@@ -298,18 +298,17 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, ipAddress,
 		return "", "", nil, err
 	}
 
-	tokenString, newRefreshToken, err := s.createTokenAndSession(ctx, user)
+	tokenString, err := s.createAccessToken(user)
 	if err != nil {
 		return "", "", nil, err
 	}
 
-	if err := s.sessionRepo.DeleteSession(ctx, refreshTokenHash); err != nil {
-		authLog.Warn("failed to delete old session after refresh", "user_id", user.ID, "error", err)
-	}
-
 	s.activityService.LogActivity(ctx, &user.ID, model.ActivityTokenRefresh, model.StatusSuccess, ipAddress, userAgent, nil, nil)
 
-	return tokenString, newRefreshToken, user, nil
+	// The refresh token itself is not rotated: the same session/refresh token
+	// keeps being reused until it expires, at which point the user must log in
+	// again to obtain a new one.
+	return tokenString, refreshToken, user, nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ipAddress, userAgent string) error {
@@ -521,7 +520,7 @@ func (s *authService) cleanupExpiredOAuthExchangeCodesLocked(now time.Time) {
 	}
 }
 
-func (s *authService) createTokenAndSession(ctx context.Context, user *model.User) (string, string, error) {
+func (s *authService) createAccessToken(user *model.User) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":        user.ID,
 		"username":       user.Username,
@@ -532,7 +531,11 @@ func (s *authService) createTokenAndSession(ctx context.Context, user *model.Use
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString(s.jwtSecret)
+	return token.SignedString(s.jwtSecret)
+}
+
+func (s *authService) createTokenAndSession(ctx context.Context, user *model.User) (string, string, error) {
+	tokenString, err := s.createAccessToken(user)
 	if err != nil {
 		return "", "", err
 	}

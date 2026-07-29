@@ -177,7 +177,7 @@ Set a new password using a reset token.
 
 ## POST `/api/auth/refresh`
 
-Extend a session with a refresh token. Returns a new access token and refresh token (rotation).
+Extend a session with a refresh token. Returns a new access token; the refresh token is **not** rotated — the same one is echoed back and keeps working until it expires (its lifetime is not extended by calling this endpoint). Once it expires, the user must log in again.
 
 **Body**
 
@@ -185,7 +185,7 @@ Extend a session with a refresh token. Returns a new access token and refresh to
 |-------|------|----------|
 | `refresh_token` | string | Yes |
 
-**Success - 200** - `data` has the same shape as login (`access_token`, `refresh_token`, `user`).
+**Success - 200** - `data` has the same shape as login (`access_token`, `refresh_token`, `user`). `refresh_token` is the same value passed in the request.
 
 **Errors**
 
