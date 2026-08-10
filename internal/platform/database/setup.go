@@ -47,9 +47,9 @@ func NewDatabase(config *config.Config) *gorm.DB {
 	// the /health endpoint verifies liveness on demand.
 	poolConfig := connectionPoolConfig{
 		maxOpenConns:    defaultInt(config.Database.MaxOpenConns, 25),
-		maxIdleConns:    defaultInt(config.Database.MaxIdleConns, 5),
-		connMaxLifetime: defaultDuration(config.Database.ConnMaxLifetime, time.Hour),
-		connMaxIdleTime: 30 * time.Minute,
+		maxIdleConns:    defaultInt(config.Database.MaxIdleConns, 25),
+		connMaxLifetime: defaultDuration(config.Database.ConnMaxLifetime, 15*time.Minute),
+		connMaxIdleTime: 5 * time.Minute,
 	}
 
 	sqldb := stdlib.OpenDB(*pgxConfig)
