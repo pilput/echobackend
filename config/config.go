@@ -195,7 +195,7 @@ func Load() (*Config, error) {
 		Auth: AuthConfig{
 			JWTSecret:          envString([]string{"JWT_SECRET"}, ""),
 			JWTExpiry:          time.Duration(envInt([]string{"JWT_EXPIRY_HOURS"}, 3)) * time.Hour,
-			RefreshTokenExpiry: time.Duration(envInt([]string{"REFRESH_TOKEN_EXPIRY_DAYS"}, 30)) * 24 * time.Hour,
+			RefreshTokenExpiry: time.Duration(envInt([]string{"REFRESH_TOKEN_EXPIRY_DAYS"}, 7)) * 24 * time.Hour,
 		},
 		Database: DatabaseConfig{
 			DSN:             envString([]string{"DATABASE_URL"}, ""),
