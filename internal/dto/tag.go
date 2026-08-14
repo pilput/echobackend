@@ -6,7 +6,7 @@ import (
 )
 
 type TagResponse struct {
-	ID   int    `json:"id"`
+	ID   uint   `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -19,7 +19,7 @@ type UpdateTagRequest struct {
 }
 
 type TrendingTagResponse struct {
-	ID            int    `json:"id"`
+	ID            uint   `json:"id"`
 	Name          string `json:"name"`
 	TotalViews    int64  `json:"total_views"`
 	TotalLikes    int64  `json:"total_likes"`

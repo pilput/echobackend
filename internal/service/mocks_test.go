@@ -109,6 +109,7 @@ type mockPostRepo struct {
 	getPostsByCreatedByFn      func(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error)
 	deletePostByIDFn           func(ctx context.Context, id string) error
 	updatePostFn               func(ctx context.Context, id string, updates map[string]any) (*model.Post, error)
+	updatePostWithTagsFn       func(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error)
 	getPostsForSitemapFn       func(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 	searchPostsFn              func(ctx context.Context, keyword string, limit int, offset int) ([]*model.Post, int64, error)
 	getPostsByTagFn            func(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error)
@@ -186,6 +187,15 @@ func (m *mockPostRepo) UpdatePost(ctx context.Context, id string, updates map[st
 		return m.updatePostFn(ctx, id, updates)
 	}
 	panic("UpdatePost not stubbed")
+}
+func (m *mockPostRepo) UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error) {
+	if m.updatePostWithTagsFn != nil {
+		return m.updatePostWithTagsFn(ctx, id, updates, tags)
+	}
+	if m.updatePostFn != nil {
+		return m.updatePostFn(ctx, id, updates)
+	}
+	panic("UpdatePostWithTags not stubbed")
 }
 func (m *mockPostRepo) GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error) {
 	if m.getPostsForSitemapFn != nil {

@@ -69,7 +69,7 @@ func (s *tagService) UpdateTag(ctx context.Context, id uint, req *dto.UpdateTagR
 	if req.Name == "" {
 		return nil, apperrors.ErrTagNameRequired
 	}
-	tag := &model.Tag{ID: int(id), Name: req.Name}
+	tag := &model.Tag{ID: id, Name: req.Name}
 	if err := s.tagRepo.Update(ctx, tag); err != nil {
 		return nil, err
 	}

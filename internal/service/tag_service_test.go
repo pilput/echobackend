@@ -121,7 +121,7 @@ func TestTagService_DeleteTag_Success(t *testing.T) {
 	deleted := false
 	repo := &mockTagRepo{
 		findByIDFn: func(ctx context.Context, id uint) (*model.Tag, error) {
-			return &model.Tag{ID: int(id), Name: "go"}, nil
+			return &model.Tag{ID: id, Name: "go"}, nil
 		},
 		deleteFn: func(ctx context.Context, id uint) error {
 			if id != 1 {

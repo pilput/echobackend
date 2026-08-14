@@ -25,6 +25,7 @@ type PostRepository interface {
 	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
 	UpdatePost(ctx context.Context, id string, updates map[string]any) (*model.Post, error)
+	UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error)
 	GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 	SearchPosts(ctx context.Context, keyword string, limit int, offset int) ([]*model.Post, int64, error)
 	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error)
@@ -63,30 +64,34 @@ func (r *postRepository) CreatePostWithTags(ctx context.Context, post *model.Pos
 }
 
 func (r *postRepository) UpdatePost(ctx context.Context, id string, updates map[string]any) (*model.Post, error) {
-	if len(updates) == 0 {
-		var currentPost model.Post
-		err := r.db.WithContext(ctx).Preload("User", preloadUserBrief).Preload("Tags").First(&currentPost, "id = ?", id).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, apperrors.ErrPostNotFound
-			}
-			return nil, fmt.Errorf("failed to fetch post (no updates provided): %w", err)
-		}
-		return &currentPost, nil
-	}
+	return r.UpdatePostWithTags(ctx, id, updates, nil)
+}
 
-	result := r.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return nil, fmt.Errorf("failed to update post: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return nil, apperrors.ErrPostNotFound
+func (r *postRepository) UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error) {
+	if len(updates) > 0 {
+		result := r.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Updates(updates)
+		if result.Error != nil {
+			return nil, fmt.Errorf("failed to update post: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return nil, apperrors.ErrPostNotFound
+		}
 	}
 
 	var updatedPost model.Post
 	err := r.db.WithContext(ctx).Preload("User", preloadUserBrief).Preload("Tags").First(&updatedPost, "id = ?", id).Error
 	if err != nil {
-		return nil, fmt.Errorf("post updated, but failed to retrieve updated record: %w", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve post for update: %w", err)
+	}
+
+	if tags != nil {
+		if err := r.db.WithContext(ctx).Model(&updatedPost).Association("Tags").Replace(tags); err != nil {
+			return nil, fmt.Errorf("failed to update post tags association: %w", err)
+		}
+		updatedPost.Tags = tags
 	}
 
 	return &updatedPost, nil

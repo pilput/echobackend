@@ -163,7 +163,22 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 		updates["published"] = *req.Published
 	}
 
-	if len(updates) == 0 && len(req.Tags) == 0 {
+	var tags []model.Tag
+	if req.Tags != nil {
+		tags = make([]model.Tag, 0, len(req.Tags))
+		for _, tagName := range req.Tags {
+			if tagName == "" {
+				continue
+			}
+			tag, err := s.findOrCreateTagByName(ctx, tagName)
+			if err != nil {
+				return nil, err
+			}
+			tags = append(tags, *tag)
+		}
+	}
+
+	if len(updates) == 0 && req.Tags == nil {
 		post, err := s.postRepo.GetPostByID(ctx, id)
 		if err != nil {
 			return nil, err
@@ -171,7 +186,13 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 		return dto.PostToResponse(post), nil
 	}
 
-	updatedPost, err := s.postRepo.UpdatePost(ctx, id, updates)
+	var updatedPost *model.Post
+	var err error
+	if req.Tags != nil {
+		updatedPost, err = s.postRepo.UpdatePostWithTags(ctx, id, updates, tags)
+	} else {
+		updatedPost, err = s.postRepo.UpdatePost(ctx, id, updates)
+	}
 	if err != nil {
 		return nil, err
 	}

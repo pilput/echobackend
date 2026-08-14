@@ -129,7 +129,10 @@ func (r *holdingRepository) Create(ctx context.Context, holding *model.Holding) 
 }
 
 func (r *holdingRepository) Update(ctx context.Context, holding *model.Holding) error {
-	result := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", holding.ID, holding.UserID).Updates(holding)
+	result := r.db.WithContext(ctx).Model(&model.Holding{}).
+		Where("id = ? AND user_id = ?", holding.ID, holding.UserID).
+		Select("Name", "Symbol", "Platform", "HoldingTypeID", "Currency", "InvestedAmount", "CurrentValue", "Units", "AvgBuyPrice", "CurrentPrice", "Notes", "Month", "Year", "LastUpdated", "UpdatedAt").
+		Updates(holding)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update holding: %w", result.Error)
 	}
