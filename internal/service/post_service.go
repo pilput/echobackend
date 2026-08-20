@@ -39,7 +39,7 @@ type PostService interface {
 	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error)
 	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*dto.PostResponse, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
-	UploadImagePosts(ctx context.Context, file *multipart.FileHeader) error
+	UploadImagePosts(ctx context.Context, file *multipart.FileHeader) (string, error)
 	CreatePost(ctx context.Context, req *dto.CreatePostRequest, creatorID string) (*dto.PostResponse, error)
 	UpdatePost(ctx context.Context, id string, req *dto.UpdatePostRequest) (*dto.PostResponse, error)
 	IsAuthor(ctx context.Context, id string, userid string) error
@@ -410,42 +410,46 @@ func (s *postService) GetPostsForYou(ctx context.Context, userID string, offset 
 	return postsResponse, total, nil
 }
 
-func (s *postService) UploadImagePosts(ctx context.Context, file *multipart.FileHeader) error {
+func (s *postService) UploadImagePosts(ctx context.Context, file *multipart.FileHeader) (string, error) {
 	if file == nil {
-		return apperrors.ErrFileNil
+		return "", apperrors.ErrFileNil
 	}
 	if file.Size > maxPostImageSize {
-		return apperrors.ErrFileTooLarge
+		return "", apperrors.ErrFileTooLarge
 	}
 	if s.s3storage == nil {
-		return apperrors.ErrStorageUnavailable
+		return "", apperrors.ErrStorageUnavailable
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = src.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(src, maxPostImageSize+1))
 	if err != nil {
-		return err
+		return "", err
 	}
 	if int64(len(data)) > maxPostImageSize {
-		return apperrors.ErrFileTooLarge
+		return "", apperrors.ErrFileTooLarge
 	}
 
 	contentType, ext, ok := detectAllowedImage(data)
 	if !ok {
-		return apperrors.ErrInvalidFileType
+		return "", apperrors.ErrInvalidFileType
 	}
 
 	objectKey, err := randomImageObjectKey(ext)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return s.s3storage.Save(ctx, objectKey, bytes.NewReader(data), contentType)
+	if err := s.s3storage.Save(ctx, objectKey, bytes.NewReader(data), contentType); err != nil {
+		return "", err
+	}
+
+	return objectKey, nil
 }
 
 func (s *postService) findOrCreateTagByName(ctx context.Context, tagName string) (*model.Tag, error) {

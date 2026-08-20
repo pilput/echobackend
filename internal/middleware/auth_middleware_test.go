@@ -271,3 +271,31 @@ func TestAuthAdmin_AllowsSuperAdmin(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 }
+
+func TestAuthAdmin_AllowsSuperAdminFromClaimFastPath(t *testing.T) {
+	// mockUserService has no getAdminByIDFn defined, so if called, it would panic.
+	users := &mockUserService{}
+	mw := newAuthMiddlewareForTest("test-secret", users)
+
+	e := echo.New()
+	called := false
+	handler := mw.AuthAdmin()(func(c *echo.Context) error {
+		called = true
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", jwt.MapClaims{"user_id": "admin-1", "is_super_admin": true})
+
+	if err := handler(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !called {
+		t.Fatal("next was not called")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+}

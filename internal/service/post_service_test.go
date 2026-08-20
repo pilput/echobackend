@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"mime/multipart"
 	"testing"
 
@@ -74,7 +75,7 @@ func (m *mockCacheStore) SetJSON(ctx context.Context, key string, value any) err
 func TestUploadImagePostsRejectsFilesLargerThanOneMiB(t *testing.T) {
 	svc := NewPostService(&mockPostRepo{}, nil, nil, nil)
 
-	err := svc.UploadImagePosts(context.Background(), &multipart.FileHeader{
+	_, err := svc.UploadImagePosts(context.Background(), &multipart.FileHeader{
 		Filename: "large.jpg",
 		Size:     maxPostImageSize + 1,
 	})
@@ -354,6 +355,41 @@ func TestGetPostsTrending(t *testing.T) {
 		}
 		if len(resp) != 1 || *resp[0].Title != title {
 			t.Fatalf("unexpected response: %v", resp)
+		}
+	})
+}
+
+type mockFileUploader struct {
+	saveFn func(ctx context.Context, path string, file io.Reader, contentType string) error
+}
+
+func (m *mockFileUploader) Save(ctx context.Context, path string, file io.Reader, contentType string) error {
+	if m.saveFn != nil {
+		return m.saveFn(ctx, path, file, contentType)
+	}
+	return nil
+}
+
+func TestUploadImagePosts(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("nil file", func(t *testing.T) {
+		svc := NewPostService(&mockPostRepo{}, nil, &mockFileUploader{}, nil)
+		_, err := svc.UploadImagePosts(ctx, nil)
+		if !errors.Is(err, apperrors.ErrFileNil) {
+			t.Fatalf("expected ErrFileNil, got %v", err)
+		}
+	})
+
+	t.Run("storage nil", func(t *testing.T) {
+		svc := NewPostService(&mockPostRepo{}, nil, nil, nil)
+		header := &multipart.FileHeader{
+			Filename: "test.jpg",
+			Size:     100,
+		}
+		_, err := svc.UploadImagePosts(ctx, header)
+		if !errors.Is(err, apperrors.ErrStorageUnavailable) {
+			t.Fatalf("expected ErrStorageUnavailable, got %v", err)
 		}
 	})
 }

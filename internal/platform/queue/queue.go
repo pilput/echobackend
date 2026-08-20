@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"echobackend/config"
@@ -29,6 +30,7 @@ type TaskOptions struct {
 
 // Service owns the shared Asynq client and worker server.
 type Service struct {
+	mu           sync.RWMutex
 	client       *asynq.Client
 	server       *asynq.Server
 	mux          *asynq.ServeMux
@@ -55,21 +57,21 @@ func NewService(cfg config.QueueConfig) *Service {
 		log.Warn("invalid Redis URL, background jobs disabled", "error", err)
 		return service
 	}
-	redisOpt = withRedisTimeouts(redisOpt, cfg.ConnectTimeout)
 
-	service.client = asynq.NewClient(redisOpt)
+	connectTimeout := cfg.ConnectTimeout
+	if connectTimeout <= 0 || connectTimeout > 2*time.Second {
+		connectTimeout = 2 * time.Second
+	}
+	redisOpt = withRedisTimeouts(redisOpt, connectTimeout)
 
-	// Verify broker connectivity in the background so startup is not blocked.
-	go func() {
-		if err := service.client.Ping(); err != nil {
-			log.Warn("failed to connect to Redis, background jobs disabled", "error", err)
-			_ = service.client.Close()
-			service.client = nil
-			return
-		}
-		log.Info("Asynq enabled", "queue", cfg.DefaultQueue, "concurrency", cfg.Concurrency)
-	}()
+	client := asynq.NewClient(redisOpt)
+	if err := client.Ping(); err != nil {
+		log.Warn("failed to connect to Redis, background jobs disabled", "error", err)
+		_ = client.Close()
+		return service
+	}
 
+	service.client = client
 	service.server = asynq.NewServer(redisOpt, asynq.Config{
 		Concurrency: cfg.Concurrency,
 		Queues: map[string]int{
@@ -80,13 +82,18 @@ func NewService(cfg config.QueueConfig) *Service {
 		}),
 	})
 
-	log.Info("server configured", "queue", cfg.DefaultQueue, "concurrency", cfg.Concurrency)
+	log.Info("Asynq enabled", "queue", cfg.DefaultQueue, "concurrency", cfg.Concurrency)
 	return service
 }
 
 // IsConfigured reports whether the queue broker and worker are available.
 func (s *Service) IsConfigured() bool {
-	return s != nil && s.client != nil && s.server != nil
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.client != nil && s.server != nil
 }
 
 // Handle registers a task handler.
@@ -102,13 +109,22 @@ func (s *Service) Handle(taskType string, handler HandlerFunc) {
 
 // Start begins processing registered task handlers.
 func (s *Service) Start() {
-	if !s.IsConfigured() || s.started {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	if s.client == nil || s.server == nil || s.started {
+		s.mu.Unlock()
 		return
 	}
 	s.started = true
+	server := s.server
+	mux := s.mux
+	s.mu.Unlock()
 
 	go func() {
-		if err := s.server.Run(s.mux); err != nil {
+		if err := server.Run(mux); err != nil {
 			log.Error("Asynq server stopped", "error", err)
 		}
 	}()
@@ -120,12 +136,19 @@ func (s *Service) Close() error {
 		return nil
 	}
 
-	if s.server != nil {
-		s.server.Shutdown()
+	s.mu.Lock()
+	server := s.server
+	client := s.client
+	s.server = nil
+	s.client = nil
+	s.mu.Unlock()
+
+	if server != nil {
+		server.Shutdown()
 	}
 
-	if s.client != nil {
-		return s.client.Close()
+	if client != nil {
+		return client.Close()
 	}
 
 	return nil
@@ -161,7 +184,16 @@ func (s *Service) EnqueueJSON(taskType string, payload any, opts TaskOptions) er
 	}
 
 	task := asynq.NewTask(taskType, body)
-	_, err = s.client.Enqueue(task, taskOptions...)
+
+	s.mu.RLock()
+	client := s.client
+	s.mu.RUnlock()
+
+	if client == nil {
+		return errors.New("queue service not configured")
+	}
+
+	_, err = client.Enqueue(task, taskOptions...)
 	return err
 }
 

@@ -360,73 +360,55 @@ func (r *postRepository) ExistsByID(ctx context.Context, id string) (bool, error
 	return count > 0, nil
 }
 
+func (r *postRepository) applyPostFilters(db *gorm.DB, filter *dto.PostQueryFilter) *gorm.DB {
+	q := activePostUserJoin(db.Model(&model.Post{}))
+
+	if filter.Search != "" {
+		likePattern := "%" + filter.Search + "%"
+		q = q.Where("posts.title ILIKE ?", likePattern)
+	}
+
+	if filter.Published != nil {
+		q = q.Where("posts.published = ?", *filter.Published)
+	} else {
+		q = q.Where("posts.published = ?", true)
+	}
+
+	if filter.StartDate != "" {
+		q = q.Where("posts.created_at >= ?", filter.StartDate)
+	}
+	if filter.EndDate != "" {
+		q = q.Where("posts.created_at <= ?", filter.EndDate)
+	}
+
+	if filter.CreatedBy != "" {
+		q = q.Where("posts.created_by = ?", filter.CreatedBy)
+	}
+
+	if len(filter.Tags) > 0 {
+		tagSubquery := r.db.Table("posts_to_tags").
+			Select("posts_to_tags.post_id").
+			Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+			Where("tags.name IN ?", filter.Tags)
+		q = q.Where("posts.id IN (?)", tagSubquery)
+	}
+
+	return q
+}
+
 func (r *postRepository) GetPostsFiltered(ctx context.Context, filter *dto.PostQueryFilter) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
 
-	query := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
-		Preload("User", preloadUserBrief).
-		Preload("Tags")
+	base := r.applyPostFilters(r.db.WithContext(ctx), filter)
 
-	if filter.Search != "" {
-		likePattern := "%" + filter.Search + "%"
-		query = query.Where("posts.title ILIKE ? AND posts.published = ?", likePattern, true)
-	} else {
-		query = query.Where("posts.published = ?", true)
-	}
-
-	if filter.StartDate != "" {
-		query = query.Where("posts.created_at >= ?", filter.StartDate)
-	}
-	if filter.EndDate != "" {
-		query = query.Where("posts.created_at <= ?", filter.EndDate)
-	}
-
-	if filter.Search == "" && filter.Published != nil {
-		query = query.Where("posts.published = ?", *filter.Published)
-	}
-
-	if filter.CreatedBy != "" {
-		query = query.Where("posts.created_by = ?", filter.CreatedBy)
-	}
-
-	if len(filter.Tags) > 0 {
-		query = query.Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
-			Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
-			Where("tags.name IN ?", filter.Tags)
-	}
-
-	countQuery := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{}))
-
-	if filter.Search != "" {
-		likePattern := "%" + filter.Search + "%"
-		countQuery = countQuery.Where("posts.title ILIKE ? AND posts.published = ?", likePattern, true)
-	} else {
-		countQuery = countQuery.Where("posts.published = ?", true)
-	}
-
-	if filter.StartDate != "" {
-		countQuery = countQuery.Where("posts.created_at >= ?", filter.StartDate)
-	}
-	if filter.EndDate != "" {
-		countQuery = countQuery.Where("posts.created_at <= ?", filter.EndDate)
-	}
-	if filter.Search == "" && filter.Published != nil {
-		countQuery = countQuery.Where("posts.published = ?", *filter.Published)
-	}
-	if filter.CreatedBy != "" {
-		countQuery = countQuery.Where("posts.created_by = ?", filter.CreatedBy)
-	}
-	if len(filter.Tags) > 0 {
-		countQuery = countQuery.Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
-			Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
-			Where("tags.name IN ?", filter.Tags)
-	}
-
-	err := countQuery.Count(&count).Error
-	if err != nil {
+	if err := base.Count(&count).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
 	}
+
+	query := r.applyPostFilters(r.db.WithContext(ctx), filter).
+		Preload("User", preloadUserBrief).
+		Preload("Tags")
 
 	sortField := filter.GetSortField()
 	sortOrder := filter.GetSortOrder()
@@ -434,7 +416,7 @@ func (r *postRepository) GetPostsFiltered(ctx context.Context, filter *dto.PostQ
 
 	query = query.Limit(filter.Limit).Offset(filter.Offset)
 
-	err = query.Find(&posts).Error
+	err := query.Find(&posts).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get filtered posts: %w", err)
 	}

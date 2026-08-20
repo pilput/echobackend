@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -63,12 +62,7 @@ func (s *S3Storage) Save(ctx context.Context, path string, file io.Reader, conte
 		defer func() { _ = rc.Close() }()
 	}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.client.PutObject(ctx, s.bucket, path, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+	_, err := s.client.PutObject(ctx, s.bucket, path, file, -1, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	return err

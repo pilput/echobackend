@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -538,8 +539,14 @@ func buildCompareMap(data []struct {
 }
 
 func buildCompareBreakdownResult(allNames map[string]bool, fromMap, toMap map[string]struct{ Invested, CurrentValue float64 }) []dto.HoldingCompareBreakdown {
-	var result []dto.HoldingCompareBreakdown
+	names := make([]string, 0, len(allNames))
 	for name := range allNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var result []dto.HoldingCompareBreakdown
+	for _, name := range names {
 		from := fromMap[name]
 		to := toMap[name]
 		fromPL := from.CurrentValue - from.Invested

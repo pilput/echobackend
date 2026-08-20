@@ -612,3 +612,58 @@ func TestHoldingService_GetHoldingTypes_CacheMiss(t *testing.T) {
 		t.Fatalf("expected setJSON call on cache miss: %v", cache.setJSONCalls)
 	}
 }
+
+func TestHoldingService_CompareMonths_DeterministicSorting(t *testing.T) {
+	fromMonth, fromYear := 1, 2026
+	toMonth, toYear := 2, 2026
+
+	repo := &mockHoldingRepo{
+		getSummaryFn: func(ctx context.Context, userID string, month, year *int) (float64, float64, int64, error) {
+			return 1000, 1500, 2, nil
+		},
+		getTypeBreakdownFn: func(ctx context.Context, userID string, month, year *int) ([]breakdownRow, error) {
+			// Deliberately unsorted in repo output
+			return []breakdownRow{
+				{Name: "Zebra Stock", Invested: 100, CurrentValue: 120},
+				{Name: "Crypto", Invested: 400, CurrentValue: 600},
+				{Name: "Alpha ETF", Invested: 500, CurrentValue: 780},
+			}, nil
+		},
+		getPlatformBreakdownFn: func(ctx context.Context, userID string, month, year *int) ([]breakdownRow, error) {
+			return []breakdownRow{
+				{Name: "Stockbit", Invested: 500, CurrentValue: 700},
+				{Name: "Bibit", Invested: 500, CurrentValue: 800},
+			}, nil
+		},
+	}
+
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	resp, err := svc.CompareMonths(context.Background(), "u1", &dto.HoldingCompareQuery{
+		FromMonth: &fromMonth,
+		FromYear:  &fromYear,
+		ToMonth:   toMonth,
+		ToYear:    toYear,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify TypeComparison is strictly sorted: Alpha ETF, Crypto, Zebra Stock
+	if len(resp.TypeComparison) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(resp.TypeComparison))
+	}
+	if resp.TypeComparison[0].Name != "Alpha ETF" ||
+		resp.TypeComparison[1].Name != "Crypto" ||
+		resp.TypeComparison[2].Name != "Zebra Stock" {
+		t.Fatalf("unexpected TypeComparison sort order: %+v", resp.TypeComparison)
+	}
+
+	// Verify PlatformComparison is strictly sorted: Bibit, Stockbit
+	if len(resp.PlatformComparison) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.PlatformComparison))
+	}
+	if resp.PlatformComparison[0].Name != "Bibit" ||
+		resp.PlatformComparison[1].Name != "Stockbit" {
+		t.Fatalf("unexpected PlatformComparison sort order: %+v", resp.PlatformComparison)
+	}
+}

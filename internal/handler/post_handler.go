@@ -400,10 +400,14 @@ func (h *PostHandler) UploadImagePosts(c *echo.Context) error {
 		return response.BadRequest(c, "No file uploaded", nil)
 	}
 
-	if err := h.postService.UploadImagePosts(c.Request().Context(), file); err != nil {
+	imagePath, err := h.postService.UploadImagePosts(c.Request().Context(), file)
+	if err != nil {
 		return h.respondPostError(c, "Failed to upload image", err)
 	}
-	return response.Success(c, "Successfully uploaded image", nil)
+	return response.Created(c, "Successfully uploaded image", map[string]string{
+		"path": imagePath,
+		"url":  imagePath,
+	})
 }
 
 func (h *PostHandler) GetPostsForSitemap(c *echo.Context) error {
