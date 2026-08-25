@@ -104,7 +104,7 @@ func (s *exchangeRateService) response(from, to, symbol string, rate float64, ca
 		To:        to,
 		Symbol:    symbol,
 		Rate:      rate,
-		Source:    "Yahoo Finance",
+		Source:    "RapidAPI",
 		Cached:    cached,
 		FetchedAt: s.now().UTC().Format(time.RFC3339),
 	}

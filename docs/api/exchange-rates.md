@@ -1,6 +1,6 @@
 # Exchange Rates Module - `/api/exchange-rates`
 
-Currency exchange rates from Yahoo Finance. **All routes require a Bearer token.**
+Currency exchange rates from RapidAPI. **All routes require a Bearer token.**
 
 Results are stored in Valkey/Redis for 15 minutes when `VALKEY_URL` is enabled. If cache is disabled, the endpoint still works and fetches from the provider on each request.
 
@@ -35,7 +35,7 @@ Authorization: Bearer <access_token>
     "to": "IDR",
     "symbol": "USDIDR=X",
     "rate": 16250,
-    "source": "Yahoo Finance",
+    "source": "RapidAPI",
     "cached": false,
     "fetchedAt": "2026-06-01T10:00:00Z"
   }
@@ -46,7 +46,7 @@ Authorization: Bearer <access_token>
 |-------|------|-------------|
 | `from` | string | Source currency |
 | `to` | string | Target currency |
-| `symbol` | string | Yahoo Finance symbol used |
+| `symbol` | string | Currency pair symbol used |
 | `rate` | number | Value of 1 `from` in `to` |
 | `source` | string | Data provider |
 | `cached` | boolean | `true` when the response came from cache |

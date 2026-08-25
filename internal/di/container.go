@@ -88,9 +88,18 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
 	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterService, cfg)
-	yahooClient := market.NewYahooClient(nil)
-	holdingService := service.NewHoldingService(holdingRepo, yahooClient, redisCache)
-	exchangeRateService := service.NewExchangeRateService(yahooClient, redisCache)
+
+	// Market quotes (RapidAPI with shared Redis caching decorator)
+	rawQuoteClient := market.NewRapidAPIQuoteClient(
+		cfg.MarketData.RapidAPIQuoteKey,
+		cfg.MarketData.RapidAPIQuoteHost,
+		cfg.MarketData.RapidAPIQuoteBaseURL,
+		nil,
+	)
+	quoteClient := market.NewCachedQuoteClient(rawQuoteClient, redisCache, cfg.MarketData.QuoteCacheTTL)
+
+	holdingService := service.NewHoldingService(holdingRepo, quoteClient, redisCache)
+	exchangeRateService := service.NewExchangeRateService(quoteClient, redisCache)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	reportService := service.NewReportService(reportRepo)
 
