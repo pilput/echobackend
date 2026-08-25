@@ -33,6 +33,8 @@ func (h *HoldingHandler) respondHoldingError(c *echo.Context, message string, er
 		return response.BadRequest(c, message, err)
 	case errors.Is(err, apperrors.ErrHoldingInvalidRange):
 		return response.BadRequest(c, message, err)
+	case errors.Is(err, apperrors.ErrHoldingRangeTooLarge):
+		return response.BadRequest(c, message, err)
 	default:
 		return response.InternalServerError(c, message, err)
 	}
@@ -293,10 +295,16 @@ func (h *HoldingHandler) GetMonthlyData(c *echo.Context) error {
 	return response.Success(c, "Holdings monthly data fetched successfully", result)
 }
 
+// minHoldingYear/maxHoldingYearAhead bound the year query params so a caller
+// can't force the service's month-by-month loop (holding_service.go) to walk
+// millions of iterations with a value like startYear=2147483647.
+const minHoldingYear = 1990
+
 func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 	now := time.Now()
 	startMonth, startYear := int(now.Month()), now.Year()
 	endMonth, endYear := int(now.Month()), now.Year()
+	maxHoldingYear := now.Year() + 1
 
 	var hasStartMonth, hasStartYear, hasEndMonth, hasEndYear bool
 
@@ -307,10 +315,12 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 		}
 	}
 	if sy := c.QueryParam("startYear"); sy != "" {
-		if v, err := strconv.Atoi(sy); err == nil {
-			startYear = v
-			hasStartYear = true
+		v, err := strconv.Atoi(sy)
+		if err != nil || v < minHoldingYear || v > maxHoldingYear {
+			return nil, apperrors.ErrHoldingInvalidRange
 		}
+		startYear = v
+		hasStartYear = true
 	}
 	if em := c.QueryParam("endMonth"); em != "" {
 		if v, err := strconv.Atoi(em); err == nil && v >= 1 && v <= 12 {
@@ -319,10 +329,12 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 		}
 	}
 	if ey := c.QueryParam("endYear"); ey != "" {
-		if v, err := strconv.Atoi(ey); err == nil {
-			endYear = v
-			hasEndYear = true
+		v, err := strconv.Atoi(ey)
+		if err != nil || v < minHoldingYear || v > maxHoldingYear {
+			return nil, apperrors.ErrHoldingInvalidRange
 		}
+		endYear = v
+		hasEndYear = true
 	}
 
 	// Fill missing start components with current date.

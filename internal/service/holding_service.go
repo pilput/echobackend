@@ -16,6 +16,10 @@ import (
 	"echobackend/pkg/market"
 )
 
+// maxMonthlyRangeMonths bounds how many months GetMonthlyData will iterate,
+// so a huge (but validly ordered) start/end range can't build an unbounded result slice.
+const maxMonthlyRangeMonths = 240 // 20 years
+
 type holdingCache interface {
 	BuildKey(parts ...string) string
 	GetJSON(ctx context.Context, key string, dest any) (bool, error)
@@ -310,6 +314,13 @@ func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *d
 	// front — without this guard the loop below never terminates and burns CPU/RAM.
 	if q.EndYear > q.StartYear || (q.EndYear == q.StartYear && q.EndMonth > q.StartMonth) {
 		return nil, apperrors.ErrHoldingInvalidRange
+	}
+
+	// Cap the span so the month-by-month loop below (and its result slice)
+	// can't be forced to grow unbounded by a caller passing a huge valid range.
+	spanMonths := (q.StartYear-q.EndYear)*12 + (q.StartMonth - q.EndMonth)
+	if spanMonths > maxMonthlyRangeMonths {
+		return nil, apperrors.ErrHoldingRangeTooLarge
 	}
 
 	data, err := s.holdingRepo.GetMonthlyData(ctx, userID, q.StartMonth, q.StartYear, q.EndMonth, q.EndYear)

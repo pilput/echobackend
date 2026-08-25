@@ -46,6 +46,7 @@ var (
 	ErrHoldingNotOwned        = errors.New("not authorized to modify this holding")
 	ErrHoldingDuplicateSame   = errors.New("source and target month/year are the same")
 	ErrHoldingInvalidRange    = errors.New("end month/year must be on or before start month/year")
+	ErrHoldingRangeTooLarge   = errors.New("requested month/year range is too large")
 	ErrBookmarkNotFound       = errors.New("bookmark not found")
 	ErrBookmarkFolderNotFound = errors.New("bookmark folder not found")
 	ErrNotificationNotFound   = errors.New("notification not found")

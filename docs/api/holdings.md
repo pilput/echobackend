@@ -113,7 +113,11 @@ Investment portfolio records per user per month/year. **All holdings and holding
 
 The two endpoints can be passed in either chronological order. The handler normalizes them internally so that `start` becomes the latest month and `end` the oldest month in the returned series. If `end` is omitted, it defaults to 11 months before `start` (returning a 12-month series).
 
+`startYear`/`endYear` must fall within 1990 and (current year + 1), and the resolved range cannot span more than 240 months (20 years) — both are rejected with a 400.
+
 **Success - 200** - `data`: `HoldingMonthlyDataResponse[]`.
+
+**Error - 400** - Invalid or out-of-range `startYear`/`endYear`, or a range spanning more than 240 months.
 
 ---
 
