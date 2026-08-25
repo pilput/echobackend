@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	defaultRapidAPIQuoteHost    = "yahoo-finance15.p.rapidapi.com"
-	defaultRapidAPIQuoteBaseURL = "https://yahoo-finance15.p.rapidapi.com"
+	defaultRapidAPIQuoteHost    = "yh-finance.p.rapidapi.com"
+	defaultRapidAPIQuoteBaseURL = "https://yh-finance.p.rapidapi.com"
 	maxSymbolsPerQuoteRequest   = 50
 )
 
@@ -75,10 +75,13 @@ func (c *RapidAPIQuoteClient) GetQuotes(ctx context.Context, symbols []string) (
 func (c *RapidAPIQuoteClient) fetchBatch(ctx context.Context, symbols []string) (map[string]float64, error) {
 	query := url.Values{}
 	symbolsParam := strings.Join(symbols, ",")
-	query.Set("ticker", symbolsParam)
 	query.Set("symbols", symbolsParam)
+	query.Set("ticker", symbolsParam)
 
-	endpoint := "/api/v1/markets/stock/quotes"
+	endpoint := "/market/v2/get-quotes"
+	if strings.Contains(c.host, "yahoo-finance15") {
+		endpoint = "/api/v1/markets/stock/quotes"
+	}
 	reqURL := c.baseURL + endpoint + "?" + query.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

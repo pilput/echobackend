@@ -263,8 +263,8 @@ func Load() (*Config, error) {
 		MarketData: MarketDataConfig{
 			RapidAPIIDXKey:       envString([]string{"RAPIDAPI_IDX_KEY", "RAPIDAPI_KEY"}, ""),
 			RapidAPIQuoteKey:     envString([]string{"RAPIDAPI_QUOTE_KEY", "RAPIDAPI_KEY", "RAPIDAPI_IDX_KEY"}, ""),
-			RapidAPIQuoteHost:    envString([]string{"RAPIDAPI_QUOTE_HOST"}, "yahoo-finance15.p.rapidapi.com"),
-			RapidAPIQuoteBaseURL: envString([]string{"RAPIDAPI_QUOTE_BASE_URL"}, "https://yahoo-finance15.p.rapidapi.com"),
+			RapidAPIQuoteHost:    envString([]string{"RAPIDAPI_QUOTE_HOST"}, "yh-finance.p.rapidapi.com"),
+			RapidAPIQuoteBaseURL: envString([]string{"RAPIDAPI_QUOTE_BASE_URL"}, "https://yh-finance.p.rapidapi.com"),
 			QuoteCacheTTL:        time.Duration(envInt([]string{"QUOTE_CACHE_TTL_SECONDS"}, 900)) * time.Second,
 		},
 	}
