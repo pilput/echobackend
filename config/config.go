@@ -163,20 +163,11 @@ type EmailConfig struct {
 	UseTLS       bool
 }
 
-// MarketDataConfig contains API keys and settings for external financial data providers.
+// MarketDataConfig contains API keys for external financial data providers.
 type MarketDataConfig struct {
-	// RapidAPIIDXKey is the X-RapidAPI-Key for the Indonesia Stock Exchange API.
-	// Required to fetch IDX dividend and RUPS calendar data.
-	// Leave empty to disable IDX corporate-action fetching (returns empty results).
-	RapidAPIIDXKey string
-	// RapidAPIQuoteKey is the X-RapidAPI-Key for fetching market quotes (stocks, crypto, exchange rates).
-	RapidAPIQuoteKey string
-	// RapidAPIQuoteHost is the X-RapidAPI-Host header for quotes.
-	RapidAPIQuoteHost string
-	// RapidAPIQuoteBaseURL is the base URL for quotes API.
-	RapidAPIQuoteBaseURL string
-	// QuoteCacheTTL is the duration market quote prices stay cached in Redis.
-	QuoteCacheTTL time.Duration
+	// RapidAPIKey is the X-RapidAPI-Key used for RapidAPI providers (IDX calendar, YH Finance quotes).
+	// Leave empty to disable external market data fetching.
+	RapidAPIKey string
 }
 
 // Load reads configuration from environment variables with defaults.
@@ -261,11 +252,7 @@ func Load() (*Config, error) {
 			UseTLS:       envBool([]string{"SMTP_TLS"}, false),
 		},
 		MarketData: MarketDataConfig{
-			RapidAPIIDXKey:       envString([]string{"RAPIDAPI_IDX_KEY", "RAPIDAPI_KEY"}, ""),
-			RapidAPIQuoteKey:     envString([]string{"RAPIDAPI_QUOTE_KEY", "RAPIDAPI_KEY", "RAPIDAPI_IDX_KEY"}, ""),
-			RapidAPIQuoteHost:    envString([]string{"RAPIDAPI_QUOTE_HOST"}, "yh-finance.p.rapidapi.com"),
-			RapidAPIQuoteBaseURL: envString([]string{"RAPIDAPI_QUOTE_BASE_URL"}, "https://yh-finance.p.rapidapi.com"),
-			QuoteCacheTTL:        time.Duration(envInt([]string{"QUOTE_CACHE_TTL_SECONDS"}, 900)) * time.Second,
+			RapidAPIKey: envString([]string{"RAPIDAPI_KEY", "RAPIDAPI_IDX_KEY", "RAPIDAPI_QUOTE_KEY"}, ""),
 		},
 	}
 
@@ -322,9 +309,6 @@ func (c *Config) validate() error {
 	}
 	if c.Email.TaskTimeout <= 0 {
 		return errors.New("SMTP_TASK_TIMEOUT_SECONDS must be > 0")
-	}
-	if c.MarketData.QuoteCacheTTL < 0 {
-		return errors.New("QUOTE_CACHE_TTL_SECONDS must be >= 0")
 	}
 	return nil
 }

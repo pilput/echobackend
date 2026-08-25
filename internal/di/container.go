@@ -90,13 +90,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterService, cfg)
 
 	// Market quotes (RapidAPI with shared Redis caching decorator)
-	rawQuoteClient := market.NewRapidAPIQuoteClient(
-		cfg.MarketData.RapidAPIQuoteKey,
-		cfg.MarketData.RapidAPIQuoteHost,
-		cfg.MarketData.RapidAPIQuoteBaseURL,
-		nil,
-	)
-	quoteClient := market.NewCachedQuoteClient(rawQuoteClient, redisCache, cfg.MarketData.QuoteCacheTTL)
+	rawQuoteClient := market.NewRapidAPIQuoteClient(cfg.MarketData.RapidAPIKey, nil)
+	quoteClient := market.NewCachedQuoteClient(rawQuoteClient, redisCache)
 
 	holdingService := service.NewHoldingService(holdingRepo, quoteClient, redisCache)
 	exchangeRateService := service.NewExchangeRateService(quoteClient, redisCache)
@@ -104,7 +99,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	reportService := service.NewReportService(reportRepo)
 
 	// Corporate actions: IDX
-	idxCorporateClient := market.NewRapidAPIIDXClient(cfg.MarketData.RapidAPIIDXKey, nil)
+	idxCorporateClient := market.NewRapidAPIIDXClient(cfg.MarketData.RapidAPIKey, nil)
 	corporateActionService := service.NewCorporateActionService(idxCorporateClient, corporateActionRepo)
 
 	userHandler := handler.NewUserHandler(userService, userFollowService)

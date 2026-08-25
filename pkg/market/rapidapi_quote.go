@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	defaultRapidAPIQuoteHost    = "yh-finance.p.rapidapi.com"
-	defaultRapidAPIQuoteBaseURL = "https://yh-finance.p.rapidapi.com"
-	maxSymbolsPerQuoteRequest   = 50
+	rapidAPIQuoteHost         = "yh-finance.p.rapidapi.com"
+	rapidAPIQuoteBaseURL      = "https://yh-finance.p.rapidapi.com"
+	maxSymbolsPerQuoteRequest = 50
 )
 
 // QuoteClient fetches market quotes for symbols.
@@ -31,23 +31,16 @@ type RapidAPIQuoteClient struct {
 	baseURL    string
 }
 
-// NewRapidAPIQuoteClient creates a new RapidAPI quote client.
-// If host or baseURL is empty, default Yahoo Finance RapidAPI endpoints will be used.
-func NewRapidAPIQuoteClient(apiKey, host, baseURL string, httpClient *http.Client) *RapidAPIQuoteClient {
+// NewRapidAPIQuoteClient creates a new RapidAPI quote client using YH Finance.
+func NewRapidAPIQuoteClient(apiKey string, httpClient *http.Client) *RapidAPIQuoteClient {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
-	}
-	if host == "" {
-		host = defaultRapidAPIQuoteHost
-	}
-	if baseURL == "" {
-		baseURL = defaultRapidAPIQuoteBaseURL
 	}
 	return &RapidAPIQuoteClient{
 		httpClient: httpClient,
 		apiKey:     apiKey,
-		host:       host,
-		baseURL:    baseURL,
+		host:       rapidAPIQuoteHost,
+		baseURL:    rapidAPIQuoteBaseURL,
 	}
 }
 

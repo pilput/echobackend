@@ -61,7 +61,7 @@ func TestCachedQuoteClient_AllCacheHit(t *testing.T) {
 		quotes: map[string]float64{"BBCA.JK": 9800, "AAPL": 185},
 	}
 
-	client := NewCachedQuoteClient(inner, cache, 15*time.Minute)
+	client := NewCachedQuoteClient(inner, cache)
 	quotes, err := client.GetQuotes(context.Background(), []string{"BBCA.JK", "AAPL"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -85,7 +85,7 @@ func TestCachedQuoteClient_PartialCacheHit(t *testing.T) {
 		quotes: map[string]float64{"AAPL": 185},
 	}
 
-	client := NewCachedQuoteClient(inner, cache, 15*time.Minute)
+	client := NewCachedQuoteClient(inner, cache)
 	quotes, err := client.GetQuotes(context.Background(), []string{"BBCA.JK", "AAPL"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -110,7 +110,7 @@ func TestCachedQuoteClient_NilCache(t *testing.T) {
 		quotes: map[string]float64{"BBCA.JK": 9800},
 	}
 
-	client := NewCachedQuoteClient(inner, nil, 15*time.Minute)
+	client := NewCachedQuoteClient(inner, nil)
 	quotes, err := client.GetQuotes(context.Background(), []string{"BBCA.JK"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

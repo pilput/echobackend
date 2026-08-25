@@ -19,13 +19,19 @@ type CachedQuoteClient struct {
 	ttl   time.Duration
 }
 
+const defaultQuoteCacheTTL = 15 * time.Minute
+
 // NewCachedQuoteClient creates a new caching decorator around a QuoteClient.
-// If cache is nil or ttl <= 0, caching is skipped and calls go directly to inner.
-func NewCachedQuoteClient(inner QuoteClient, cache QuoteCache, ttl time.Duration) *CachedQuoteClient {
+// If cache is nil, caching is skipped and calls go directly to inner.
+func NewCachedQuoteClient(inner QuoteClient, cache QuoteCache, ttl ...time.Duration) *CachedQuoteClient {
+	cacheTTL := defaultQuoteCacheTTL
+	if len(ttl) > 0 && ttl[0] > 0 {
+		cacheTTL = ttl[0]
+	}
 	return &CachedQuoteClient{
 		inner: inner,
 		cache: cache,
-		ttl:   ttl,
+		ttl:   cacheTTL,
 	}
 }
 

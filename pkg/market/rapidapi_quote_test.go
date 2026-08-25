@@ -28,7 +28,9 @@ func TestRapidAPIQuoteClient_GetQuotes_BodyFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRapidAPIQuoteClient("test-key", "test-host", server.URL, server.Client())
+	client := NewRapidAPIQuoteClient("test-key", server.Client())
+	client.baseURL = server.URL
+	client.host = "test-host"
 	quotes, err := client.GetQuotes(context.Background(), []string{"bbca.jk", "AAPL", "USDIDR=X"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -59,7 +61,9 @@ func TestRapidAPIQuoteClient_GetQuotes_QuoteResponseFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRapidAPIQuoteClient("test-key", "test-host", server.URL, server.Client())
+	client := NewRapidAPIQuoteClient("test-key", server.Client())
+	client.baseURL = server.URL
+	client.host = "test-host"
 	quotes, err := client.GetQuotes(context.Background(), []string{"BBRI.JK"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -71,7 +75,7 @@ func TestRapidAPIQuoteClient_GetQuotes_QuoteResponseFormat(t *testing.T) {
 }
 
 func TestRapidAPIQuoteClient_GetQuotes_EmptySymbols(t *testing.T) {
-	client := NewRapidAPIQuoteClient("test-key", "test-host", "http://dummy", nil)
+	client := NewRapidAPIQuoteClient("test-key", nil)
 	quotes, err := client.GetQuotes(context.Background(), []string{"", "  "})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
