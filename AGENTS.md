@@ -8,17 +8,23 @@ docker compose up -d --wait # Start services (or: make up). Creates the `custom`
 docker compose down         # Stop (or: make down; make down-clean also wipes data)
 make help                   # All shortcuts: up, dev, test, lint, check, migrate-*, ...
 
-go run cmd/main.go          # Run server (requires .env with DATABASE_URL + JWT_SECRET)
+go run cmd/main.go          # Run server (requires .env with DATABASE_URL + JWT_SECRET >= 32 chars)
 air                         # Hot reload (reads .env automatically)
 go test ./...               # All tests (service + pkg layers only; no DB integration tests)
 go test ./internal/service/...  # Service tests only
 go test ./pkg/...           # Reusable package tests only
 go test -race ./...         # Race checker
 go vet ./...                # Static analysis
-go fmt ./...                # Format
-golangci-lint run           # Lint
+golangci-lint run           # Lint (default + enabled linters, see .golangci.yml)
+golangci-lint fmt ./...     # Format (= make fmt; gofmt + goimports, the canonical formatter)
 gosec ./...                 # Security scan
 
+make check                  # vet + test + lint — same gate as CI
+```
+
+Make only works under Git Bash/WSL/Chocolatey on Windows — otherwise run the underlying commands directly (`make help` lists all targets).
+
+```bash
 # Migrations (requires .env with GOOSE_* vars)
 goose up                    # Apply pending
 goose down                  # Rollback one
@@ -42,18 +48,20 @@ psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'
 - **`internal/model/`**: GORM entities (domain models).
 - **`internal/repository/`**: Data access layer using GORM.
 - **`internal/dto/`**: Request/response structs. `internal/apperror/` for shared app error sentinels.
-- **API routes**: All under `/api/*`, defined in `internal/routes/*Routes.go`. Auth-protected routes use `r.authMiddleware.Auth()`.
+- **API routes**: All under `/api/*`. A single `Routes` struct (`internal/routes/routes.go`) wires handler dependencies; per-module `setupXxxRoutes` methods live in `*Routes.go` files. Auth-protected routes use `r.authMiddleware.Auth()`.
 - **Health**: `GET /health` — pings DB (200/503). Used by Docker HEALTHCHECK and load balancers.
 - **Auth gates**: routes apply `r.authMiddleware.Auth()`, and admin routes chain `r.authMiddleware.AuthAdmin()` after it (e.g. `posts.PUT("/:id", h.UpdatePost, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())`).
 - **Pagination**: Use `handler.ParsePaginationParams(c, defaultLimit)` — returns `(limit, offset)`, max cap 100. Build response meta with `response.CalculatePaginationMeta(total, offset, limit)` and pass via `response.SuccessWithMeta`.
+- **Docs**: endpoint reference lives in `docs/api/`, migration notes in `migrations/README.md`.
 
 ## Config & Env
 
 - Config loaded via `config.Load()` — reads `.env` (godotenv) then environment variables.
-- **Required**: `DATABASE_URL`, `JWT_SECRET`. App panics if missing.
+- **Required**: `DATABASE_URL`, `JWT_SECRET` (must be ≥ 32 chars). App panics if missing/invalid.
 - Many keys accept **fallback aliases** (legacy names). First-set key wins. See `config/config.go` for full list.
 - `GOOSE_TABLE=custom.goose_migrations` — non-default goose table location; create the `custom` schema (`psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'`) once before the first `goose up`.
-- Valkey/Redis caching is **optional** — leave `VALKEY_URL` empty to disable (app runs fail-open).
+- Cache primary key is **`REDIS_URL`** (`VALKEY_URL` is a fallback alias) — leave empty to disable. Caching is fail-open: `NewRedisCache` returns nil and the app runs without it.
+- External integrations are **disabled by default** when their env keys are empty, not errors: GitHub OAuth (`GITHUB_CLIENT_*` → `ErrOAuthNotConfigured`), OpenRouter AI chat (`OPENROUTER_API_KEY` — stream endpoints echo the user message), SMTP email (`SMTP_HOST`), RapidAPI market data (`RAPIDAPI_KEY`), Asynq queue (`QUEUE_REDIS_URL`).
 
 ## Testing
 
@@ -85,17 +93,16 @@ Use `response.TooManyRequests(c, "msg")` for 429 (rate limit). `response.Conflic
 
 `.github/workflows/main.yml` runs on PRs and pushes to `main`:
 
-1. **test** — `go vet ./...`, `go test ./...`, `golangci-lint`
+1. **test** — `go vet ./...`, `go test ./...`, `golangci-lint` (pinned to v2.12.2)
 2. **docker** (push to `main` only, after test) — build & push `cecep31/echobackend:latest`, `:sha-<12-char>`, and `:sha-<full>`
 
 Still useful locally before pushing: `go test ./...`, `go vet ./...`, `golangci-lint run`.
 
 ## Migrations
 
-- Goose with **raw SQL** files in `migrations/`. Numbered `001_init_schema.sql` through `010_drop_uuid_ossp.sql`.
+- Goose with **raw SQL** files in `migrations/` (`001_init_schema.sql`, `002_add_post_views_and_user_follows.sql`, …).
 - Uses PostgreSQL features: triggers for count fields, `uuid_generate_v4()` (v7 preferred), `ON DELETE CASCADE`, soft deletes via `deleted_at`.
 - **New migrations**: `goose create <name> sql` (always `sql`, never `go`).
-- **First-time setup**: The local Postgres from `docker compose up` auto-creates the `custom` schema (`scripts/init-db.sql`). For an external Postgres, run `psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'` once before the first `goose up`.
 
 ## Deployment
 
