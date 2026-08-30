@@ -21,6 +21,15 @@ type fixedWindowStore struct {
 	visitors map[string]fixedWindowVisitor
 }
 
+// maxTrackedVisitors bounds the in-memory fallback store so a flood of unique
+// (or spoofed) client IPs cannot grow the map without limit. Once the cap is
+// reached, expired entries are evicted first; if none are expired, the store
+// stops admitting *new* identifiers until slots free up — existing visitors
+// keep their counters. This trades strict per-IP accuracy under extreme flood
+// for bounded memory, which is the right trade-off for an abuse-protection
+// fallback path.
+const maxTrackedVisitors = 10_000
+
 // FixedWindowRateLimiter limits each client IP to maxRequests within window.
 // It is intended for low-volume abuse protection on sensitive routes.
 func FixedWindowRateLimiter(maxRequests int, window time.Duration) echo.MiddlewareFunc {
@@ -48,7 +57,7 @@ func FixedWindowRateLimiterWithCache(redisCache *cache.RedisCache, name string, 
 			if !allowed {
 				seconds := max(int(retryAfter.Seconds()), 1)
 				c.Response().Header().Set("Retry-After", strconv.Itoa(seconds))
-				return response.TooManyRequests(c, "Terlalu banyak percobaan. Coba lagi nanti.")
+				return response.TooManyRequests(c, "Too many attempts. Please try again later.")
 			}
 
 			return next(c)
@@ -92,10 +101,13 @@ func (s *fixedWindowStore) allow(identifier string, maxRequests int, window time
 
 	visitor, ok := s.visitors[identifier]
 	if !ok || !now.Before(visitor.windowEnds) {
-		s.cleanup(now)
-		s.visitors[identifier] = fixedWindowVisitor{
-			count:      1,
-			windowEnds: now.Add(window),
+		if !ok {
+			s.admitLocked(identifier, now, window)
+		} else {
+			s.visitors[identifier] = fixedWindowVisitor{
+				count:      1,
+				windowEnds: now.Add(window),
+			}
 		}
 		return true, 0
 	}
@@ -107,6 +119,24 @@ func (s *fixedWindowStore) allow(identifier string, maxRequests int, window time
 	visitor.count++
 	s.visitors[identifier] = visitor
 	return true, 0
+}
+
+// admitLocked inserts a new visitor, evicting expired entries first and, if
+// the store is still at capacity, refusing to track brand-new identifiers.
+func (s *fixedWindowStore) admitLocked(identifier string, now time.Time, window time.Duration) {
+	if len(s.visitors) >= maxTrackedVisitors {
+		s.cleanup(now)
+	}
+	if len(s.visitors) >= maxTrackedVisitors {
+		// Store is full of active visitors; do not track this new identifier.
+		// It is treated as allowed (first request) but not counted, keeping
+		// memory bounded. Redis-backed mode is unaffected.
+		return
+	}
+	s.visitors[identifier] = fixedWindowVisitor{
+		count:      1,
+		windowEnds: now.Add(window),
+	}
 }
 
 func (s *fixedWindowStore) cleanup(now time.Time) {

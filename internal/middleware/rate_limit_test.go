@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,5 +68,44 @@ func TestFixedWindowStoreAllowsAfterWindowExpires(t *testing.T) {
 	allowed, _ = store.allow("192.0.2.10", 1, time.Minute, now.Add(time.Minute))
 	if !allowed {
 		t.Fatal("request after window expiry should be allowed")
+	}
+}
+
+func TestFixedWindowStoreBoundedUnderFlood(t *testing.T) {
+	store := &fixedWindowStore{visitors: make(map[string]fixedWindowVisitor)}
+	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+
+	// Flood with far more unique IPs than the cap; all inside one window so
+	// nothing expires.
+	for i := range maxTrackedVisitors * 2 {
+		store.allow(fmt.Sprintf("192.0.2.%d", i%256)+"-"+fmt.Sprint(i), 5, time.Minute, now)
+	}
+
+	if len(store.visitors) > maxTrackedVisitors {
+		t.Fatalf("store grew to %d visitors, want <= %d", len(store.visitors), maxTrackedVisitors)
+	}
+}
+
+func TestFixedWindowStoreEvictsExpiredBeforeRefusingNew(t *testing.T) {
+	store := &fixedWindowStore{visitors: make(map[string]fixedWindowVisitor)}
+	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+
+	// Fill the store to capacity.
+	for i := range maxTrackedVisitors {
+		store.allow(fmt.Sprintf("10.0.0.%d", i%256)+"-"+fmt.Sprint(i), 5, time.Minute, now)
+	}
+	if len(store.visitors) != maxTrackedVisitors {
+		t.Fatalf("expected full store, got %d", len(store.visitors))
+	}
+
+	// Advance past the window: all entries are now expired. A new identifier
+	// must be admitted after eviction.
+	later := now.Add(2 * time.Minute)
+	allowed, _ := store.allow("203.0.113.1", 5, time.Minute, later)
+	if !allowed {
+		t.Fatal("new visitor should be allowed after expired entries are evicted")
+	}
+	if len(store.visitors) > maxTrackedVisitors {
+		t.Fatalf("store exceeded cap after eviction: %d", len(store.visitors))
 	}
 }

@@ -37,6 +37,12 @@ func main() {
 	}
 
 	e := echo.NewWithConfig(echo.Config{Logger: slog.Default()})
+	// TrustProxy: Echo v5's ExtractIPFromXFFHeader walks the XFF list
+	// right-to-left and returns the first IP that is NOT in a trusted range
+	// (loopback/link-local/private by default). A client cannot spoof its IP
+	// by injecting X-Forwarded-For unless the request actually originates from
+	// a trusted (private/loopback) proxy hop. Only enable this behind a
+	// reverse proxy that overwrites (not appends to) the XFF header.
 	if conf.HTTP.TrustProxy {
 		e.IPExtractor = echo.ExtractIPFromXFFHeader()
 	} else {
