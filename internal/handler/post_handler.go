@@ -19,6 +19,9 @@ type PostHandler struct {
 	postViewService service.PostViewService
 }
 
+// maxPostLimit caps the page size for post listing queries.
+const maxPostLimit = 100
+
 func (h *PostHandler) respondPostError(c *echo.Context, message string, err error) error {
 	switch {
 	case errors.Is(err, apperrors.ErrPostNotFound):
@@ -55,6 +58,10 @@ func (h *PostHandler) GetPosts(c *echo.Context) error {
 		if limitInt, err := strconv.Atoi(limit); err == nil && limitInt > 0 {
 			filter.Limit = limitInt
 		}
+	}
+	// Cap limit to prevent unbounded queries (DoS vector).
+	if filter.Limit > maxPostLimit {
+		filter.Limit = maxPostLimit
 	}
 
 	if offset := c.QueryParam("offset"); offset != "" {
@@ -154,12 +161,7 @@ func (h *PostHandler) UpdateMyPost(c *echo.Context) error {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	err := h.postService.IsAuthor(c.Request().Context(), id, userID)
-	if err != nil {
-		return h.respondPostError(c, "Failed to check post ownership", err)
-	}
-
-	updatedPost, err := h.postService.UpdatePost(c.Request().Context(), id, &updateDTO)
+	updatedPost, err := h.postService.UpdateMyPost(c.Request().Context(), id, userID, &updateDTO)
 	if err != nil {
 		return h.respondPostError(c, "Failed to update post", err)
 	}
@@ -240,12 +242,7 @@ func (h *PostHandler) DeleteMyPost(c *echo.Context) error {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	if err := h.postService.IsAuthor(c.Request().Context(), id, userID); err != nil {
-		return h.respondPostError(c, "Failed to check post ownership", err)
-	}
-
-	err := h.postService.DeletePostByID(c.Request().Context(), id)
-	if err != nil {
+	if err := h.postService.DeleteMyPost(c.Request().Context(), id, userID); err != nil {
 		return h.respondPostError(c, "Failed to delete post", err)
 	}
 

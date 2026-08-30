@@ -32,7 +32,7 @@ func RecoverWithLog() echo.MiddlewareFunc {
 						"uri", c.Request().RequestURI,
 						"stack", string(stack[:length]),
 					)
-					err = tmpErr
+					err = echo.NewHTTPError(http.StatusInternalServerError, "Internal server error")
 				}
 			}()
 			return next(c)

@@ -24,8 +24,11 @@ type PostRepository interface {
 	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*model.Post, error)
 	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
+	DeletePostByOwner(ctx context.Context, id string, userID string) error
 	UpdatePost(ctx context.Context, id string, updates map[string]any) (*model.Post, error)
 	UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error)
+	UpdatePostByOwner(ctx context.Context, id string, userID string, updates map[string]any) (*model.Post, error)
+	UpdatePostWithTagsByOwner(ctx context.Context, id string, userID string, updates map[string]any, tags []model.Tag) (*model.Post, error)
 	GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 	SearchPosts(ctx context.Context, keyword string, limit int, offset int) ([]*model.Post, int64, error)
 	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error)
@@ -97,6 +100,42 @@ func (r *postRepository) UpdatePostWithTags(ctx context.Context, id string, upda
 	return &updatedPost, nil
 }
 
+func (r *postRepository) UpdatePostByOwner(ctx context.Context, id string, userID string, updates map[string]any) (*model.Post, error) {
+	return r.UpdatePostWithTagsByOwner(ctx, id, userID, updates, nil)
+}
+
+func (r *postRepository) UpdatePostWithTagsByOwner(ctx context.Context, id string, userID string, updates map[string]any, tags []model.Tag) (*model.Post, error) {
+	if len(updates) > 0 {
+		result := r.db.WithContext(ctx).Model(&model.Post{}).
+			Where("id = ? AND created_by = ?", id, userID).Updates(updates)
+		if result.Error != nil {
+			return nil, fmt.Errorf("failed to update post: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return nil, apperrors.ErrPostNotFound
+		}
+	}
+
+	var updatedPost model.Post
+	err := r.db.WithContext(ctx).Preload("User", preloadUserBrief).Preload("Tags").
+		First(&updatedPost, "id = ? AND created_by = ?", id, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve post for update: %w", err)
+	}
+
+	if tags != nil {
+		if err := r.db.WithContext(ctx).Model(&updatedPost).Association("Tags").Replace(tags); err != nil {
+			return nil, fmt.Errorf("failed to update post tags association: %w", err)
+		}
+		updatedPost.Tags = tags
+	}
+
+	return &updatedPost, nil
+}
+
 func (r *postRepository) GetPostByUsername(ctx context.Context, username string, offset int, limit int) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
@@ -138,6 +177,17 @@ func (r *postRepository) DeletePostByID(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *postRepository) DeletePostByOwner(ctx context.Context, id string, userID string) error {
+	result := r.db.WithContext(ctx).Where("id = ? AND created_by = ?", id, userID).Delete(&model.Post{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete post: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return apperrors.ErrPostNotFound
+	}
+	return nil
+}
+
 func (r *postRepository) GetPosts(ctx context.Context, limit int, offset int) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
@@ -170,7 +220,7 @@ func (r *postRepository) GetPostBySlugAndUsername(ctx context.Context, slug stri
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("posts.slug = ? AND users.username = ? AND users.deleted_at IS NULL", slug, username).
+		Where("posts.slug = ? AND posts.published = ? AND users.username = ? AND users.deleted_at IS NULL", slug, true, username).
 		First(&post).Error
 
 	if err != nil {

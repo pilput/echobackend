@@ -39,9 +39,11 @@ type PostService interface {
 	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error)
 	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*dto.PostResponse, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
+	DeleteMyPost(ctx context.Context, id string, userID string) error
 	UploadImagePosts(ctx context.Context, file *multipart.FileHeader) (string, error)
 	CreatePost(ctx context.Context, req *dto.CreatePostRequest, creatorID string) (*dto.PostResponse, error)
 	UpdatePost(ctx context.Context, id string, req *dto.UpdatePostRequest) (*dto.PostResponse, error)
+	UpdateMyPost(ctx context.Context, id string, userID string, req *dto.UpdatePostRequest) (*dto.PostResponse, error)
 	IsAuthor(ctx context.Context, id string, userid string) error
 	GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 }
@@ -145,6 +147,10 @@ func (s *postService) DeletePostByID(ctx context.Context, id string) error {
 	return s.postRepo.DeletePostByID(ctx, id)
 }
 
+func (s *postService) DeleteMyPost(ctx context.Context, id string, userID string) error {
+	return s.postRepo.DeletePostByOwner(ctx, id, userID)
+}
+
 func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.UpdatePostRequest) (*dto.PostResponse, error) {
 	updates := make(map[string]any)
 	if req.Title != "" {
@@ -192,6 +198,65 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 		updatedPost, err = s.postRepo.UpdatePostWithTags(ctx, id, updates, tags)
 	} else {
 		updatedPost, err = s.postRepo.UpdatePost(ctx, id, updates)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return dto.PostToResponse(updatedPost), nil
+}
+
+// UpdateMyPost updates a post scoped to its owner; the mutation itself is
+// owner-checked at the repository level to avoid TOCTOU ownership races.
+func (s *postService) UpdateMyPost(ctx context.Context, id string, userID string, req *dto.UpdatePostRequest) (*dto.PostResponse, error) {
+	updates := make(map[string]any)
+	if req.Title != "" {
+		updates["title"] = req.Title
+	}
+	if req.Body != "" {
+		updates["body"] = req.Body
+	}
+	if req.Slug != "" {
+		updates["slug"] = req.Slug
+	}
+	if req.PhotoURL != "" {
+		updates["photo_url"] = req.PhotoURL
+	}
+	if req.Published != nil {
+		updates["published"] = *req.Published
+	}
+
+	var tags []model.Tag
+	if req.Tags != nil {
+		tags = make([]model.Tag, 0, len(req.Tags))
+		for _, tagName := range req.Tags {
+			if tagName == "" {
+				continue
+			}
+			tag, err := s.findOrCreateTagByName(ctx, tagName)
+			if err != nil {
+				return nil, err
+			}
+			tags = append(tags, *tag)
+		}
+	}
+
+	if len(updates) == 0 && req.Tags == nil {
+		post, err := s.postRepo.GetPostByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if post.CreatedBy == nil || *post.CreatedBy != userID {
+			return nil, apperrors.ErrNotAuthor
+		}
+		return dto.PostToResponse(post), nil
+	}
+
+	var updatedPost *model.Post
+	var err error
+	if req.Tags != nil {
+		updatedPost, err = s.postRepo.UpdatePostWithTagsByOwner(ctx, id, userID, updates, tags)
+	} else {
+		updatedPost, err = s.postRepo.UpdatePostByOwner(ctx, id, userID, updates)
 	}
 	if err != nil {
 		return nil, err
