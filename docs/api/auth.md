@@ -13,8 +13,11 @@ Public auth endpoints use a fixed-window rate limit per IP. If `VALKEY_URL` is e
 | POST | `/forgot-password` | No | 3 / 5 minutes |
 | POST | `/reset-password` | No | 5 / 5 minutes |
 | POST | `/refresh` | No | 30 / minute |
+| POST | `/check-username` | No | 20 / 5 minutes |
 | POST | `/logout` | Bearer | Global |
 | GET | `/profile` | Bearer | Global |
+| PUT | `/profile` | Bearer | Global |
+| DELETE | `/account` | Bearer | Global |
 | PATCH | `/password` | Bearer | Global |
 | GET | `/activity-logs` | Bearer | Global |
 | GET | `/activity-logs/recent` | Bearer | Global |
@@ -195,6 +198,37 @@ Extend a session with a refresh token. Returns a new access token; the refresh t
 
 ---
 
+## POST `/api/auth/check-username`
+
+Check whether a username is already taken. Public (unauthenticated) so the register/edit-profile form can validate as the user types; rate-limited to reduce enumeration abuse.
+
+**Body**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `username` | string | Yes | 3-30 characters |
+
+**Success - 200**
+
+```json
+{
+  "success": true,
+  "message": "Username availability checked",
+  "data": { "exists": true }
+}
+```
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 400 | Invalid body |
+| 422 | Validation failed |
+| 429 | Rate limited |
+| 500 | Server error |
+
+---
+
 ## POST `/api/auth/logout`
 
 Log out the user by deleting the refresh token session.
@@ -244,6 +278,78 @@ Get the currently logged-in user's profile. Returns a flat subset of user fields
   }
 }
 ```
+
+---
+
+## PUT `/api/auth/profile`
+
+Update the currently logged-in user's username, first name, and last name. Email cannot be changed here.
+
+**Header:** `Authorization: Bearer <access_token>`
+
+**Body**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `username` | string | Yes | 3-30 characters |
+| `first_name` | string | No | max 100 characters |
+| `last_name` | string | No | max 100 characters |
+
+**Success - 200** - `data`: same shape as `GET /api/auth/profile`.
+
+```json
+{
+  "success": true,
+  "message": "Profile updated successfully",
+  "data": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "username": "johndoe",
+    "first_name": "John",
+    "last_name": "Doe",
+    "image": "https://...",
+    "is_super_admin": false,
+    "followers_count": 0,
+    "following_count": 0
+  }
+}
+```
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 400 | Invalid body |
+| 401 | Not authenticated |
+| 404 | User not found |
+| 409 | Username already taken by another user |
+| 422 | Validation failed |
+| 500 | Server error |
+
+---
+
+## DELETE `/api/auth/account`
+
+Soft-delete the currently logged-in user's own account (sets `deleted_at`; the row is not permanently removed). Existing access/refresh tokens are not proactively revoked — the frontend should clear local tokens after this call.
+
+**Header:** `Authorization: Bearer <access_token>`
+
+**Success - 200**
+
+```json
+{
+  "success": true,
+  "message": "Account deleted successfully",
+  "data": null
+}
+```
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 401 | Not authenticated |
+| 500 | Server error |
 
 ---
 

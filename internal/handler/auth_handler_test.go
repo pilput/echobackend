@@ -88,6 +88,18 @@ func (m *mockAuthService) ExchangeOAuthCode(ctx context.Context, code string) (s
 	return "", "", nil, nil
 }
 
+func (m *mockAuthService) UpdateProfile(ctx context.Context, userID, username, firstName, lastName string) (*model.User, error) {
+	return nil, nil
+}
+
+func (m *mockAuthService) DeleteAccount(ctx context.Context, userID string) error {
+	return nil
+}
+
+func (m *mockAuthService) CheckUsernameExists(ctx context.Context, username string) (bool, error) {
+	return false, nil
+}
+
 type mockAuthActivityService struct{}
 
 func (m *mockAuthActivityService) LogActivity(ctx context.Context, userID *string, activityType, status, ipAddress, userAgent string, errorMessage *string, metadata map[string]any) {

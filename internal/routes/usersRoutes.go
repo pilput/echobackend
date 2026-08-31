@@ -12,8 +12,11 @@ func (r *Routes) setupUserRoutes(api *echo.Group) {
 		authUsers := users.Group("", r.authMiddleware.Auth())
 		{
 			authUsers.GET("/me", r.userHandler.GetMe)
+			authUsers.POST("/me/image", r.userHandler.UploadAvatar)
 			authUsers.GET("", r.userHandler.GetUsers, r.authMiddleware.AuthAdmin())
+			authUsers.POST("", r.userHandler.CreateUser, r.authMiddleware.AuthAdmin())
 			authUsers.GET("/:id", r.userHandler.GetByID, r.authMiddleware.AuthAdmin())
+			authUsers.PUT("/:id", r.userHandler.UpdateUser, r.authMiddleware.AuthAdmin())
 			authUsers.DELETE("/:id", r.userHandler.DeleteUser, r.authMiddleware.AuthAdmin())
 			authUsers.POST("/:id/restore", r.userHandler.RestoreUser, r.authMiddleware.AuthAdmin())
 

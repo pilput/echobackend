@@ -83,7 +83,8 @@ Query: `limit` (default varies by endpoint, **maximum 100** on most endpoints â€
   `register`, `login`, and `reset-password` **5 / 5 minutes**;
   `forgot-password` **3 / 5 minutes**;
   `refresh` **30 / minute**;
-  `oauth/exchange` **10 / minute**.
+  `oauth/exchange` **10 / minute**;
+  `check-username` **20 / 5 minutes**.
 
 ## Health & Root
 

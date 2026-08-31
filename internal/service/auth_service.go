@@ -33,6 +33,9 @@ type AuthService interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ipAddress, userAgent string) error
 	Logout(ctx context.Context, refreshToken string) error
 	GetProfile(ctx context.Context, userID string) (*model.User, error)
+	UpdateProfile(ctx context.Context, userID, username, firstName, lastName string) (*model.User, error)
+	DeleteAccount(ctx context.Context, userID string) error
+	CheckUsernameExists(ctx context.Context, username string) (bool, error)
 	GetGithubOAuthURL(state string) string
 	GetGithubToken(ctx context.Context, code string) (string, error)
 	SignInWithGithub(ctx context.Context, githubUser *GithubUser, ipAddress, userAgent string) (string, string, *model.User, error)
@@ -348,6 +351,48 @@ func (s *authService) Logout(ctx context.Context, refreshToken string) error {
 
 func (s *authService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	return s.userRepo.GetByID(ctx, userID, false)
+}
+
+// UpdateProfile updates the authenticated user's username/first name/last name.
+// When the username changes, it is checked for uniqueness against other users.
+func (s *authService) UpdateProfile(ctx context.Context, userID, username, firstName, lastName string) (*model.User, error) {
+	user, err := s.userRepo.GetByID(ctx, userID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.Username == nil || *user.Username != username {
+		if err := s.userRepo.CheckUserByUsername(ctx, username); err != nil {
+			return nil, err
+		}
+	}
+
+	user.Username = &username
+	user.FirstName = &firstName
+	user.LastName = &lastName
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// DeleteAccount soft-deletes the authenticated user's own account.
+func (s *authService) DeleteAccount(ctx context.Context, userID string) error {
+	return s.userRepo.SoftDeleteByID(ctx, userID)
+}
+
+// CheckUsernameExists reports whether a user with the given username already exists.
+func (s *authService) CheckUsernameExists(ctx context.Context, username string) (bool, error) {
+	err := s.userRepo.CheckUserByUsername(ctx, username)
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, apperrors.ErrUserExists) {
+		return true, nil
+	}
+	return false, err
 }
 
 func (s *authService) GetGithubOAuthURL(state string) string {

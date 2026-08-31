@@ -60,13 +60,49 @@ Public profile shape of `UserResponse`. Omits `email`, `is_super_admin`, `delete
 | GET | `/:id` | Bearer + **super admin** | By UUID |
 | GET | `/username/:username` | No | By username |
 | GET | `/me` | Bearer | User from token |
+| POST | `/me/image` | Bearer | Upload/replace the current user's avatar |
 | GET | `` | Bearer + **super admin** | User list (paginated); soft-delete filter via query |
+| POST | `` | Bearer + **super admin** | Create a user |
+| PUT | `/:id` | Bearer + **super admin** | Update any user's profile fields |
 | DELETE | `/:id` | Bearer + **super admin** | Soft-delete user |
 | POST | `/:id/restore` | Bearer + **super admin** | Restore a soft-deleted user |
 
 ### GET `/api/users/me`
 
 **Success - 200** - `data`: one `CurrentUserResponse`.
+
+### POST `/api/users/me/image`
+
+Upload or replace the current user's avatar. `multipart/form-data` with a single file field named `avatar`.
+
+**Header:** `Authorization: Bearer <access_token>`
+
+**Form field**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `avatar` | file | Yes | JPEG, PNG, GIF, or WebP; max 5 MB (checked by content sniffing, not just extension) |
+
+**Success - 200**
+
+```json
+{
+  "success": true,
+  "message": "Profile picture updated successfully",
+  "data": { "image": "users/avatars/<generated-key>.jpg" }
+}
+```
+
+`image` is the stored object key, in the same format as the `image` field returned elsewhere (`GET /api/auth/profile`, `UserResponse`, etc.) — resolve it the same way the frontend already resolves other user/post image fields.
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 400 | No file / file missing, file over 5 MB, unsupported file type, or storage unavailable |
+| 401 | Not authenticated |
+| 404 | User not found |
+| 500 | Server error |
 
 ### GET `/api/users` (admin)
 
@@ -89,6 +125,35 @@ GET /api/users?deleted=true&limit=10&offset=0
 GET /api/users?deleted=all
 ```
 
+### POST `/api/users` (admin)
+
+Create a user account directly (admin action; skips email verification/registration flow).
+
+**Header:** `Authorization: Bearer <access_token>`
+
+**Body**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `username` | string | Yes | 3-30 characters |
+| `email` | string | Yes | email format |
+| `password` | string | Yes | min 8 characters |
+| `first_name` | string | No | max 100 characters |
+| `last_name` | string | No | max 100 characters |
+
+**Success - 201** - `data`: `UserResponse`.
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 400 | Invalid body |
+| 401 | Not authenticated |
+| 403 | Not a super admin |
+| 409 | Email or username already exists |
+| 422 | Validation failed |
+| 500 | Server error |
+
 ### GET `/api/users/:id` (admin)
 
 **Query**
@@ -106,6 +171,36 @@ Example:
 ```http
 GET /api/users/<uuid>?deleted=true
 ```
+
+### PUT `/api/users/:id` (admin)
+
+Update any user's profile fields, including their `is_super_admin` flag. Every field is sent on every request (no partial update semantics) — omitted/empty `username` or `email` fail validation.
+
+**Header:** `Authorization: Bearer <access_token>`
+
+**Body**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `username` | string | Yes | 3-30 characters |
+| `email` | string | Yes | email format |
+| `first_name` | string | No | max 100 characters |
+| `last_name` | string | No | max 100 characters |
+| `is_super_admin` | boolean | No | defaults to `false` if omitted |
+
+**Success - 200** - `data`: updated `UserResponse`.
+
+**Errors**
+
+| HTTP | Condition |
+|------|-----------|
+| 400 | Invalid body |
+| 401 | Not authenticated |
+| 403 | Not a super admin |
+| 404 | User not found |
+| 409 | Email or username already taken by another user |
+| 422 | Validation failed |
+| 500 | Server error |
 
 ### GET `/api/users/username/:username`
 

@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -47,6 +48,18 @@ func (m *mockUserService) GetUsers(ctx context.Context, offset int, limit int, d
 func (m *mockUserService) Delete(ctx context.Context, id string) error { return nil }
 
 func (m *mockUserService) Restore(ctx context.Context, id string) (*dto.UserResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) UploadAvatar(ctx context.Context, userID string, file *multipart.FileHeader) (string, error) {
+	return "", nil
+}
+
+func (m *mockUserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) UpdateUser(ctx context.Context, id string, req *dto.UpdateUserRequest) (*dto.UserResponse, error) {
 	return nil, nil
 }
 

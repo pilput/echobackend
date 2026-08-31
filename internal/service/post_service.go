@@ -505,7 +505,7 @@ func (s *postService) UploadImagePosts(ctx context.Context, file *multipart.File
 		return "", apperrors.ErrInvalidFileType
 	}
 
-	objectKey, err := randomImageObjectKey(ext)
+	objectKey, err := randomImageObjectKey(imageUploadPrefix, ext)
 	if err != nil {
 		return "", err
 	}
@@ -530,17 +530,21 @@ func detectAllowedImage(data []byte) (contentType string, ext string, ok bool) {
 		return contentType, ".png", true
 	case "image/webp":
 		return contentType, ".webp", true
+	case "image/gif":
+		return contentType, ".gif", true
 	default:
 		return "", "", false
 	}
 }
 
-func randomImageObjectKey(ext string) (string, error) {
+// randomImageObjectKey generates a random object key under the given storage
+// prefix (e.g. "posts/images" or "users/avatars").
+func randomImageObjectKey(prefix, ext string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/%s%s", imageUploadPrefix, hex.EncodeToString(b), ext), nil
+	return fmt.Sprintf("%s/%s%s", prefix, hex.EncodeToString(b), ext), nil
 }
 
 func (s *postService) GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error) {

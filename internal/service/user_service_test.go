@@ -21,7 +21,7 @@ func TestUserService_GetByID_Success(t *testing.T) {
 			return &model.User{ID: id, Email: "a@b.com", FirstName: &first, LastName: &last}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, err := svc.GetByID(context.Background(), "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,7 +40,7 @@ func TestUserService_GetByID_NotFound(t *testing.T) {
 			return nil, apperrors.ErrUserNotFound
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	_, err := svc.GetByID(context.Background(), "missing")
 	if !errors.Is(err, apperrors.ErrUserNotFound) {
 		t.Fatalf("expected ErrUserNotFound, got %v", err)
@@ -53,7 +53,7 @@ func TestUserService_GetMe_Success(t *testing.T) {
 			return &model.User{ID: id, Email: "me@example.com", IsSuperAdmin: new(true)}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, err := svc.GetMe(context.Background(), "u-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -70,7 +70,7 @@ func TestUserService_GetByUsername_Success(t *testing.T) {
 			return &model.User{ID: "1", Email: "alice@x.com", Username: &uname}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, err := svc.GetByUsername(context.Background(), uname)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -90,7 +90,7 @@ func TestUserService_GetUsers_Success(t *testing.T) {
 			}, 2, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, total, err := svc.GetUsers(context.Background(), 0, 10, dto.UserDeletedFilterActive)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -116,7 +116,7 @@ func TestUserService_GetUsers_RepoError(t *testing.T) {
 			return nil, 0, wantErr
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	_, _, err := svc.GetUsers(context.Background(), 0, 10, dto.UserDeletedFilterActive)
 	if err == nil || !errors.Is(err, wantErr) {
 		t.Fatalf("expected wrapped repo error, got %v", err)
@@ -134,7 +134,7 @@ func TestUserService_GetUsers_DeletedFilter(t *testing.T) {
 			}, 1, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, total, err := svc.GetUsers(context.Background(), 0, 10, dto.UserDeletedFilterOnly)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -160,7 +160,7 @@ func TestUserService_GetAdminByID_DeletedOnly(t *testing.T) {
 			return &model.User{ID: id, Email: "a@x.com", DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true}}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, err := svc.GetAdminByID(context.Background(), "u1", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -176,7 +176,7 @@ func TestUserService_GetAdminByID_NotFound(t *testing.T) {
 			return nil, apperrors.ErrUserNotFound
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	_, err := svc.GetAdminByID(context.Background(), "missing", true)
 	if !errors.Is(err, apperrors.ErrUserNotFound) {
 		t.Fatalf("expected ErrUserNotFound, got %v", err)
@@ -194,7 +194,7 @@ func TestUserService_Delete(t *testing.T) {
 			return nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	if err := svc.Delete(context.Background(), "u1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestUserService_Restore_Success(t *testing.T) {
 			return &model.User{ID: id, Email: "a@x.com", IsSuperAdmin: new(false)}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	resp, err := svc.Restore(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -231,7 +231,7 @@ func TestUserService_Restore_NotFound(t *testing.T) {
 			return apperrors.ErrUserNotFound
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	_, err := svc.Restore(context.Background(), "missing")
 	if !errors.Is(err, apperrors.ErrUserNotFound) {
 		t.Fatalf("expected ErrUserNotFound, got %v", err)
@@ -244,7 +244,7 @@ func TestUserService_Restore_Conflict(t *testing.T) {
 			return apperrors.ErrUserExists
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, nil)
 	_, err := svc.Restore(context.Background(), "u1")
 	if !errors.Is(err, apperrors.ErrUserExists) {
 		t.Fatalf("expected ErrUserExists, got %v", err)

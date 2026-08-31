@@ -263,6 +263,78 @@ func (h *AuthHandler) GetProfile(c *echo.Context) error {
 	})
 }
 
+func (h *AuthHandler) UpdateProfile(c *echo.Context) error {
+	userID, ok := GetUserIDFromClaims(c)
+	if !ok {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+
+	var req dto.UpdateProfileRequest
+	if err := c.Bind(&req); err != nil {
+		return response.BadRequest(c, "Invalid request format", err)
+	}
+
+	if err := c.Validate(req); err != nil {
+		return response.FromValidateError(c, err)
+	}
+
+	user, err := h.authService.UpdateProfile(c.Request().Context(), userID, req.Username, req.FirstName, req.LastName)
+	if errors.Is(err, apperrors.ErrUserExists) {
+		return response.Conflict(c, "Failed to update profile", "Username already taken")
+	}
+	if errors.Is(err, apperrors.ErrUserNotFound) {
+		return response.NotFound(c, "Failed to update profile", err)
+	}
+	if err != nil {
+		return response.InternalServerError(c, "Failed to update profile", err)
+	}
+
+	return response.Success(c, "Profile updated successfully", map[string]any{
+		"id":              user.ID,
+		"email":           user.Email,
+		"username":        user.Username,
+		"first_name":      user.FirstName,
+		"last_name":       user.LastName,
+		"image":           user.Image,
+		"is_super_admin":  user.IsSuperAdmin,
+		"followers_count": user.FollowersCount,
+		"following_count": user.FollowingCount,
+	})
+}
+
+func (h *AuthHandler) DeleteAccount(c *echo.Context) error {
+	userID, ok := GetUserIDFromClaims(c)
+	if !ok {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.authService.DeleteAccount(c.Request().Context(), userID); err != nil {
+		return response.InternalServerError(c, "Failed to delete account", err)
+	}
+
+	return response.Success(c, "Account deleted successfully", nil)
+}
+
+func (h *AuthHandler) CheckUsername(c *echo.Context) error {
+	var req dto.CheckUsernameRequest
+	if err := c.Bind(&req); err != nil {
+		return response.BadRequest(c, "Invalid request format", err)
+	}
+
+	if err := c.Validate(req); err != nil {
+		return response.FromValidateError(c, err)
+	}
+
+	exists, err := h.authService.CheckUsernameExists(c.Request().Context(), req.Username)
+	if err != nil {
+		return response.InternalServerError(c, "Failed to check username", err)
+	}
+
+	return response.Success(c, "Username availability checked", map[string]any{
+		"exists": exists,
+	})
+}
+
 func (h *AuthHandler) GetActivityLogs(c *echo.Context) error {
 	userID, ok := GetUserIDFromClaims(c)
 	if !ok {

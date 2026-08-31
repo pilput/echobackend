@@ -37,6 +37,16 @@ type OAuthExchangeRequest struct {
 	Code string `json:"code" validate:"required"`
 }
 
+type UpdateProfileRequest struct {
+	Username  string `json:"username" validate:"required,min=3,max=30"`
+	FirstName string `json:"first_name" validate:"omitempty,max=100"`
+	LastName  string `json:"last_name" validate:"omitempty,max=100"`
+}
+
+type CheckUsernameRequest struct {
+	Username string `json:"username" validate:"required,min=3,max=30"`
+}
+
 type AuthTokenResponse struct {
 	AccessToken  string     `json:"access_token"`
 	RefreshToken string     `json:"refresh_token"`
