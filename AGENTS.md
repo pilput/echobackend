@@ -3,7 +3,7 @@
 ## Commands
 
 ```bash
-# Local dev services (Postgres 18 + Valkey + MinIO via docker-compose.yml)
+# Local dev services (Postgres 18 + Valkey + RustFS via docker-compose.yml)
 docker compose up -d --wait # Start services (or: make up). Creates the `custom` schema automatically.
 docker compose down         # Stop (or: make down; make down-clean also wipes data)
 make help                   # All shortcuts: up, dev, test, lint, check, migrate-*, ...

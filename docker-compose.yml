@@ -9,7 +9,7 @@ name: echobackend
 #
 # After first start, set in .env:
 #   REDIS_URL=redis://localhost:6379
-#   S3_USE_SSL=false              # local MinIO speaks plain HTTP
+#   S3_USE_SSL=false              # local RustFS speaks plain HTTP
 
 services:
   postgres:
@@ -48,44 +48,46 @@ services:
       retries: 10
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    container_name: echobackend-minio
-    command: ["server", "/data", "--console-address", ":9001"]
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: echobackend-rustfs
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_CONSOLE_ADDRESS: :9001
+      RUSTFS_CONSOLE_ENABLE: true
     ports:
       - "9000:9000" # S3 API
       - "9001:9001" # Web console (http://localhost:9001)
     volumes:
-      - minio-data:/data
+      - rustfs-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set healthcheck http://127.0.0.1:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} >/dev/null 2>&1 && mc ready healthcheck"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/health/ready"]
       interval: 5s
       timeout: 5s
       retries: 12
     restart: unless-stopped
 
-  # One-shot job: creates the default bucket after MinIO is healthy.
+  # One-shot job: creates the default bucket after RustFS is healthy.
   createbuckets:
-    image: minio/mc:latest
+    image: rustfs/rc:latest
     container_name: echobackend-createbuckets
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${S3_BUCKET:-minio-bucket}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      RUSTFS_BUCKET: ${S3_BUCKET:-minio-bucket}
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} >/dev/null;
-      echo 'Creating bucket (if missing):' $${MINIO_BUCKET};
-      mc mb --ignore-existing local/$${MINIO_BUCKET};
+      rc alias set local http://rustfs:9000 $${RUSTFS_ACCESS_KEY} $${RUSTFS_SECRET_KEY} >/dev/null;
+      echo 'Creating bucket (if missing):' $${RUSTFS_BUCKET};
+      rc mb --ignore-existing local/$${RUSTFS_BUCKET};
       "
 
 volumes:
   postgres-data:
   valkey-data:
-  minio-data:
+  rustfs-data:
