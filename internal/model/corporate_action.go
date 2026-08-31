@@ -12,6 +12,8 @@ type CorporateAction struct {
 	Name      string     `json:"name" gorm:"type:text"`
 	Type      string     `json:"type" gorm:"type:text;not null"` // "dividend" | "rups"
 	EventDate time.Time  `json:"event_date" gorm:"column:event_date;type:date;not null"`
+	CumDate   *time.Time `json:"cum_date" gorm:"type:date"`
+	RecDate   *time.Time `json:"rec_date" gorm:"type:date"`
 	PayDate   *time.Time `json:"pay_date" gorm:"type:date"`
 	Amount    *float64   `json:"amount" gorm:"type:numeric(18,4)"`
 	Currency  string     `json:"currency" gorm:"type:text"`

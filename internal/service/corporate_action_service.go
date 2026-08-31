@@ -68,6 +68,8 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 					Name:      a.Name,
 					Type:      string(a.Type),
 					EventDate: a.Date,
+					CumDate:   a.CumDate,
+					RecDate:   a.RecDate,
 					PayDate:   a.PayDate,
 					Amount:    a.Amount,
 					Currency:  a.Currency,
@@ -99,6 +101,14 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 			Note:     a.Note,
 			Market:   a.Market,
 			Amount:   a.Amount,
+		}
+		if a.CumDate != nil {
+			cs := a.CumDate.Format(calendarDateFormat)
+			r.CumDate = &cs
+		}
+		if a.RecDate != nil {
+			rs := a.RecDate.Format(calendarDateFormat)
+			r.RecDate = &rs
 		}
 		if a.PayDate != nil {
 			ps := a.PayDate.Format(calendarDateFormat)

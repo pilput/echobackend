@@ -25,6 +25,12 @@ type CorporateAction struct {
 	Type CorporateActionType
 	// Date is the primary event date (ex-date for dividends, meeting date for RUPS).
 	Date time.Time
+	// CumDate is the last trading date to still be entitled to the dividend
+	// (cum-date, one exchange day before the ex-date). Nil for non-dividend events.
+	CumDate *time.Time
+	// RecDate is the recording/entitlement date used to determine the
+	// shareholder register (nil for non-dividend events).
+	RecDate *time.Time
 	// PayDate is the dividend payment date (nil for non-dividend events).
 	PayDate *time.Time
 	// Amount is the gross dividend amount per share (nil for non-dividend events).

@@ -80,6 +80,18 @@ func (c *RapidAPIIDXClient) GetCorporateActions(ctx context.Context, from, to ti
 				Market:   "IDX",
 			}
 
+			if d.CumDateStr != "" {
+				if t, err := time.Parse(rapidAPIDateFormat, d.CumDateStr); err == nil {
+					action.CumDate = &t
+				}
+			}
+
+			if d.RecDateStr != "" {
+				if t, err := time.Parse(rapidAPIDateFormat, d.RecDateStr); err == nil {
+					action.RecDate = &t
+				}
+			}
+
 			if d.PayDateStr != "" {
 				if t, err := time.Parse(rapidAPIDateFormat, d.PayDateStr); err == nil {
 					action.PayDate = &t
@@ -147,7 +159,9 @@ func (c *RapidAPIIDXClient) GetCorporateActions(ctx context.Context, from, to ti
 
 type rapidAPIDividendItem struct {
 	CompanySymbol string `json:"company_symbol"`
+	CumDateStr    string `json:"dividend_cumdate"`
 	ExDateStr     string `json:"dividend_exdate"`
+	RecDateStr    string `json:"dividend_recdate"`
 	PayDateStr    string `json:"dividend_paydate"`
 	ValueStr      string `json:"dividend_value"`
 	CurrencyStr   string `json:"dividend_currency"`

@@ -57,7 +57,7 @@ func (r *corporateActionRepository) UpsertMany(ctx context.Context, actions []mo
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "symbol"}, {Name: "type"}, {Name: "event_date"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "pay_date", "amount", "currency", "note", "market", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "cum_date", "rec_date", "pay_date", "amount", "currency", "note", "market", "updated_at"}),
 	}).Create(&actions).Error
 }
 
@@ -94,6 +94,12 @@ func dedupeCorporateActions(actions []model.CorporateAction) []model.CorporateAc
 		}
 		if existing.Amount == nil {
 			existing.Amount = a.Amount
+		}
+		if existing.CumDate == nil {
+			existing.CumDate = a.CumDate
+		}
+		if existing.RecDate == nil {
+			existing.RecDate = a.RecDate
 		}
 		if existing.PayDate == nil {
 			existing.PayDate = a.PayDate
