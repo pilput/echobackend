@@ -284,7 +284,7 @@ func TestDeleteComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		err := svc.DeleteComment(ctx, commentID, ownerID)
+		err := svc.DeleteComment(ctx, commentID, ownerID, false)
 		if !errors.Is(err, apperrors.ErrCommentNotOwned) {
 			t.Fatalf("expected ErrCommentNotOwned, got %v", err)
 		}
@@ -302,12 +302,34 @@ func TestDeleteComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		err := svc.DeleteComment(ctx, commentID, ownerID)
+		err := svc.DeleteComment(ctx, commentID, ownerID, false)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
 		if !deleteCalled {
 			t.Fatalf("expected deleteCommentFn to be called")
+		}
+	})
+
+	t.Run("admin can delete a comment they do not own", func(t *testing.T) {
+		deleteCalled := false
+		mockComment := &mockCommentRepo{
+			getCommentByIDFn: func(ctx context.Context, id string) (*model.PostComment, error) {
+				return &model.PostComment{ID: id, CreatedBy: "other-user"}, nil
+			},
+			deleteCommentFn: func(ctx context.Context, id string) error {
+				deleteCalled = true
+				return nil
+			},
+		}
+		svc := NewCommentService(mockComment, nil, nil)
+		adminID := "admin-uuid"
+		err := svc.DeleteComment(ctx, commentID, adminID, true)
+		if err != nil {
+			t.Fatalf("expected nil, got %v", err)
+		}
+		if !deleteCalled {
+			t.Fatalf("expected deleteCommentFn to be called for admin moderation delete")
 		}
 	})
 }

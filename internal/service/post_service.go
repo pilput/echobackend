@@ -35,7 +35,7 @@ type PostService interface {
 	GetPostsTrending(ctx context.Context, limit int) ([]*dto.PostResponse, error)
 	GetPostByID(ctx context.Context, id string) (*dto.PostResponse, error)
 	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*dto.PostResponse, error)
-	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*dto.PostResponse, int64, error)
+	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*dto.PostResponse, int64, error)
 	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error)
 	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*dto.PostResponse, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
@@ -372,7 +372,7 @@ func (s *postService) GetPostsTrending(ctx context.Context, limit int) ([]*dto.P
 	return postsResponse, nil
 }
 
-func (s *postService) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*dto.PostResponse, int64, error) {
+func (s *postService) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*dto.PostResponse, int64, error) {
 	if limit < 0 {
 		limit = 0
 	}
@@ -383,7 +383,7 @@ func (s *postService) GetPostsByCreatedBy(ctx context.Context, createdBy string,
 		return []*dto.PostResponse{}, 0, nil
 	}
 
-	posts, total, err := s.postRepo.GetPostsByCreatedBy(ctx, createdBy, offset, limit)
+	posts, total, err := s.postRepo.GetPostsByCreatedBy(ctx, createdBy, offset, limit, search, published)
 	if err != nil {
 		return nil, 0, err
 	}

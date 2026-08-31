@@ -14,7 +14,7 @@ type CommentService interface {
 	GetCommentsByPostID(ctx context.Context, postID string) ([]*dto.CommentResponse, error)
 	GetCommentByID(ctx context.Context, id string) (*dto.CommentResponse, error)
 	UpdateComment(ctx context.Context, id string, content string, userID string) (*dto.CommentResponse, error)
-	DeleteComment(ctx context.Context, id string, userID string) error
+	DeleteComment(ctx context.Context, id string, userID string, isAdmin bool) error
 	IsCommentAuthor(ctx context.Context, commentID string, userID string) error
 }
 
@@ -122,13 +122,15 @@ func (s *commentService) UpdateComment(ctx context.Context, id string, text stri
 	return dto.CommentToResponse(updated), nil
 }
 
-func (s *commentService) DeleteComment(ctx context.Context, id string, userID string) error {
+// DeleteComment deletes a comment. Ownership is enforced unless isAdmin is
+// true, in which case a super admin may delete any comment (moderation).
+func (s *commentService) DeleteComment(ctx context.Context, id string, userID string, isAdmin bool) error {
 	comment, err := s.commentRepo.GetCommentByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	if comment.CreatedBy != userID {
+	if !isAdmin && comment.CreatedBy != userID {
 		return apperrors.ErrCommentNotOwned
 	}
 

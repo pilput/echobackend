@@ -106,7 +106,19 @@ Paginated published posts for a user or tag name.
 
 **Query:** `limit`, `offset` (default limit 10, max 100).
 
-### GET `/api/posts/me` and `/feed/for-you`
+### GET `/api/posts/me`
+
+Paginated list of posts owned by the logged-in user, including unpublished drafts. **Auth required.**
+
+**Query**
+
+| Param | Description |
+|-------|-------------|
+| `limit`, `offset` | Pagination (default limit 10) |
+| `search` | Case-insensitive match against `posts.title` (`ILIKE '%search%'`); omit for no filter |
+| `published` | `true` / `false`; omit (or send anything else) to include both published and draft posts |
+
+### GET `/api/posts/feed/for-you`
 
 **Query:** `limit`, `offset`. **Auth required.**
 
@@ -244,8 +256,8 @@ Delete a post by ID. **Super admin auth required.**
 |--------|------|------|
 | GET | `/:id/comments` | No |
 | POST | `/:id/comments` | Bearer |
-| PUT | `/:id/comments/:comment_id` | Bearer |
-| DELETE | `/:id/comments/:comment_id` | Bearer |
+| PUT | `/:id/comments/:comment_id` | Bearer (owner only) |
+| DELETE | `/:id/comments/:comment_id` | Bearer (owner, or **super admin**) |
 
 ### `CommentResponse`
 
@@ -268,6 +280,12 @@ POST and PUT accept the same body:
 | `text` | Yes | 1-1000 characters |
 
 **Success - 201 (POST) / 200 (PUT)** - `data`: `CommentResponse`.
+
+### DELETE `/api/posts/:id/comments/:comment_id`
+
+Deletes a comment. Requires the requester to own the comment (`created_by`), **or** be a super admin (moderation) — a super admin can delete any user's comment, not just their own. `PUT` (edit) remains owner-only; there is no admin override for editing.
+
+**Success - 200** - `data`: `null`.
 
 ---
 

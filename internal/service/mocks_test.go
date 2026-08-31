@@ -106,7 +106,7 @@ type mockPostRepo struct {
 	getPostsRandomFn            func(ctx context.Context, limit int) ([]*model.Post, error)
 	getPostsTrendingFn          func(ctx context.Context, limit int) ([]*model.Post, error)
 	getPostBySlugAndUsernameFn  func(ctx context.Context, slug string, username string) (*model.Post, error)
-	getPostsByCreatedByFn       func(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error)
+	getPostsByCreatedByFn       func(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error)
 	deletePostByIDFn            func(ctx context.Context, id string) error
 	deletePostByOwnerFn         func(ctx context.Context, id string, userID string) error
 	updatePostWithTagsByOwnerFn func(ctx context.Context, id string, userID string, updates map[string]any, tags []model.Tag) (*model.Post, error)
@@ -172,9 +172,9 @@ func (m *mockPostRepo) GetPostBySlugAndUsername(ctx context.Context, slug string
 	}
 	panic("GetPostBySlugAndUsername not stubbed")
 }
-func (m *mockPostRepo) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error) {
+func (m *mockPostRepo) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error) {
 	if m.getPostsByCreatedByFn != nil {
-		return m.getPostsByCreatedByFn(ctx, createdBy, offset, limit)
+		return m.getPostsByCreatedByFn(ctx, createdBy, offset, limit, search, published)
 	}
 	panic("GetPostsByCreatedBy not stubbed")
 }

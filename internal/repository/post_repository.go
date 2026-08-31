@@ -22,7 +22,7 @@ type PostRepository interface {
 	GetPostsTrending(ctx context.Context, limit int) ([]*model.Post, error)
 	GetPostByID(ctx context.Context, id string) (*model.Post, error)
 	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*model.Post, error)
-	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error)
+	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
 	DeletePostByOwner(ctx context.Context, id string, userID string) error
 	UpdatePost(ctx context.Context, id string, updates map[string]any) (*model.Post, error)
@@ -282,21 +282,31 @@ func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*mo
 	return posts, nil
 }
 
-func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int) ([]*model.Post, int64, error) {
+func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
 
-	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
-		Where("posts.created_by = ?", createdBy).
-		Count(&count).Error
+	buildQuery := func() *gorm.DB {
+		q := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
+			Where("posts.created_by = ?", createdBy)
+		if search != "" {
+			likePattern := "%" + search + "%"
+			q = q.Where("posts.title ILIKE ?", likePattern)
+		}
+		if published != nil {
+			q = q.Where("posts.published = ?", *published)
+		}
+		return q
+	}
+
+	err := buildQuery().Count(&count).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count posts by creator ID %s: %w", createdBy, err)
 	}
 
-	err = activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
+	err = buildQuery().
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("posts.created_by = ?", createdBy).
 		Order("posts.created_at DESC").
 		Offset(offset).
 		Limit(limit).

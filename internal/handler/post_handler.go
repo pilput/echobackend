@@ -285,7 +285,16 @@ func (h *PostHandler) GetMyPosts(c *echo.Context) error {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	posts, total, err := h.postService.GetPostsByCreatedBy(c.Request().Context(), userID, offset, limit)
+	search := c.QueryParam("search")
+
+	var published *bool
+	if pub := c.QueryParam("published"); pub != "" {
+		if pubBool, err := strconv.ParseBool(pub); err == nil {
+			published = &pubBool
+		}
+	}
+
+	posts, total, err := h.postService.GetPostsByCreatedBy(c.Request().Context(), userID, offset, limit, search, published)
 	if err != nil {
 		return response.InternalServerError(c, "Failed to get posts", err)
 	}

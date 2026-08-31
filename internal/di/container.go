@@ -106,7 +106,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postHandler := handler.NewPostHandler(postService, postViewService)
 	authHandler := handler.NewAuthHandler(authService, authActivityService, cfg.Frontend)
 	tagHandler := handler.NewTagHandler(tagService)
-	commentHandler := handler.NewCommentHandler(commentService)
+	commentHandler := handler.NewCommentHandler(commentService, userService)
 	postViewHandler := handler.NewPostViewHandler(postViewService)
 	postLikeHandler := handler.NewPostLikeHandler(postLikeService)
 	userFollowHandler := handler.NewUserFollowHandler(userFollowService)

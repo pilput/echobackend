@@ -52,6 +52,43 @@ func GetUserIDFromClaims(c *echo.Context) (string, bool) {
 	return "", false
 }
 
+// IsSuperAdminFromClaims reports whether the JWT claims attached to the
+// request assert super-admin status. This is a fast-path check only: it
+// mirrors the claim shortcut in AuthMiddleware.AuthAdmin, so a false/absent
+// result does not mean the user isn't an admin — JWTs can be long-lived and
+// a user's admin status can change after issuance. Callers that need an
+// authoritative answer should fall back to a DB lookup when this returns
+// false.
+func IsSuperAdminFromClaims(c *echo.Context) bool {
+	userClaims := c.Get("user")
+	if userClaims == nil {
+		return false
+	}
+
+	switch v := userClaims.(type) {
+	case jwt.MapClaims:
+		return superAdminClaimTrue(v)
+	case *jwt.Token:
+		claims, ok := v.Claims.(jwt.MapClaims)
+		if !ok {
+			return false
+		}
+		return superAdminClaimTrue(claims)
+	case map[string]any:
+		return superAdminClaimTrue(v)
+	}
+	return false
+}
+
+func superAdminClaimTrue(claims map[string]any) bool {
+	isSuperAdminClaim, exists := claims["is_super_admin"]
+	if !exists || isSuperAdminClaim == nil {
+		return false
+	}
+	isSuperAdmin, ok := isSuperAdminClaim.(bool)
+	return ok && isSuperAdmin
+}
+
 func ParsePaginationParams(c *echo.Context, defaultLimit int) (limit, offset int) {
 	limit = defaultLimit
 	offset = 0
