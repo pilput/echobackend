@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -14,15 +13,21 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"strings"
+	"sync"
 	"time"
 
 	"echobackend/config"
-	"echobackend/internal/platform/queue"
+	"echobackend/pkg/applog"
 )
 
-const taskTypePasswordReset = "email:password_reset"
+var log = applog.Component("email")
 
-// Service sends application emails through SMTP.
+type passwordResetPayload struct {
+	To        string `json:"to"`
+	ResetLink string `json:"reset_link"`
+}
+
+// Service sends application emails through SMTP using an in-process worker pool.
 type Service struct {
 	host     string
 	port     int
@@ -32,16 +37,15 @@ type Service struct {
 	timeout  time.Duration
 	taskTTL  time.Duration
 	useTLS   bool
-	queue    *queue.Service
+
+	tasks     chan passwordResetPayload
+	quit      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
-type passwordResetPayload struct {
-	To        string `json:"to"`
-	ResetLink string `json:"reset_link"`
-}
-
-// NewService creates an SMTP-backed email service and registers its background tasks.
-func NewService(cfg config.EmailConfig, taskQueue *queue.Service) *Service {
+// NewService creates an SMTP-backed email service and starts its background worker pool.
+func NewService(cfg config.EmailConfig) *Service {
 	service := &Service{
 		host:     cfg.SMTPHost,
 		port:     cfg.SMTPPort,
@@ -51,54 +55,80 @@ func NewService(cfg config.EmailConfig, taskQueue *queue.Service) *Service {
 		timeout:  cfg.Timeout,
 		taskTTL:  cfg.TaskTimeout,
 		useTLS:   cfg.UseTLS,
-		queue:    taskQueue,
+		tasks:    make(chan passwordResetPayload, 128),
+		quit:     make(chan struct{}),
 	}
-	service.registerQueueHandlers()
+	if service.hasSMTPConfig() {
+		service.startWorkers(2)
+		log.Info("email background workers started", "workers", 2)
+	}
 	return service
 }
 
-func (s *Service) registerQueueHandlers() {
-	if s == nil || s.queue == nil {
-		return
+func (s *Service) startWorkers(workerCount int) {
+	for i := 0; i < workerCount; i++ {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			for {
+				select {
+				case <-s.quit:
+					return
+				case payload, ok := <-s.tasks:
+					if !ok {
+						return
+					}
+					taskCtx := context.Background()
+					var cancel context.CancelFunc
+					if s.taskTTL > 0 {
+						taskCtx, cancel = context.WithTimeout(taskCtx, s.taskTTL)
+					}
+					if err := s.SendPasswordResetEmail(taskCtx, payload.To, payload.ResetLink); err != nil {
+						log.Error("failed to send password reset email", "error", err, "to", payload.To)
+					}
+					if cancel != nil {
+						cancel()
+					}
+				}
+			}
+		}()
 	}
-	s.queue.Handle(taskTypePasswordReset, s.handlePasswordResetTask)
 }
 
-// IsConfigured reports whether queued email delivery is enabled.
+// IsConfigured reports whether email delivery is enabled.
 func (s *Service) IsConfigured() bool {
-	return s != nil && s.hasSMTPConfig() && s.queue != nil && s.queue.IsConfigured()
+	return s != nil && s.hasSMTPConfig()
 }
 
 func (s *Service) hasSMTPConfig() bool {
 	return s != nil && s.host != "" && s.port > 0 && s.from != ""
 }
 
-// Close is kept for DI cleanup compatibility.
+// Close stops background workers gracefully.
 func (s *Service) Close() error {
+	if s == nil {
+		return nil
+	}
+	s.closeOnce.Do(func() {
+		close(s.quit)
+		s.wg.Wait()
+	})
 	return nil
 }
 
-// EnqueuePasswordResetEmail queues a password reset email for Asynq delivery.
+// EnqueuePasswordResetEmail queues a password reset email for background delivery.
 func (s *Service) EnqueuePasswordResetEmail(to, resetLink string) error {
 	if !s.IsConfigured() {
 		return errors.New("email service not configured")
 	}
 
 	payload := passwordResetPayload{To: to, ResetLink: resetLink}
-	return s.queue.EnqueueJSON(taskTypePasswordReset, payload, queue.TaskOptions{Timeout: s.taskTTL})
-}
-
-func (s *Service) handlePasswordResetTask(ctx context.Context, payloadBytes []byte) error {
-	var payload passwordResetPayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return fmt.Errorf("json.Unmarshal failed: %w: %w", err, queue.SkipRetry)
+	select {
+	case s.tasks <- payload:
+		return nil
+	default:
+		return errors.New("email queue is full")
 	}
-
-	if payload.To == "" || payload.ResetLink == "" {
-		return fmt.Errorf("invalid password reset payload: %w", queue.SkipRetry)
-	}
-
-	return s.SendPasswordResetEmail(ctx, payload.To, payload.ResetLink)
 }
 
 // SendPasswordResetEmail sends the password reset link email.
@@ -291,8 +321,7 @@ func passwordResetTemplate(resetLink, expiresIn string) (string, string) {
     .header { padding: 28px 32px 18px; border-bottom: 1px solid #eeeeee; }
     .brand { margin: 0 0 12px; color: #555555; font-size: 13px; font-weight: 600; }
     h1 { margin: 0; color: #111111; font-size: 23px; line-height: 1.3; font-weight: 600; }
-    .content { padding: 26px 32px 32px; }
-    p { margin: 0 0 16px; color: #333333; font-size: 16px; line-height: 1.6; }
+    .content { padding: 26px 32px 32px; }\n    p { margin: 0 0 16px; color: #333333; font-size: 16px; line-height: 1.6; }
     .button-wrap { margin: 24px 0; }
     .button { display: inline-block; background: #111111; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-size: 15px; font-weight: 600; }
     .meta { margin: 22px 0; padding: 14px 0; border-top: 1px solid #eeeeee; border-bottom: 1px solid #eeeeee; color: #555555; font-size: 14px; line-height: 1.5; }

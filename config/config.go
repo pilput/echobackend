@@ -9,7 +9,6 @@
 //	cfg.Database  // PostgreSQL DSN and pool tuning
 //	cfg.S3        // S3-compatible object storage
 //	cfg.Cache     // Valkey/Redis cache
-//	cfg.Queue     // background jobs
 //	cfg.Email     // password reset email delivery
 //
 // Some env keys have fallback aliases (legacy names). The first-set key wins;
@@ -32,7 +31,6 @@ type Config struct {
 	Database   DatabaseConfig
 	S3         S3Config
 	Cache      CacheConfig
-	Queue      QueueConfig
 	OpenRouter OpenRouterConfig
 	GitHub     GitHubConfig
 	Frontend   FrontendConfig
@@ -110,20 +108,6 @@ type CacheConfig struct {
 	TTL time.Duration
 	// ConnectTimeout is used when establishing a new cache connection.
 	ConnectTimeout time.Duration
-}
-
-// QueueConfig contains Asynq background job settings.
-type QueueConfig struct {
-	// RedisURL is the connection URL for the Asynq broker. Empty disables background jobs.
-	RedisURL string
-	// ConnectTimeout is used for Redis dial/read/write timeouts.
-	ConnectTimeout time.Duration
-	// DefaultQueue is used when callers do not specify a queue.
-	DefaultQueue string
-	// Concurrency controls the number of concurrent Asynq workers.
-	Concurrency int
-	// MaxRetry is the default retry count for queued tasks.
-	MaxRetry int
 }
 
 // OpenRouterConfig contains upstream AI chat settings.
@@ -215,13 +199,6 @@ func Load() (*Config, error) {
 			TTL:            time.Duration(envInt([]string{"CACHE_TTL_SECONDS"}, 60)) * time.Second,
 			ConnectTimeout: time.Duration(envInt([]string{"REDIS_CONNECT_TIMEOUT_MS", "VALKEY_CONNECT_TIMEOUT_MS"}, 2000)) * time.Millisecond,
 		},
-		Queue: QueueConfig{
-			RedisURL:       envString([]string{"QUEUE_REDIS_URL", "ASYNQ_REDIS_URL", "REDIS_URL", "VALKEY_URL"}, ""),
-			ConnectTimeout: time.Duration(envInt([]string{"QUEUE_REDIS_TIMEOUT_MS", "ASYNQ_REDIS_TIMEOUT_MS", "REDIS_CONNECT_TIMEOUT_MS", "VALKEY_CONNECT_TIMEOUT_MS"}, 2000)) * time.Millisecond,
-			DefaultQueue:   envString([]string{"QUEUE_DEFAULT_NAME"}, "default"),
-			Concurrency:    envInt([]string{"QUEUE_CONCURRENCY"}, 1),
-			MaxRetry:       envInt([]string{"QUEUE_MAX_RETRY"}, 5),
-		},
 		OpenRouter: OpenRouterConfig{
 			APIKey:       envString([]string{"OPENROUTER_API_KEY"}, ""),
 			BaseURL:      envString([]string{"OPENROUTER_BASE_URL"}, "https://openrouter.ai/api/v1"),
@@ -285,18 +262,6 @@ func (c *Config) validate() error {
 	}
 	if c.Cache.ConnectTimeout < 0 {
 		return errors.New("REDIS_CONNECT_TIMEOUT_MS must be >= 0")
-	}
-	if c.Queue.ConnectTimeout <= 0 {
-		return errors.New("QUEUE_REDIS_TIMEOUT_MS must be > 0")
-	}
-	if c.Queue.DefaultQueue == "" {
-		return errors.New("QUEUE_DEFAULT_NAME is required")
-	}
-	if c.Queue.Concurrency <= 0 {
-		return errors.New("QUEUE_CONCURRENCY must be > 0")
-	}
-	if c.Queue.MaxRetry < 0 {
-		return errors.New("QUEUE_MAX_RETRY must be >= 0")
 	}
 	if c.HTTP.RateLimitRPS < 0 {
 		return errors.New("HTTP_RATE_LIMIT_RPS must be >= 0")

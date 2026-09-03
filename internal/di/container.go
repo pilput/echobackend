@@ -8,7 +8,6 @@ import (
 	"echobackend/internal/platform/cache"
 	"echobackend/internal/platform/database"
 	"echobackend/internal/platform/email"
-	"echobackend/internal/platform/queue"
 	"echobackend/internal/platform/storage"
 	"echobackend/internal/repository"
 	"echobackend/internal/routes"
@@ -46,17 +45,11 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		})
 	}
 
-	taskQueue := queue.NewService(cfg.Queue)
-	cleanup.Register(func() error {
-		return taskQueue.Close()
-	})
-
 	s3Storage := storage.NewS3Storage(cfg)
-	emailService := email.NewService(cfg.Email, taskQueue)
+	emailService := email.NewService(cfg.Email)
 	cleanup.Register(func() error {
 		return emailService.Close()
 	})
-	taskQueue.Start()
 
 	userRepo := repository.NewUserRepository(db)
 	postRepo := repository.NewPostRepository(db)
