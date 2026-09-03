@@ -22,6 +22,9 @@ type PostHandler struct {
 // maxPostLimit caps the page size for post listing queries.
 const maxPostLimit = 100
 
+// maxSitemapPostLimit is the default and maximum limit for sitemap posts.
+const maxSitemapPostLimit = 50000
+
 func (h *PostHandler) respondPostError(c *echo.Context, message string, err error) error {
 	switch {
 	case errors.Is(err, apperrors.ErrPostNotFound):
@@ -417,7 +420,17 @@ func (h *PostHandler) UploadImagePosts(c *echo.Context) error {
 }
 
 func (h *PostHandler) GetPostsForSitemap(c *echo.Context) error {
-	posts, err := h.postService.GetPostsForSitemap(c.Request().Context(), 1000)
+	limit := maxSitemapPostLimit
+	if l := c.QueryParam("limit"); l != "" {
+		if limitInt, err := strconv.Atoi(l); err == nil && limitInt > 0 {
+			limit = limitInt
+		}
+	}
+	if limit > maxSitemapPostLimit {
+		limit = maxSitemapPostLimit
+	}
+
+	posts, err := h.postService.GetPostsForSitemap(c.Request().Context(), limit)
 	if err != nil {
 		return response.InternalServerError(c, "Failed to get posts for sitemap", err)
 	}

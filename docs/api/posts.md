@@ -216,6 +216,14 @@ Likes **received** by posts owned by the logged-in user, aggregated monthly. **A
 
 ### GET `/api/posts/sitemap`
 
+Returns posts formatted for sitemap generation.
+
+**Query (optional)**
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | 50000 | Maximum number of posts to return (max: 50000) |
+
 **Success - 200** - `data`: `SitemapPost[]`:
 
 ```json
