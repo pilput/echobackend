@@ -107,7 +107,9 @@ INVALID_LINE_WITHOUT_EQUALS
 		t.Fatalf("failed to write test .env: %v", err)
 	}
 
-	loadDotEnv(envPath)
+	if err := loadDotEnv(envPath); err != nil {
+		t.Fatalf("failed to load .env: %v", err)
+	}
 
 	if got := os.Getenv(keyNormal); got != "normal_val" {
 		t.Errorf("expected normal_val, got %q", got)
@@ -122,6 +124,8 @@ INVALID_LINE_WITHOUT_EQUALS
 		t.Errorf("expected original_value (not overwritten), got %q", got)
 	}
 
-	// Missing file should not panic or error
-	loadDotEnv(filepath.Join(tmpDir, "does-not-exist.env"))
+	// Missing file returns error without panic
+	if err := loadDotEnv(filepath.Join(tmpDir, "does-not-exist.env")); err == nil {
+		t.Error("expected error for missing file")
+	}
 }

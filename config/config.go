@@ -161,8 +161,8 @@ type MarketDataConfig struct {
 //
 // Some keys accept legacy aliases; the first-set key wins.
 func Load() (*Config, error) {
-	// Best-effort .env loading; missing file is not an error.
-	loadDotEnv(".env")
+	// Best-effort .env loading; missing or unreadable file is not an error.
+	_ = loadDotEnv(".env")
 
 	cfg := &Config{
 		App: AppConfig{
@@ -241,12 +241,12 @@ func Load() (*Config, error) {
 }
 
 // loadDotEnv reads a .env file if present and sets any environment variables
-// that are not already set. Missing or unreadable files are ignored.
+// that are not already set. Missing or unreadable files return an error.
 // System or container environment variables always take precedence.
-func loadDotEnv(filepath string) {
+func loadDotEnv(filepath string) error {
 	file, err := os.Open(filepath)
 	if err != nil {
-		return
+		return err
 	}
 	defer func() { _ = file.Close() }()
 
@@ -275,6 +275,8 @@ func loadDotEnv(filepath string) {
 			_ = os.Setenv(key, value)
 		}
 	}
+
+	return scanner.Err()
 }
 
 // validate checks cross-section invariants and required fields.
