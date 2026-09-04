@@ -29,7 +29,10 @@ type Container struct {
 func NewContainer(cfg *config.Config) (*Container, error) {
 	cleanup := NewCleanupManager()
 
-	db := database.NewDatabase(cfg)
+	db, err := database.NewDatabase(cfg)
+	if err != nil {
+		return nil, err
+	}
 	cleanup.Register(func() error {
 		sqlDB, err := db.DB()
 		if err != nil {

@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -16,8 +14,18 @@ import (
 
 var log = applog.Component("database")
 
-// NewDatabase creates a new database connection using the provided configuration
-func NewDatabase(config *config.Config) *gorm.DB {
+// NewDatabase opens the connection pool and wraps it in GORM.
+//
+// Connection-level settings belong in DATABASE_URL, not here: pgx parses the
+// libpq connection string and validates it, so connect_timeout, sslmode and
+// default_query_exec_mode are set the same way every other Postgres tool sets
+// them. Only pool sizing — which is a property of this process, not of the
+// connection — is configured in code.
+//
+// Reach for stdlib.OpenDB with a hand-built pgx.ConnConfig only if something is
+// ever needed that has no connection-string equivalent, such as a custom
+// tls.Config or an AfterConnect hook.
+func NewDatabase(config *config.Config) (*gorm.DB, error) {
 	gormLogLevel := logger.Error
 	if config.App.Debug {
 		gormLogLevel = logger.Info
@@ -30,42 +38,44 @@ func NewDatabase(config *config.Config) *gorm.DB {
 			IgnoreRecordNotFoundError: true,
 			ParameterizedQueries:      !config.App.Debug,
 		}),
+		// Turns driver errors into gorm.ErrDuplicatedKey / ErrForeignKeyViolated,
+		// so repositories can match on those instead of reaching for pgconn and
+		// SQLSTATE strings.
+		TranslateError: true,
 	}
 
-	pgxConfig, err := pgx.ParseConfig(config.Database.DSN)
+	// gorm.Open pings before returning, because DisableAutomaticPing is left
+	// false and the pool it builds satisfies its Pinger check. Startup therefore
+	// blocks until the database answers, and an unreachable database fails the
+	// process here instead of surfacing as 500s on the first request. The
+	// /health endpoint re-checks liveness afterwards. Keep connect_timeout in
+	// the DSN so a hung TCP connect cannot stall startup for the OS default.
+	db, err := gorm.Open(postgres.Open(config.Database.DSN), gormConfig)
 	if err != nil {
-		log.Error("failed to parse database config", "error", err)
-		panic(fmt.Errorf("failed to parse database config: %w", err))
+		// GORM closes the pool itself when its own ping fails.
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	// Use the default extended query protocol for better performance (named statements,
-	// binary encoding). If you run behind PgBouncer in transaction-pooling mode, set
-	// PGX_QUERY_EXEC_MODE=simple or switch back to QueryExecModeSimpleProtocol here.
-	pgxConfig.ConnectTimeout = 10 * time.Second
 
-	// Open connection pool — connections are established lazily on first use.
-	// We intentionally skip a blocking Ping here to keep startup fast;
-	// the /health endpoint verifies liveness on demand.
+	sqldb, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to reach underlying sql.DB: %w", err)
+	}
+
 	poolConfig := connectionPoolConfig{
 		maxOpenConns:    defaultInt(config.Database.MaxOpenConns, 25),
 		maxIdleConns:    defaultInt(config.Database.MaxIdleConns, 25),
 		connMaxLifetime: defaultDuration(config.Database.ConnMaxLifetime, 15*time.Minute),
-		connMaxIdleTime: 5 * time.Minute,
+		connMaxIdleTime: defaultDuration(config.Database.ConnMaxIdleTime, 5*time.Minute),
 	}
-
-	sqldb := stdlib.OpenDB(*pgxConfig)
 	configureConnectionPool(sqldb, poolConfig)
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: sqldb,
-	}), gormConfig)
-	if err != nil {
-		_ = sqldb.Close()
-		log.Error("failed to open database", "error", err)
-		panic(fmt.Errorf("failed to open database: %w", err))
-	}
-
-	log.Info("pool ready", "max_open", poolConfig.maxOpenConns, "max_idle", poolConfig.maxIdleConns, "conn_lifetime", poolConfig.connMaxLifetime)
-	return db
+	log.Info("pool ready",
+		"max_open", poolConfig.maxOpenConns,
+		"max_idle", poolConfig.maxIdleConns,
+		"conn_lifetime", poolConfig.connMaxLifetime,
+		"conn_idle_time", poolConfig.connMaxIdleTime,
+	)
+	return db, nil
 }
 
 type connectionPoolConfig struct {

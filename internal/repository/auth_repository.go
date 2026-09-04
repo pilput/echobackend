@@ -7,7 +7,6 @@ import (
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/model"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -54,8 +53,9 @@ func (r *authRepository) FindUserByIdentifier(ctx context.Context, identifier st
 func (r *authRepository) CreateUser(ctx context.Context, user *model.User) error {
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(result.Error, &pgErr) && pgErr.Code == "23505" {
+		// gorm.Config.TranslateError turns SQLSTATE 23505 into ErrDuplicatedKey,
+		// so the unique-violation check no longer depends on the pgx driver.
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
 			return apperrors.ErrUserExists
 		}
 		return result.Error

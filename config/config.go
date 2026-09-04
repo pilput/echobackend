@@ -81,6 +81,12 @@ type DatabaseConfig struct {
 	MaxIdleConns int
 	// ConnMaxLifetime is the maximum duration a database connection can be reused.
 	ConnMaxLifetime time.Duration
+	// ConnMaxIdleTime is how long a connection may sit idle before it is closed.
+	//
+	// Connection-level settings (connect_timeout, sslmode,
+	// default_query_exec_mode) are not fields here: they belong in the DSN,
+	// where pgx parses and validates them.
+	ConnMaxIdleTime time.Duration
 }
 
 // S3Config contains S3-compatible object storage settings (MinIO, AWS S3, etc.).
@@ -185,6 +191,7 @@ func Load() (*Config, error) {
 			MaxOpenConns:    envInt([]string{"DB_POOL_MAX_OPEN", "MAX_OPEN_CONNS"}, 25),
 			MaxIdleConns:    envInt([]string{"DB_POOL_MAX_IDLE", "MAX_IDLE_CONNS"}, 25),
 			ConnMaxLifetime: envDuration([]string{"DB_POOL_CONN_LIFETIME", "CONN_MAX_LIFETIME"}, 15*time.Minute),
+			ConnMaxIdleTime: envDuration([]string{"DB_POOL_CONN_IDLE_TIME", "CONN_MAX_IDLE_TIME"}, 5*time.Minute),
 		},
 		S3: S3Config{
 			Endpoint:  envString([]string{"S3_ENDPOINT", "MINIO_ENDPOINT"}, "localhost:9000"),
