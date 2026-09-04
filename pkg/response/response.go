@@ -173,8 +173,7 @@ func ValidationError(c *echo.Context, message string, err error) error {
 // FromValidateError maps Echo validation errors to a unified response:
 // structured field errors use 422 with Errors populated; otherwise ValidationError fallback.
 func FromValidateError(c *echo.Context, err error) error {
-	var errs validator.ValidationErrors
-	if errors.As(err, &errs) {
+	if errs, ok := errors.AsType[validator.ValidationErrors](err); ok {
 		log.Warn("validation error",
 			"error", errs.Error(),
 		)

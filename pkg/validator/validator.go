@@ -80,8 +80,7 @@ func IsFreeOpenRouterModel(model string) bool {
 
 func (cv *CustomValidator) Validate(i any) error {
 	if err := cv.validator.Struct(i); err != nil {
-		var validationErrors validator.ValidationErrors
-		if errors.As(err, &validationErrors) {
+		if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
 			result := ValidationErrors{
 				Errors: make([]ValidationError, len(validationErrors)),
 			}

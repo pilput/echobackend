@@ -66,10 +66,8 @@ func NewService(cfg config.EmailConfig) *Service {
 }
 
 func (s *Service) startWorkers(workerCount int) {
-	for i := 0; i < workerCount; i++ {
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
+	for range workerCount {
+		s.wg.Go(func() {
 			for {
 				select {
 				case <-s.quit:
@@ -91,7 +89,7 @@ func (s *Service) startWorkers(workerCount int) {
 					}
 				}
 			}
-		}()
+		})
 	}
 }
 

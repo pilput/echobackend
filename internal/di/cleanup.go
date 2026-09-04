@@ -3,6 +3,7 @@ package di
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 )
@@ -37,12 +38,12 @@ func (cm *CleanupManager) Cleanup(ctx context.Context) error {
 	var errors []error
 
 	// Cleanup in reverse order (LIFO)
-	for i := len(cleaners) - 1; i >= 0; i-- {
+	for _, cleaner := range slices.Backward(cleaners) {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("cleanup timeout: %w", ctx.Err())
 		default:
-			if err := cleaners[i](); err != nil {
+			if err := cleaner(); err != nil {
 				errors = append(errors, fmt.Errorf("cleanup error: %w", err))
 			}
 		}
