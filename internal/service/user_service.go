@@ -11,8 +11,7 @@ import (
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
-
-	"golang.org/x/crypto/bcrypt"
+	pkgpassword "echobackend/pkg/password"
 )
 
 type UserRepository interface {
@@ -188,11 +187,10 @@ func (s *userService) CreateUser(ctx context.Context, req *dto.CreateUserRequest
 		return nil, err
 	}
 
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(req.Password)
 	if err != nil {
 		return nil, err
 	}
-	hashedPassword := string(hashedPasswordBytes)
 
 	username := req.Username
 	newUser := &model.User{

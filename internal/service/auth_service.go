@@ -20,8 +20,9 @@ import (
 	"echobackend/internal/model"
 	"echobackend/internal/repository"
 
+	pkgpassword "echobackend/pkg/password"
+
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService interface {
@@ -132,12 +133,10 @@ func (s *authService) Register(ctx context.Context, email, username, password st
 		return nil, err
 	}
 
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(password)
 	if err != nil {
 		return nil, err
 	}
-
-	hashedPassword := string(hashedPasswordBytes)
 
 	newUser := &model.User{
 		Email:    email,
@@ -164,9 +163,17 @@ func (s *authService) Login(ctx context.Context, identifier, password, ipAddress
 		return "", "", nil, apperrors.ErrInvalidCredentials
 	}
 
-	if compareErr := bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(password)); compareErr != nil {
+	matched, compareErr := pkgpassword.Compare(*user.Password, password)
+	if compareErr != nil || !matched {
 		s.activityService.LogActivity(ctx, &user.ID, model.ActivityLoginFailed, model.StatusFailure, ipAddress, userAgent, nil, nil)
 		return "", "", nil, apperrors.ErrInvalidCredentials
+	}
+
+	// Transparent upgrade: rehash legacy bcrypt or outdated argon2 hashes to current Argon2id defaults
+	if pkgpassword.NeedsRehash(*user.Password) {
+		if newHash, err := pkgpassword.Hash(password); err == nil {
+			user.Password = &newHash
+		}
 	}
 
 	tokenString, refreshToken, err := s.createTokenAndSession(ctx, user)
@@ -255,11 +262,10 @@ func (s *authService) ResetPassword(ctx context.Context, token, password, ipAddr
 		return apperrors.ErrUserNotFound
 	}
 
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(password)
 	if err != nil {
 		return err
 	}
-	hashedPassword := string(hashedPasswordBytes)
 
 	user.Password = &hashedPassword
 	if err := s.userRepo.Update(ctx, user); err != nil {
@@ -324,16 +330,16 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 		return apperrors.ErrInvalidCredentials
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(currentPassword)); err != nil {
+	matched, compareErr := pkgpassword.Compare(*user.Password, currentPassword)
+	if compareErr != nil || !matched {
 		s.activityService.LogActivity(ctx, &userID, model.ActivityPasswordChange, model.StatusFailure, ipAddress, userAgent, nil, nil)
 		return apperrors.ErrInvalidCredentials
 	}
 
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(newPassword)
 	if err != nil {
 		return err
 	}
-	hashedPassword := string(hashedPasswordBytes)
 
 	user.Password = &hashedPassword
 	if err := s.userRepo.Update(ctx, user); err != nil {

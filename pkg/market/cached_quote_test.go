@@ -33,9 +33,9 @@ func (m *mockQuoteCache) SetJSONWithTTL(ctx context.Context, key string, value a
 }
 
 type mockInnerQuoteClient struct {
-	calls        int
+	calls         int
 	lastRequested []string
-	quotes       map[string]float64
+	quotes        map[string]float64
 }
 
 func (m *mockInnerQuoteClient) GetQuotes(ctx context.Context, symbols []string) (map[string]float64, error) {

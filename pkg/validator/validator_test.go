@@ -242,3 +242,12 @@ func TestFreeModelValidation(t *testing.T) {
 		t.Fatal("expected validation error for paid model")
 	}
 }
+
+func BenchmarkIsValidUUID(b *testing.B) {
+	uuid := "550e8400-e29b-41d4-a716-446655440000"
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = IsValidUUID(uuid)
+	}
+}

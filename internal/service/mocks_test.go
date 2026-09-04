@@ -310,15 +310,16 @@ func (m *mockPostViewRepo) CountViewsByAuthorBefore(ctx context.Context, userID,
 // ---- UserRepository mock ------------------------------------------------------
 
 type mockUserRepo struct {
-	getByIDFn       func(ctx context.Context, id string, deletedOnly bool) (*model.User, error)
-	getByUsernameFn func(ctx context.Context, username string) (*model.User, error)
-	getUsersFn      func(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*model.User, int64, error)
-	softDeleteFn    func(ctx context.Context, id string) error
-	restoreByIDFn   func(ctx context.Context, id string) error
-	createFn        func(ctx context.Context, user *model.User) error
-	updateFn        func(ctx context.Context, user *model.User) error
-	existsFn        func(ctx context.Context, email string) (bool, error)
-	getByEmailFn    func(ctx context.Context, email string) (*model.User, error)
+	getByIDFn             func(ctx context.Context, id string, deletedOnly bool) (*model.User, error)
+	getByUsernameFn       func(ctx context.Context, username string) (*model.User, error)
+	getUsersFn            func(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*model.User, int64, error)
+	softDeleteFn          func(ctx context.Context, id string) error
+	restoreByIDFn         func(ctx context.Context, id string) error
+	createFn              func(ctx context.Context, user *model.User) error
+	updateFn              func(ctx context.Context, user *model.User) error
+	existsFn              func(ctx context.Context, email string) (bool, error)
+	getByEmailFn          func(ctx context.Context, email string) (*model.User, error)
+	checkUserByUsernameFn func(ctx context.Context, username string) error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *model.User) error {
@@ -379,7 +380,10 @@ func (m *mockUserRepo) Exists(ctx context.Context, email string) (bool, error) {
 	return false, nil
 }
 func (m *mockUserRepo) CheckUserByUsername(ctx context.Context, username string) error {
-	panic("CheckUserByUsername not stubbed")
+	if m.checkUserByUsernameFn != nil {
+		return m.checkUserByUsernameFn(ctx, username)
+	}
+	return nil
 }
 
 // ---- TagRepository mock -------------------------------------------------------

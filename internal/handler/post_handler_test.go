@@ -120,7 +120,7 @@ func TestGetPostsForSitemap_Limits(t *testing.T) {
 			}
 
 			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/api/posts/sitemap?"+tt.query, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/posts/sitemap?"+tt.query, nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 

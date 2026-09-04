@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -78,7 +79,7 @@ func TestFixedWindowStoreBoundedUnderFlood(t *testing.T) {
 	// Flood with far more unique IPs than the cap; all inside one window so
 	// nothing expires.
 	for i := range maxTrackedVisitors * 2 {
-		store.allow(fmt.Sprintf("192.0.2.%d", i%256)+"-"+fmt.Sprint(i), 5, time.Minute, now)
+		store.allow(fmt.Sprintf("192.0.2.%d", i%256)+"-"+strconv.Itoa(i), 5, time.Minute, now)
 	}
 
 	if len(store.visitors) > maxTrackedVisitors {
@@ -92,7 +93,7 @@ func TestFixedWindowStoreEvictsExpiredBeforeRefusingNew(t *testing.T) {
 
 	// Fill the store to capacity.
 	for i := range maxTrackedVisitors {
-		store.allow(fmt.Sprintf("10.0.0.%d", i%256)+"-"+fmt.Sprint(i), 5, time.Minute, now)
+		store.allow(fmt.Sprintf("10.0.0.%d", i%256)+"-"+strconv.Itoa(i), 5, time.Minute, now)
 	}
 	if len(store.visitors) != maxTrackedVisitors {
 		t.Fatalf("expected full store, got %d", len(store.visitors))
