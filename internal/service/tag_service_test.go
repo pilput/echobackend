@@ -36,21 +36,36 @@ func TestTagService_CreateTag_Success(t *testing.T) {
 }
 
 func TestTagService_FindOrCreateByName_EmptyName(t *testing.T) {
-	svc := NewTagService(&mockTagRepo{})
+	repo := &mockTagRepo{
+		findOrCreateByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
+			t.Fatal("repository should not be reached for an empty name")
+			return nil, nil
+		},
+	}
+	svc := NewTagService(repo)
 	_, err := svc.FindOrCreateByName(context.Background(), "")
 	if !errors.Is(err, apperrors.ErrTagNameEmpty) {
 		t.Fatalf("expected ErrTagNameEmpty, got %v", err)
 	}
 }
 
-func TestTagService_FindOrCreateByName_Existing(t *testing.T) {
+// The find-then-insert logic itself now lives in tagRepository, where the INSERT
+// can carry ON CONFLICT; the service is only responsible for rejecting an empty
+// name and passing everything else straight through.
+func TestTagService_FindOrCreateByName_Delegates(t *testing.T) {
 	existing := &model.Tag{ID: 1, Name: "go"}
+	var gotName string
 	repo := &mockTagRepo{
-		findByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
+		findOrCreateByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
+			gotName = name
 			return existing, nil
 		},
+		findByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
+			t.Fatal("FindByName should not be called directly by the service")
+			return nil, nil
+		},
 		createFn: func(ctx context.Context, tag *model.Tag) error {
-			t.Fatal("Create should not be called when tag exists")
+			t.Fatal("Create should not be called directly by the service")
 			return nil
 		},
 	}
@@ -60,38 +75,18 @@ func TestTagService_FindOrCreateByName_Existing(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != existing {
-		t.Fatalf("expected to return existing tag, got %+v", got)
+		t.Fatalf("expected to return the repository's tag, got %+v", got)
+	}
+	if gotName != "go" {
+		t.Fatalf("expected name %q to reach the repository, got %q", "go", gotName)
 	}
 }
 
-func TestTagService_FindOrCreateByName_CreatesNew(t *testing.T) {
-	repo := &mockTagRepo{
-		findByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
-			return nil, apperrors.ErrTagNotFound
-		},
-		createFn: func(ctx context.Context, tag *model.Tag) error {
-			tag.ID = 42
-			return nil
-		},
-	}
-	svc := NewTagService(repo)
-	got, err := svc.FindOrCreateByName(context.Background(), "rust")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got.ID != 42 || got.Name != "rust" {
-		t.Fatalf("unexpected tag: %+v", got)
-	}
-}
-
-func TestTagService_FindOrCreateByName_CreateError(t *testing.T) {
+func TestTagService_FindOrCreateByName_RepoError(t *testing.T) {
 	wantErr := errors.New("db error")
 	repo := &mockTagRepo{
-		findByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
-			return nil, apperrors.ErrTagNotFound
-		},
-		createFn: func(ctx context.Context, tag *model.Tag) error {
-			return wantErr
+		findOrCreateByNameFn: func(ctx context.Context, name string) (*model.Tag, error) {
+			return nil, wantErr
 		},
 	}
 	svc := NewTagService(repo)

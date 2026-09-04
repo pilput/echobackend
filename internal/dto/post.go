@@ -82,7 +82,6 @@ type PostResponse struct {
 	Tags          []TagResponse `json:"tags,omitempty"`
 	CreatedAt     *time.Time    `json:"created_at"`
 	UpdatedAt     *time.Time    `json:"updated_at"`
-	DeletedAt     *time.Time    `json:"deleted_at,omitempty"`
 }
 
 func PostToResponse(p *model.Post) *PostResponse {
@@ -97,11 +96,6 @@ func PostToResponse(p *model.Post) *PostResponse {
 		for i, tag := range p.Tags {
 			tagResponses[i] = *TagToResponse(&tag)
 		}
-	}
-
-	var deletedAtTime *time.Time
-	if p.DeletedAt.Valid {
-		deletedAtTime = &p.DeletedAt.Time
 	}
 
 	return &PostResponse{
@@ -119,7 +113,6 @@ func PostToResponse(p *model.Post) *PostResponse {
 		Tags:          tagResponses,
 		CreatedAt:     p.CreatedAt,
 		UpdatedAt:     p.UpdatedAt,
-		DeletedAt:     deletedAtTime,
 	}
 }
 

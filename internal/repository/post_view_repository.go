@@ -113,7 +113,7 @@ func (r *postViewRepository) GetViewTrendByAuthor(ctx context.Context, userID, s
 	err := r.db.WithContext(ctx).
 		Table("post_views AS pv").
 		Select("DATE(pv.created_at) AS date, COUNT(*) AS count").
-		Joins("JOIN posts AS p ON p.id = pv.post_id AND p.deleted_at IS NULL").
+		Joins("JOIN posts AS p ON p.id = pv.post_id").
 		Where("p.created_by = ? AND pv.deleted_at IS NULL", userID).
 		Where("DATE(pv.created_at) >= ? AND DATE(pv.created_at) <= ?", startDate, endDate).
 		Group("DATE(pv.created_at)").
@@ -129,7 +129,7 @@ func (r *postViewRepository) CountViewsByAuthorBefore(ctx context.Context, userI
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table("post_views AS pv").
-		Joins("JOIN posts AS p ON p.id = pv.post_id AND p.deleted_at IS NULL").
+		Joins("JOIN posts AS p ON p.id = pv.post_id").
 		Where("p.created_by = ? AND pv.deleted_at IS NULL", userID).
 		Where("DATE(pv.created_at) < ?", beforeDate).
 		Count(&count).Error

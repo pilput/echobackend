@@ -94,7 +94,6 @@ func TestPostToResponse(t *testing.T) {
 	}
 
 	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
-	deletedAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 	post := &model.Post{
 		ID:            "post-1",
 		Title:         new("Post title"),
@@ -108,7 +107,6 @@ func TestPostToResponse(t *testing.T) {
 		PublishedAt:   &now,
 		CreatedAt:     &now,
 		UpdatedAt:     &now,
-		DeletedAt:     gorm.DeletedAt{Time: deletedAt, Valid: true},
 		User: &model.User{
 			ID:       "user-1",
 			Username: new("author"),
@@ -125,9 +123,6 @@ func TestPostToResponse(t *testing.T) {
 	}
 	if len(resp.Tags) != 2 || resp.Tags[0].Name != "go" || resp.Tags[1].Name != "api" {
 		t.Fatalf("unexpected tags: %+v", resp.Tags)
-	}
-	if resp.DeletedAt == nil || !resp.DeletedAt.Equal(deletedAt) {
-		t.Fatalf("expected deleted_at %v, got %v", deletedAt, resp.DeletedAt)
 	}
 }
 

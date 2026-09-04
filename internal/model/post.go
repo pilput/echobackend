@@ -2,15 +2,15 @@ package model
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
+// Post is deliberately not soft-deletable: it has no gorm.DeletedAt field, so
+// Delete issues a real DELETE and the child rows go with it through the
+// ON DELETE CASCADE foreign keys defined in the migrations.
 type Post struct {
 	ID            string         `json:"id" gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	CreatedAt     *time.Time     `json:"created_at"`
 	UpdatedAt     *time.Time     `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`
 	Title         *string        `json:"title" gorm:"type:varchar(255);not null"`
 	CreatedBy     *string        `json:"created_by" gorm:"type:uuid;not null;uniqueIndex:creator_and_slug_unique"`
 	Body          *string        `json:"body"`

@@ -112,21 +112,10 @@ func (s *tagService) FindOrCreateByName(ctx context.Context, name string) (*mode
 		return nil, apperrors.ErrTagNameEmpty
 	}
 
-	tag, err := s.tagRepo.FindByName(ctx, name)
-	if err == nil {
-		return tag, nil
-	}
-
-	newTag := &model.Tag{
-		Name: name,
-	}
-
-	err = s.tagRepo.Create(ctx, newTag)
-	if err != nil {
-		return nil, err
-	}
-
-	return newTag, nil
+	// The find-then-create sequence lives in the repository: only there can the
+	// insert carry ON CONFLICT, which is what makes two concurrent requests for
+	// the same new tag safe.
+	return s.tagRepo.FindOrCreateByName(ctx, name)
 }
 
 func (s *tagService) DeleteTag(ctx context.Context, id uint) error {

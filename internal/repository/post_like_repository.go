@@ -101,7 +101,7 @@ func (r *postLikeRepository) GetLikesByMonthByAuthor(ctx context.Context, userID
 	err := r.db.WithContext(ctx).
 		Table("post_likes AS pl").
 		Select("TO_CHAR(DATE_TRUNC('month', pl.created_at), 'YYYY-MM') AS month, COUNT(*) AS count").
-		Joins("JOIN posts AS p ON p.id = pl.post_id AND p.deleted_at IS NULL").
+		Joins("JOIN posts AS p ON p.id = pl.post_id").
 		Where("p.created_by = ?", userID).
 		Where("pl.created_at >= ? AND pl.created_at < ?", start, endExclusive).
 		Group("DATE_TRUNC('month', pl.created_at)").

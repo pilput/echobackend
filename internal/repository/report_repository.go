@@ -57,7 +57,9 @@ func (r *reportRepository) GetOverviewCounts(ctx context.Context) (totalUsers, t
 	if err = r.db.WithContext(ctx).Model(&model.Post{}).Where("published = ? AND DATE(created_at) >= ?", true, today).Count(&npResult.Count).Error; err != nil {
 		return
 	}
-	if err = r.db.WithContext(ctx).Table("post_views").Select("COUNT(DISTINCT user_id) AS count").Where("user_id IS NOT NULL AND DATE(created_at) >= ?", weekAgo).Scan(&auResult).Error; err != nil {
+	// Table() opts out of the soft-delete scope GORM adds for Model(), so the
+	// deleted_at predicate has to be written by hand here.
+	if err = r.db.WithContext(ctx).Table("post_views").Select("COUNT(DISTINCT user_id) AS count").Where("user_id IS NOT NULL AND deleted_at IS NULL AND DATE(created_at) >= ?", weekAgo).Scan(&auResult).Error; err != nil {
 		return
 	}
 
@@ -81,7 +83,7 @@ func (r *reportRepository) GetUserCounts(ctx context.Context, startDate, endDate
 	}
 
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
-	if err = r.db.WithContext(ctx).Table("post_views").Select("COUNT(DISTINCT user_id)").Where("user_id IS NOT NULL AND created_at >= ?", thirtyDaysAgo).Scan(&activeUsers).Error; err != nil {
+	if err = r.db.WithContext(ctx).Table("post_views").Select("COUNT(DISTINCT user_id)").Where("user_id IS NOT NULL AND deleted_at IS NULL AND created_at >= ?", thirtyDaysAgo).Scan(&activeUsers).Error; err != nil {
 		return
 	}
 
@@ -102,7 +104,8 @@ func (r *reportRepository) GetTopContributors(ctx context.Context, limit int) ([
 	if err := r.db.WithContext(ctx).
 		Table("users").
 		Select("users.id, users.username, users.first_name, users.last_name, COUNT(posts.id) AS post_count, COALESCE(SUM(posts.view_count), 0) AS total_views, COALESCE(SUM(posts.like_count), 0) AS total_likes").
-		Joins("LEFT JOIN posts ON users.id = posts.created_by AND posts.deleted_at IS NULL").
+		Joins("LEFT JOIN posts ON users.id = posts.created_by").
+		Where("users.deleted_at IS NULL").
 		Group("users.id, users.username, users.first_name, users.last_name").
 		Order("COUNT(posts.id) DESC").
 		Limit(limit).
@@ -136,8 +139,12 @@ func (r *reportRepository) GetUserGrowthTrendData(ctx context.Context, start, en
 		Count int64
 	}
 	var rows []dayCount
+	// The cumulative count above goes through Model(), which filters soft-deleted
+	// users automatically; Table() below does not, so it must match explicitly or
+	// the trend and its baseline would be counted on different populations.
 	if err := r.db.WithContext(ctx).Table("users").
 		Select("DATE(created_at) AS date, COUNT(*) AS count").
+		Where("deleted_at IS NULL").
 		Where("DATE(created_at) >= ? AND DATE(created_at) <= ?", start.Format("2006-01-02"), end.Format("2006-01-02")).
 		Group("DATE(created_at)").
 		Order("DATE(created_at) ASC").
@@ -201,7 +208,7 @@ func (r *reportRepository) GetTopPosts(ctx context.Context, limit int, tagID *in
 	query := r.db.WithContext(ctx).
 		Table("posts").
 		Select("posts.id, posts.title, posts.slug, posts.view_count AS views, posts.like_count AS likes, posts.created_at, users.id AS author_id, users.username AS author_username, users.first_name AS author_first_name, users.last_name AS author_last_name").
-		Joins("INNER JOIN users ON posts.created_by = users.id").
+		Joins("INNER JOIN users ON posts.created_by = users.id AND users.deleted_at IS NULL").
 		Where("posts.published = ?", true).
 		Order("posts.view_count DESC").
 		Limit(limit)
