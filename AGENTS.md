@@ -33,7 +33,7 @@ goose create <name> sql     # New migration file
 
 # First-time setup: goose stores version history in the `custom` schema.
 # `docker compose up` already creates it via scripts/init-db.sql.
-# For an external Postgres, run this once before the first `goose up`:
+# For an external Postgres, run this once before the first `goose up`
 psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'
 ```
 
@@ -56,7 +56,7 @@ psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'
 
 ## Config & Env
 
-- Config loaded via `config.Load()` — reads `.env` (godotenv) then environment variables.
+- Config loaded via `config.Load()` — reads `.env` (stdlib loader) then environment variables.
 - **Required**: `DATABASE_URL`, `JWT_SECRET` (must be ≥ 32 chars). App panics if missing/invalid.
 - Many keys accept **fallback aliases** (legacy names). First-set key wins. See `config/config.go` for full list.
 - `GOOSE_TABLE=custom.goose_migrations` — non-default goose table location; create the `custom` schema (`psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS custom;'`) once before the first `goose up`.

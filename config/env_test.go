@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -80,4 +82,46 @@ func TestEnvDuration(t *testing.T) {
 	if got := envDuration([]string{primary, fallback}, defaultValue); got != defaultValue {
 		t.Fatalf("expected default for invalid primary, got %s", got)
 	}
+}
+
+func TestLoadDotEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	envPath := filepath.Join(tmpDir, ".env")
+
+	const keyNormal = "TEST_DOTENV_KEY_NORMAL"
+	const keyQuoted = "TEST_DOTENV_KEY_QUOTED"
+	const keySingleQuoted = "TEST_DOTENV_KEY_SINGLE"
+	const keyExisting = "TEST_DOTENV_KEY_EXISTING"
+
+	t.Setenv(keyExisting, "original_value")
+
+	content := `
+# Comment line
+TEST_DOTENV_KEY_NORMAL=normal_val
+TEST_DOTENV_KEY_QUOTED="quoted val"
+TEST_DOTENV_KEY_SINGLE='single val'
+TEST_DOTENV_KEY_EXISTING=new_val
+INVALID_LINE_WITHOUT_EQUALS
+`
+	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write test .env: %v", err)
+	}
+
+	loadDotEnv(envPath)
+
+	if got := os.Getenv(keyNormal); got != "normal_val" {
+		t.Errorf("expected normal_val, got %q", got)
+	}
+	if got := os.Getenv(keyQuoted); got != "quoted val" {
+		t.Errorf("expected 'quoted val', got %q", got)
+	}
+	if got := os.Getenv(keySingleQuoted); got != "single val" {
+		t.Errorf("expected 'single val', got %q", got)
+	}
+	if got := os.Getenv(keyExisting); got != "original_value" {
+		t.Errorf("expected original_value (not overwritten), got %q", got)
+	}
+
+	// Missing file should not panic or error
+	loadDotEnv(filepath.Join(tmpDir, "does-not-exist.env"))
 }

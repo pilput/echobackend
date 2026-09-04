@@ -16,11 +16,11 @@
 package config
 
 import (
+	"bufio"
 	"errors"
+	"os"
 	"strings"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
 // Config is the root application configuration.
@@ -162,7 +162,7 @@ type MarketDataConfig struct {
 // Some keys accept legacy aliases; the first-set key wins.
 func Load() (*Config, error) {
 	// Best-effort .env loading; missing file is not an error.
-	_ = godotenv.Load()
+	loadDotEnv(".env")
 
 	cfg := &Config{
 		App: AppConfig{
@@ -238,6 +238,43 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadDotEnv reads a .env file if present and sets any environment variables
+// that are not already set. Missing or unreadable files are ignored.
+// System or container environment variables always take precedence.
+func loadDotEnv(filepath string) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, value)
+		}
+	}
 }
 
 // validate checks cross-section invariants and required fields.

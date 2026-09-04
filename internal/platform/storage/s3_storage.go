@@ -3,20 +3,24 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"echobackend/config"
 	"echobackend/pkg/applog"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 var log = applog.Component("storage")
 
 type S3Storage struct {
-	client *minio.Client
+	client *s3.Client
 	bucket string
 }
 
@@ -32,17 +36,36 @@ func NewS3Storage(cfg *config.Config) *S3Storage {
 		return nil
 	}
 
-	minioClient, err := minio.New(cfg.S3.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.S3.AccessKey, cfg.S3.SecretKey, ""),
-		Secure: cfg.S3.UseSSL,
-	})
+	endpoint := cfg.S3.Endpoint
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		scheme := "https"
+		if !cfg.S3.UseSSL {
+			scheme = "http"
+		}
+		endpoint = fmt.Sprintf("%s://%s", scheme, endpoint)
+	}
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			cfg.S3.AccessKey,
+			cfg.S3.SecretKey,
+			"",
+		)),
+		awsconfig.WithRegion("us-east-1"),
+	)
 	if err != nil {
-		log.Error("failed to create MinIO/S3 client", "error", err)
+		log.Error("failed to load AWS/S3 config", "error", err)
 		return nil
 	}
 
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(endpoint)
+		o.UsePathStyle = true
+	})
+
 	return &S3Storage{
-		client: minioClient,
+		client: client,
 		bucket: cfg.S3.Bucket,
 	}
 }
@@ -62,9 +85,16 @@ func (s *S3Storage) Save(ctx context.Context, path string, file io.Reader, conte
 		defer func() { _ = rc.Close() }()
 	}
 
-	_, err := s.client.PutObject(ctx, s.bucket, path, file, -1, minio.PutObjectOptions{
-		ContentType: contentType,
-	})
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(path),
+		Body:   file,
+	}
+	if contentType != "" {
+		input.ContentType = aws.String(contentType)
+	}
+
+	_, err := s.client.PutObject(ctx, input)
 	return err
 }
 
@@ -74,14 +104,16 @@ func (s *S3Storage) Get(ctx context.Context, path string) (io.ReadCloser, error)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, s3GetTimeout)
-	object, err := s.client.GetObject(ctx, s.bucket, path, minio.GetObjectOptions{})
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(path),
+	})
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	// Return a wrapper that will cancel the context when closed
-	return &readCloserWithCancel{object, cancel}, nil
+	return &readCloserWithCancel{out.Body, cancel}, nil
 }
 
 func (s *S3Storage) Delete(ctx context.Context, path string) error {
@@ -92,7 +124,11 @@ func (s *S3Storage) Delete(ctx context.Context, path string) error {
 	ctx, cancel := context.WithTimeout(ctx, s3DeleteTimeout)
 	defer cancel()
 
-	return s.client.RemoveObject(ctx, s.bucket, path, minio.RemoveObjectOptions{})
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(path),
+	})
+	return err
 }
 
 type readCloserWithCancel struct {
