@@ -39,7 +39,7 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 - **Routes**: all under `/api/*`. Single `Routes` struct (`internal/routes/routes.go`); per-module `setupXxxRoutes` live in `*Routes.go` files.
 - **Auth**: `r.authMiddleware.Auth()` for login-required; admin routes must chain `Auth()` **first**, then `AuthAdmin()` (`AuthAdmin` reads `c.Get("user")` set by `Auth()` and returns 401 without it). `OptionalAuth()` exists for public-but-personalized endpoints. Claims shortcut `is_super_admin` is a fast path only — DB (`GetAdminByID`) is authoritative.
 - **Health**: `GET /health` pings DB (200/503). `GET /` returns Hello World via `response.Success`.
-- **Docs**: endpoint reference in `docs/api/`, migration notes in `migrations/README.md`.
+- **Docs**: endpoint reference is a hand-written OpenAPI 3.1 spec rooted at `docs/api/openapi.yaml`, split per-module into `docs/api/paths/<module>.yaml` and `docs/api/schemas/<module>.yaml` (see `docs/api/README.md` for the layout) — no codegen, update the relevant module file(s) in the same commit as route/DTO changes; `npx @redocly/cli lint docs/api/openapi.yaml` must stay at 0 errors. Migration notes in `migrations/README.md`.
 
 ## Config & Env
 

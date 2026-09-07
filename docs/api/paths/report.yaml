@@ -1,0 +1,115 @@
+reportsOverview:
+  get:
+    tags: [Reports]
+    summary: Overview and engagement snapshot (admin)
+    description: |
+      `startDate`/`endDate` filter only the nested `engagement` object. The `overview`
+      block is always an all-time / today snapshot and ignores the date range.
+    operationId: getReportOverview
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    responses:
+      '200':
+        description: Overview report.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      overview: {$ref: ../schemas/report.yaml#/OverviewStatsResponse}
+                      engagement: {$ref: ../schemas/report.yaml#/EngagementMetricsResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+reportsUsers:
+  get:
+    tags: [Reports]
+    summary: User report (admin)
+    operationId: getUserReport
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    - name: limit
+      in: query
+      description: Size of the `topContributors` list.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    responses:
+      '200':
+        description: User report.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/report.yaml#/UserReportResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+reportsPosts:
+  get:
+    tags: [Reports]
+    summary: Post report (admin)
+    operationId: getPostReport
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    - name: limit
+      in: query
+      description: Size of the `topPosts` list.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    - name: tagId
+      in: query
+      description: Restrict the report to posts carrying this tag.
+      schema: {type: integer}
+    responses:
+      '200':
+        description: Post report.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/report.yaml#/PostReportResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+reportsEngagement:
+  get:
+    tags: [Reports]
+    summary: Engagement metrics (admin)
+    operationId: getEngagementReport
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    responses:
+      '200':
+        description: Engagement metrics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/report.yaml#/EngagementMetricsResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}

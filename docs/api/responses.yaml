@@ -1,0 +1,45 @@
+BadRequest:
+  description: Malformed request or unusable parameter.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+Unauthorized:
+  description: Missing or invalid access token.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+      example: {success: false, message: Unauthorized, error: Unauthorized access}
+Forbidden:
+  description: Authenticated, but not permitted (usually not a super admin).
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+      example: {success: false, message: Forbidden, error: Access forbidden}
+NotFound:
+  description: Resource not found.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+Conflict:
+  description: Duplicate resource.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+ValidationFailed:
+  description: Body failed validation; `errors` lists the offending fields.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ValidationErrorEnvelope}
+RateLimited:
+  description: Fixed-window rate limit exceeded.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}
+      example: {success: false, message: Too many requests, error: Rate limit exceeded}
+ServerError:
+  description: |
+    Unexpected server error. The underlying error is logged server-side only and never
+    returned to the client.
+  content:
+    application/json:
+      schema: {$ref: ./schemas/envelope.yaml#/ErrorEnvelope}

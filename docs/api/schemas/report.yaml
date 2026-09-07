@@ -1,0 +1,103 @@
+OverviewStatsResponse:
+  type: object
+  properties:
+    totalUsers: {type: integer, format: int64}
+    totalPosts: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+    totalComments: {type: integer, format: int64}
+    newUsersToday: {type: integer, format: int64}
+    newPostsToday: {type: integer, format: int64}
+    activeUsersThisWeek: {type: integer, format: int64}
+TopContributor:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    username:
+      type: [string, 'null']
+    firstName:
+      type: [string, 'null']
+    lastName:
+      type: [string, 'null']
+    postCount: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+UserGrowthData:
+  type: object
+  properties:
+    date: {type: string, format: date}
+    newUsers: {type: integer, format: int64}
+    cumulativeUsers: {type: integer, format: int64}
+UserReportResponse:
+  type: object
+  properties:
+    totalUsers: {type: integer, format: int64}
+    newUsersThisPeriod: {type: integer, format: int64}
+    activeUsers: {type: integer, format: int64}
+    topContributors:
+      type: array
+      items: {$ref: '#/TopContributor'}
+    growthTrend:
+      type: array
+      items: {$ref: '#/UserGrowthData'}
+PostPerformanceData:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    title:
+      type: [string, 'null']
+    slug:
+      type: [string, 'null']
+    views: {type: integer, format: int64}
+    likes: {type: integer, format: int64}
+    comments: {type: integer, format: int64}
+    engagementRate: {type: number}
+    author:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        username:
+          type: [string, 'null']
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+    createdAt:
+      type: [string, 'null']
+      format: date-time
+TagPerformance:
+  type: object
+  properties:
+    id: {type: integer}
+    name: {type: string}
+    postCount: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+PostReportResponse:
+  type: object
+  properties:
+    totalPosts: {type: integer, format: int64}
+    newPostsThisPeriod: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+    totalComments: {type: integer, format: int64}
+    avgEngagementRate: {type: number}
+    topPosts:
+      type: array
+      items: {$ref: '#/PostPerformanceData'}
+    tagPerformance:
+      type: array
+      items: {$ref: '#/TagPerformance'}
+EngagementMetricsResponse:
+  type: object
+  properties:
+    totalEngagements: {type: integer, format: int64}
+    avgLikesPerPost: {type: number}
+    avgCommentsPerPost: {type: number}
+    avgViewsPerPost: {type: number}
+    periodComparison:
+      type: object
+      properties:
+        current: {type: integer, format: int64}
+        previous: {type: integer, format: int64}
+        changePercent: {type: number}

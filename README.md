@@ -93,7 +93,7 @@ The project follows a modular layered architecture with manual dependency inject
 
 ## API Documentation
 
-Full HTTP API reference for frontend integration lives in [`docs/api/README.md`](docs/api/README.md), with per-module docs for auth, users, posts, tags, chat, holdings, exchange rates, bookmarks, notifications, and admin reports.
+Full HTTP API reference for frontend integration lives in [`docs/api/openapi.yaml`](docs/api/openapi.yaml) — an OpenAPI 3.1 document, split per-module (auth, users, posts, tags, chat, holdings, exchange rates, bookmarks, notifications, admin reports) into small files under `docs/api/paths/` and `docs/api/schemas/`. See [`docs/api/README.md`](docs/api/README.md) for the layout and how to preview, lint, and generate clients from it.
 
 ### Standardized Responses
 

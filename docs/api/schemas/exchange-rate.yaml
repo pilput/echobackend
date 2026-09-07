@@ -1,0 +1,11 @@
+ExchangeRateResponse:
+  type: object
+  properties:
+    from: {type: string}
+    to: {type: string}
+    symbol: {type: string, description: The currency pair symbol that was used.}
+    rate: {type: number, description: Value of one unit of `from` expressed in `to`.}
+    source: {type: string}
+    cached: {type: boolean}
+    fetchedAt: {type: string, format: date-time, description: 'When the fetch or cache record was created,
+        RFC3339 UTC.'}

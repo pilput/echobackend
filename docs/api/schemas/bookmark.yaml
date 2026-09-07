@@ -1,0 +1,111 @@
+ToggleBookmarkRequest:
+  type: object
+  description: All fields optional; applied when the bookmark is created.
+  properties:
+    folder_id:
+      type: [string, 'null']
+      format: uuid
+    name:
+      type: [string, 'null']
+      maxLength: 255
+    notes:
+      type: [string, 'null']
+      maxLength: 2000
+UpdateBookmarkRequest:
+  type: object
+  properties:
+    name:
+      type: [string, 'null']
+      maxLength: 255
+    notes:
+      type: [string, 'null']
+      maxLength: 2000
+MoveBookmarkRequest:
+  type: object
+  properties:
+    folder_id:
+      type: [string, 'null']
+      format: uuid
+      description: Send `null` to take the bookmark out of every folder.
+CreateBookmarkFolderRequest:
+  type: object
+  required: [name]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 100}
+    description:
+      type: [string, 'null']
+      maxLength: 1000
+UpdateBookmarkFolderRequest:
+  type: object
+  properties:
+    name:
+      type: [string, 'null']
+      minLength: 1
+      maxLength: 100
+    description:
+      type: [string, 'null']
+      maxLength: 1000
+BookmarkResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    folder_id:
+      type: [string, 'null']
+      format: uuid
+    name:
+      type: [string, 'null']
+    notes:
+      type: [string, 'null']
+    post:
+      anyOf:
+      - {$ref: ./post.yaml#/PostResponse}
+      - {type: 'null'}
+    folder:
+      anyOf:
+      - {$ref: '#/BookmarkFolderResponse'}
+      - {type: 'null'}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+BookmarkEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/BookmarkResponse'}
+BookmarkFolderResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    name: {type: string}
+    description:
+      type: [string, 'null']
+    bookmark_count: {type: integer, format: int64}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+BookmarkFolderEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/BookmarkFolderResponse'}
+ToggleBookmarkResponse:
+  type: object
+  properties:
+    action:
+      type: string
+      enum: [added, removed]
+    bookmark:
+      anyOf:
+      - {$ref: '#/BookmarkResponse'}
+      - {type: 'null'}

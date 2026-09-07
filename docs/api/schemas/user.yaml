@@ -1,0 +1,165 @@
+UserBrief:
+  type: object
+  description: Nested author shape on posts, comments and likes.
+  properties:
+    id: {type: string, format: uuid}
+    username:
+      type: [string, 'null']
+    image:
+      type: [string, 'null']
+Profile:
+  type: object
+  properties:
+    id: {type: integer}
+    user_id: {type: string, format: uuid}
+    bio:
+      type: [string, 'null']
+    website:
+      type: [string, 'null']
+    phone:
+      type: [string, 'null']
+    location:
+      type: [string, 'null']
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+UserResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    email: {type: string, format: email, description: Present on admin routes only; omitted elsewhere.}
+    name: {type: string, description: First and last name joined; empty when either is missing.}
+    username:
+      type: [string, 'null']
+    image:
+      type: [string, 'null']
+      description: Avatar object key.
+    first_name:
+      type: [string, 'null']
+    last_name:
+      type: [string, 'null']
+    followers_count: {type: integer, format: int64}
+    following_count: {type: integer, format: int64}
+    is_following:
+      type: [boolean, 'null']
+      description: Present only on routes that carry auth context.
+    is_super_admin:
+      type: [boolean, 'null']
+      description: Present only on admin routes.
+    profile:
+      anyOf:
+      - {$ref: '#/Profile'}
+      - {type: 'null'}
+      description: Not loaded on the admin list route.
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+    deleted_at:
+      type: [string, 'null']
+      format: date-time
+      description: Admin routes only; set when the user is soft-deleted.
+    last_logged_at:
+      type: [string, 'null']
+      format: date-time
+      description: Admin routes only; omitted when never set.
+CurrentUserResponse:
+  type: object
+  description: |
+    `GET /api/users/me`. Always carries `email` and `is_super_admin`; never carries
+    `deleted_at`, `is_following` or `last_logged_at`.
+  properties:
+    id: {type: string, format: uuid}
+    email: {type: string, format: email}
+    name: {type: string}
+    username:
+      type: [string, 'null']
+    image:
+      type: [string, 'null']
+    first_name:
+      type: [string, 'null']
+    last_name:
+      type: [string, 'null']
+    is_super_admin:
+      type: [boolean, 'null']
+    followers_count: {type: integer, format: int64}
+    following_count: {type: integer, format: int64}
+    profile:
+      anyOf:
+      - {$ref: '#/Profile'}
+      - {type: 'null'}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+PublicUserResponse:
+  type: object
+  description: |
+    Public profile shape. Omits `email`, `is_super_admin`, `deleted_at` and
+    `last_logged_at`.
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string}
+    username:
+      type: [string, 'null']
+    image:
+      type: [string, 'null']
+    first_name:
+      type: [string, 'null']
+    last_name:
+      type: [string, 'null']
+    followers_count: {type: integer, format: int64}
+    following_count: {type: integer, format: int64}
+    is_following:
+      type: [boolean, 'null']
+    profile:
+      anyOf:
+      - {$ref: '#/Profile'}
+      - {type: 'null'}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+CreateUserRequest:
+  type: object
+  required: [username, email, password]
+  properties:
+    username: {type: string, minLength: 3, maxLength: 30}
+    email: {type: string, format: email}
+    password: {type: string, format: password, minLength: 8}
+    first_name: {type: string, maxLength: 100}
+    last_name: {type: string, maxLength: 100}
+UpdateUserRequest:
+  type: object
+  required: [username, email]
+  properties:
+    username: {type: string, minLength: 3, maxLength: 30}
+    email: {type: string, format: email}
+    first_name: {type: string, maxLength: 100}
+    last_name: {type: string, maxLength: 100}
+    is_super_admin: {type: boolean, default: false}
+FollowRequest:
+  type: object
+  required: [user_id]
+  properties:
+    user_id: {type: string, format: uuid}
+FollowResponse:
+  type: object
+  properties:
+    is_following: {type: boolean}
+    message: {type: string}
+UserFollowStats:
+  type: object
+  properties:
+    user_id: {type: string, format: uuid}
+    followers_count: {type: integer, format: int64}
+    following_count: {type: integer, format: int64}

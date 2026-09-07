@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: echobackend API
+  version: 1.0.0
+  summary: HTTP API for the echobackend service.
+  description: |
+    HTTP API reference for frontend integration.
+
+    All business routes live under the `/api` prefix; only `GET /` and `GET /health`
+    sit outside it.
+
+    ## Response envelope
+
+    Almost every handler answers with the `pkg/response` envelope:
+
+    ```json
+    { "success": true, "message": "...", "data": {}, "meta": {} }
+    ```
+
+    `data`, `meta`, `error` and `errors` are `omitempty` — they disappear from the JSON
+    when empty. Success responses carry no `error`/`errors`; error responses usually
+    carry no `data`/`meta`.
+
+    The two exceptions are `GET /health` (plain `{"status": ...}` object) and the chat
+    streaming endpoints, which answer with `text/event-stream`.
+
+    ## Pagination
+
+    Paginated lists add a `meta` object (`total_items`, `offset`, `limit`, `total_pages`).
+    `limit` is capped at 100 on most endpoints; `GET /api/posts` is the known exception
+    and currently accepts larger values.
+
+    ## Global limits
+
+    - Request body size: 10 MB (larger requests return 413).
+    - CORS origins: `HTTP_ALLOW_ORIGINS` (default `*`).
+    - Global rate limit: active when `HTTP_RATE_LIMIT_RPS` > 0.
+    - Auth endpoints use a per-IP fixed window. With `REDIS_URL`/`VALKEY_URL` set, counters
+      live in Valkey/Redis and apply across instances; otherwise they fall back to
+      in-memory counters per instance.
+
+    ## Type conventions
+
+    - **UUID**: string primary key for users, posts, comments, bookmarks and conversations.
+    - **Time**: ISO 8601 / RFC3339 (`2026-05-12T08:00:00Z`).
+    - **Nullable**: Go pointer fields may be `null` or omitted.
+    - **Financial numbers (holdings)**: decimal *strings* in JSON (`"1500000.00"`), not numbers.
+
+    Debug routes (`/api/debug/pprof/*`) are registered only when `APP_DEBUG=true` and are
+    not part of this contract.
+servers:
+- url: http://localhost:{port}
+  description: Local development
+  variables:
+    port: {default: '8080', description: Value of PORT in .env}
+- url: https://{host}
+  description: Deployment / reverse proxy
+  variables:
+    host: {default: api.your-domain.tld}
+tags:
+- {name: Health, description: Liveness and readiness probes.}
+- {name: Auth, description: 'Registration, login, OAuth, tokens, password management, activity logs.'}
+- {name: Users, description: 'Profiles, admin user management, avatars.'}
+- {name: Follow, description: Follow/unfollow and social statistics.}
+- {name: Posts, description: 'Post CRUD, feeds, analytics, image upload, sitemap.'}
+- {name: Comments, description: Comments on posts.}
+- {name: Post views, description: View recording and statistics.}
+- {name: Post likes, description: Likes and like statistics.}
+- {name: Tags, description: Tag management.}
+- {name: Chat, description: 'Chat conversations, messages and SSE streaming.'}
+- {name: Holdings, description: Investment portfolio records per user per month/year.}
+- {name: Exchange rates, description: Currency exchange rates.}
+- {name: Bookmarks, description: Post bookmarks and folders.}
+- {name: Notifications, description: In-app notifications.}
+- {name: Reports, description: Admin statistics dashboard.}
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Root
+      operationId: getRoot
+      security: []
+      responses:
+        '200':
+          description: Welcome message in the standard envelope.
+          content:
+            application/json:
+              schema: {$ref: ./schemas/envelope.yaml#/EmptyEnvelope}
+              example: {success: true, message: Hello World}
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Pings the database. Does **not** use the standard envelope.
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Service healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, const: ok}
+              example: {status: ok}
+        '503':
+          description: Database unreachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  reason: {type: string}
+              example: {status: unhealthy, reason: database unreachable}
+  /api/auth/register: {$ref: ./paths/auth.yaml#/authRegister}
+  /api/auth/login: {$ref: ./paths/auth.yaml#/authLogin}
+  /api/auth/forgot-password: {$ref: ./paths/auth.yaml#/authForgotPassword}
+  /api/auth/reset-password: {$ref: ./paths/auth.yaml#/authResetPassword}
+  /api/auth/refresh: {$ref: ./paths/auth.yaml#/authRefresh}
+  /api/auth/check-username: {$ref: ./paths/auth.yaml#/authCheckUsername}
+  /api/auth/logout: {$ref: ./paths/auth.yaml#/authLogout}
+  /api/auth/profile: {$ref: ./paths/auth.yaml#/authProfile}
+  /api/auth/account: {$ref: ./paths/auth.yaml#/authAccount}
+  /api/auth/password: {$ref: ./paths/auth.yaml#/authPassword}
+  /api/auth/activity-logs: {$ref: ./paths/auth.yaml#/authActivityLogs}
+  /api/auth/activity-logs/recent: {$ref: ./paths/auth.yaml#/authActivityLogsRecent}
+  /api/auth/activity-logs/failed-logins: {$ref: ./paths/auth.yaml#/authActivityLogsFailedLogins}
+  /api/auth/oauth/github: {$ref: ./paths/auth.yaml#/authOauthGithub}
+  /api/auth/oauth/github/callback: {$ref: ./paths/auth.yaml#/authOauthGithubCallback}
+  /api/auth/oauth/exchange: {$ref: ./paths/auth.yaml#/authOauthExchange}
+  /api/users: {$ref: ./paths/user.yaml#/users}
+  /api/users/me: {$ref: ./paths/user.yaml#/usersMe}
+  /api/users/me/image: {$ref: ./paths/user.yaml#/usersMeImage}
+  /api/users/username/{username}: {$ref: ./paths/user.yaml#/usersUsernameByUsername}
+  /api/users/{id}: {$ref: ./paths/user.yaml#/usersById}
+  /api/users/{id}/restore: {$ref: ./paths/user.yaml#/usersByIdRestore}
+  /api/users/follow: {$ref: ./paths/user.yaml#/usersFollow}
+  /api/users/{id}/follow: {$ref: ./paths/user.yaml#/usersByIdFollow}
+  /api/users/{id}/follow-status: {$ref: ./paths/user.yaml#/usersByIdFollowStatus}
+  /api/users/{id}/mutual-follows: {$ref: ./paths/user.yaml#/usersByIdMutualFollows}
+  /api/users/{id}/followers: {$ref: ./paths/user.yaml#/usersByIdFollowers}
+  /api/users/{id}/following: {$ref: ./paths/user.yaml#/usersByIdFollowing}
+  /api/users/{id}/follow-stats: {$ref: ./paths/user.yaml#/usersByIdFollowStats}
+  /api/posts: {$ref: ./paths/post.yaml#/posts}
+  /api/posts/random: {$ref: ./paths/post.yaml#/postsRandom}
+  /api/posts/trending: {$ref: ./paths/post.yaml#/postsTrending}
+  /api/posts/me: {$ref: ./paths/post.yaml#/postsMe}
+  /api/posts/me/analytics: {$ref: ./paths/post.yaml#/postsMeAnalytics}
+  /api/posts/me/analytics/likes-by-month: {$ref: ./paths/post.yaml#/postsMeAnalyticsLikesByMonth}
+  /api/posts/me/{id}: {$ref: ./paths/post.yaml#/postsMeById}
+  /api/posts/feed/for-you: {$ref: ./paths/post.yaml#/postsFeedForYou}
+  /api/posts/image: {$ref: ./paths/post.yaml#/postsImage}
+  /api/posts/sitemap: {$ref: ./paths/post.yaml#/postsSitemap}
+  /api/posts/username/{username}: {$ref: ./paths/post.yaml#/postsUsernameByUsername}
+  /api/posts/u/{username}/{slug}: {$ref: ./paths/post.yaml#/postsUByUsernameBySlug}
+  /api/posts/tag/{tag}: {$ref: ./paths/post.yaml#/postsTagByTag}
+  /api/posts/{id}: {$ref: ./paths/post.yaml#/postsById}
+  /api/posts/{id}/comments: {$ref: ./paths/post.yaml#/postsByIdComments}
+  /api/posts/{id}/comments/{comment_id}: {$ref: ./paths/post.yaml#/postsByIdCommentsByCommentId}
+  /api/posts/{id}/view: {$ref: ./paths/post.yaml#/postsByIdView}
+  /api/posts/{id}/views: {$ref: ./paths/post.yaml#/postsByIdViews}
+  /api/posts/{id}/view-stats: {$ref: ./paths/post.yaml#/postsByIdViewStats}
+  /api/posts/{id}/viewed: {$ref: ./paths/post.yaml#/postsByIdViewed}
+  /api/posts/{id}/like: {$ref: ./paths/post.yaml#/postsByIdLike}
+  /api/posts/{id}/likes: {$ref: ./paths/post.yaml#/postsByIdLikes}
+  /api/posts/{id}/like-stats: {$ref: ./paths/post.yaml#/postsByIdLikeStats}
+  /api/posts/{id}/liked: {$ref: ./paths/post.yaml#/postsByIdLiked}
+  /api/tags: {$ref: ./paths/tag.yaml#/tags}
+  /api/tags/trending: {$ref: ./paths/tag.yaml#/tagsTrending}
+  /api/tags/sitemap: {$ref: ./paths/tag.yaml#/tagsSitemap}
+  /api/tags/{id}: {$ref: ./paths/tag.yaml#/tagsById}
+  /api/chat/conversations: {$ref: ./paths/chat.yaml#/chatConversations}
+  /api/chat/conversations/stream: {$ref: ./paths/chat.yaml#/chatConversationsStream}
+  /api/chat/conversations/{id}: {$ref: ./paths/chat.yaml#/chatConversationsById}
+  /api/chat/conversations/{conversationId}/messages: {$ref: ./paths/chat.yaml#/chatConversationsByConversationidMessages}
+  /api/chat/conversations/{conversationId}/messages/stream: {$ref: ./paths/chat.yaml#/chatConversationsByConversationidMessagesStream}
+  /api/chat/messages/{messageId}: {$ref: ./paths/chat.yaml#/chatMessagesByMessageid}
+  /api/bookmarks: {$ref: ./paths/bookmark.yaml#/bookmarks}
+  /api/bookmarks/folders: {$ref: ./paths/bookmark.yaml#/bookmarksFolders}
+  /api/bookmarks/folders/{folder_id}: {$ref: ./paths/bookmark.yaml#/bookmarksFoldersByFolderId}
+  /api/bookmarks/{id}: {$ref: ./paths/bookmark.yaml#/bookmarksById}
+  /api/bookmarks/{bookmark_id}/move: {$ref: ./paths/bookmark.yaml#/bookmarksByBookmarkIdMove}
+  /api/notifications: {$ref: ./paths/notification.yaml#/notifications}
+  /api/notifications/unread-count: {$ref: ./paths/notification.yaml#/notificationsUnreadCount}
+  /api/notifications/read-all: {$ref: ./paths/notification.yaml#/notificationsReadAll}
+  /api/notifications/{id}/read: {$ref: ./paths/notification.yaml#/notificationsByIdRead}
+  /api/holdings: {$ref: ./paths/holding.yaml#/holdings}
+  /api/holdings/summary: {$ref: ./paths/holding.yaml#/holdingsSummary}
+  /api/holdings/trends: {$ref: ./paths/holding.yaml#/holdingsTrends}
+  /api/holdings/compare: {$ref: ./paths/holding.yaml#/holdingsCompare}
+  /api/holdings/monthly: {$ref: ./paths/holding.yaml#/holdingsMonthly}
+  /api/holdings/calendar: {$ref: ./paths/holding.yaml#/holdingsCalendar}
+  /api/holdings/duplicate: {$ref: ./paths/holding.yaml#/holdingsDuplicate}
+  /api/holdings/sync: {$ref: ./paths/holding.yaml#/holdingsSync}
+  /api/holdings/{id}: {$ref: ./paths/holding.yaml#/holdingsById}
+  /api/holding-types: {$ref: ./paths/holding.yaml#/holdingTypes}
+  /api/exchange-rates: {$ref: ./paths/exchange-rate.yaml#/exchangeRates}
+  /api/reports/overview: {$ref: ./paths/report.yaml#/reportsOverview}
+  /api/reports/users: {$ref: ./paths/report.yaml#/reportsUsers}
+  /api/reports/posts: {$ref: ./paths/report.yaml#/reportsPosts}
+  /api/reports/engagement: {$ref: ./paths/report.yaml#/reportsEngagement}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        `Authorization: Bearer <access_token>`.
+
+        Tokens come from `POST /api/auth/login`, `POST /api/auth/refresh`, or
+        `POST /api/auth/oauth/exchange`. Claims include `user_id` (UUID). The
+        `is_super_admin` claim is a fast path only — the database is authoritative for
+        admin checks.

@@ -1,0 +1,215 @@
+bookmarks:
+  get:
+    tags: [Bookmarks]
+    summary: List the current user's bookmarks
+    operationId: listBookmarks
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: folder_id
+      in: query
+      description: |
+        Folder UUID to filter by. The literal string `null` selects bookmarks that sit
+        outside any folder.
+      schema: {type: string}
+    - name: limit
+      in: query
+      schema: {type: integer, default: 50, minimum: 1, maximum: 100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Bookmarks with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/bookmark.yaml#/BookmarkResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+bookmarksFolders:
+  get:
+    tags: [Bookmarks]
+    summary: List the current user's bookmark folders
+    operationId: listBookmarkFolders
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Folders.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/bookmark.yaml#/BookmarkFolderResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Bookmarks]
+    summary: Create a bookmark folder
+    operationId: createBookmarkFolder
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/bookmark.yaml#/CreateBookmarkFolderRequest}
+    responses:
+      '201':
+        description: Folder created.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/bookmark.yaml#/BookmarkFolderEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+bookmarksFoldersByFolderId:
+  parameters:
+  - name: folder_id
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  patch:
+    tags: [Bookmarks]
+    summary: Rename or re-describe a folder
+    operationId: updateBookmarkFolder
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/bookmark.yaml#/UpdateBookmarkFolderRequest}
+    responses:
+      '200':
+        description: Updated folder.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/bookmark.yaml#/BookmarkFolderEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Bookmarks]
+    summary: Delete a folder
+    operationId: deleteBookmarkFolder
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Folder deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+bookmarksById:
+  post:
+    tags: [Bookmarks]
+    summary: Toggle a bookmark on a post
+    description: |
+      Removes the bookmark when it already exists, otherwise creates it. `action` in the
+      response says which happened.
+
+      Note the path segment is a **post** UUID here, while the `PATCH` on the same path is
+      addressed by **bookmark** UUID (`:post_id` and `:bookmark_id` in the Go routes). They
+      share one path item because OpenAPI does not allow two paths that differ only in the
+      name of a path parameter.
+    operationId: toggleBookmark
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Post UUID.
+      schema: {type: string, format: uuid}
+    requestBody:
+      description: Optional metadata applied when the bookmark is created.
+      content:
+        application/json:
+          schema: {$ref: ../schemas/bookmark.yaml#/ToggleBookmarkRequest}
+    responses:
+      '200':
+        description: Toggle result.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/bookmark.yaml#/ToggleBookmarkResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  patch:
+    tags: [Bookmarks]
+    summary: Update a bookmark's name or notes
+    description: The path segment is a **bookmark** UUID here, unlike the `POST` above.
+    operationId: updateBookmark
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Bookmark UUID.
+      schema: {type: string, format: uuid}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/bookmark.yaml#/UpdateBookmarkRequest}
+    responses:
+      '200':
+        description: Updated bookmark.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/bookmark.yaml#/BookmarkEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+bookmarksByBookmarkIdMove:
+  patch:
+    tags: [Bookmarks]
+    summary: Move a bookmark into a folder
+    operationId: moveBookmark
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/BookmarkIdPath}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/bookmark.yaml#/MoveBookmarkRequest}
+    responses:
+      '200':
+        description: Moved bookmark.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/bookmark.yaml#/BookmarkEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}

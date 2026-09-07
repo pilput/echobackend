@@ -1,0 +1,463 @@
+users:
+  get:
+    tags: [Users]
+    summary: List users (admin)
+    operationId: listUsers
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    - name: deleted
+      in: query
+      description: |
+        Soft-delete filter. Empty or `false` returns active users only, `true` returns
+        deleted users only, `all` returns both. Any other value returns 400.
+      schema:
+        type: string
+        enum: ['', 'false', 'true', all]
+        default: ''
+    responses:
+      '200':
+        description: |
+          Users with pagination meta. `profile` is not loaded on this list route.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Users]
+    summary: Create a user (admin)
+    description: Creates an account directly, skipping the registration flow.
+    operationId: createUser
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/user.yaml#/CreateUserRequest}
+    responses:
+      '201':
+        description: User created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '409': {$ref: ../responses.yaml#/Conflict}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersMe:
+  get:
+    tags: [Users]
+    summary: Current user from the token
+    operationId: getMe
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Current user.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/CurrentUserResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersMeImage:
+  post:
+    tags: [Users]
+    summary: Upload or replace the current user's avatar
+    description: |
+      The returned `image` is the stored object key, in the same format as the `image`
+      field elsewhere — resolve it the same way the frontend resolves other user/post
+      image fields.
+    operationId: uploadAvatar
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [avatar]
+            properties:
+              avatar:
+                type: string
+                format: binary
+                description: |
+                  JPEG, PNG, GIF or WebP, max 5 MB. The type is checked by content
+                  sniffing, not by extension.
+    responses:
+      '200':
+        description: Avatar stored.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      image: {type: string}
+            example:
+              success: true
+              message: Profile picture updated successfully
+              data: {image: users/avatars/0195f3c0.jpg}
+      '400':
+        description: Missing file, file over 5 MB, unsupported type, or storage unavailable.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersUsernameByUsername:
+  get:
+    tags: [Users]
+    summary: Public profile by username
+    operationId: getUserByUsername
+    security: []
+    parameters:
+    - name: username
+      in: path
+      required: true
+      schema: {type: string}
+    responses:
+      '200':
+        description: |
+          Public profile. `is_following` is always omitted here because the route carries
+          no auth middleware.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/PublicUserResponse}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersById:
+  parameters:
+  - {$ref: ../parameters.yaml#/UserIdPath}
+  get:
+    tags: [Users]
+    summary: User by ID (admin)
+    operationId: getUserById
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: deleted
+      in: query
+      description: |
+        `true` fetches a soft-deleted user. Without it only active users are returned.
+      schema:
+        type: string
+        enum: ['true']
+    responses:
+      '200':
+        description: |
+          User. `is_following` is set because the route has auth context; `deleted_at` is
+          set when the user is soft-deleted.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Users]
+    summary: Update any user (admin)
+    description: |
+      Full replacement, not a patch — every field is sent on every request. An omitted or
+      empty `username`/`email` fails validation.
+    operationId: updateUser
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/user.yaml#/UpdateUserRequest}
+    responses:
+      '200':
+        description: Updated user.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409': {$ref: ../responses.yaml#/Conflict}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Users]
+    summary: Soft-delete a user (admin)
+    description: Sets `deleted_at`; the row is not removed from the database.
+    operationId: deleteUser
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: User soft-deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersByIdRestore:
+  post:
+    tags: [Users]
+    summary: Restore a soft-deleted user (admin)
+    description: Clears `deleted_at`.
+    operationId: restoreUser
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    responses:
+      '200':
+        description: Reactivated user.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404':
+        description: User not found, or not soft-deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '409':
+        description: Email or username is already used by another active user.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersFollow:
+  post:
+    tags: [Follow]
+    summary: Follow a user
+    operationId: followUser
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/user.yaml#/FollowRequest}
+    responses:
+      '200':
+        description: Follow state after the call.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/FollowResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500':
+        description: |
+          Server error. Some follow domain errors (user not found, already following)
+          currently surface here instead of as a specific 4xx.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+usersByIdFollow:
+  delete:
+    tags: [Follow]
+    summary: Unfollow the user in the path
+    operationId: unfollowUser
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    responses:
+      '200':
+        description: Follow state after the call.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/FollowResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500':
+        description: |
+          Server error. Some follow domain errors currently surface here instead of as a
+          specific 4xx.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+usersByIdFollowStatus:
+  get:
+    tags: [Follow]
+    summary: Whether the current user follows the user in the path
+    operationId: checkFollowStatus
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    responses:
+      '200':
+        description: Follow status.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      is_following: {type: boolean}
+            example:
+              success: true
+              message: Successfully checked follow status
+              data: {is_following: false}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersByIdMutualFollows:
+  get:
+    tags: [Follow]
+    summary: Mutual follows between the current user and the user in the path
+    operationId: getMutualFollows
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    responses:
+      '200':
+        description: Mutual follows.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersByIdFollowers:
+  get:
+    tags: [Follow]
+    summary: Followers of a user
+    operationId: getFollowers
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Followers with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersByIdFollowing:
+  get:
+    tags: [Follow]
+    summary: Users a user follows
+    operationId: getFollowing
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Followed users with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+usersByIdFollowStats:
+  get:
+    tags: [Follow]
+    summary: Follower and following counts
+    operationId: getFollowStats
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/UserIdPath}
+    responses:
+      '200':
+        description: Follow statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserFollowStats}
+      '500': {$ref: ../responses.yaml#/ServerError}

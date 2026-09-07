@@ -1,0 +1,80 @@
+CreateChatConversationRequest:
+  type: object
+  required: [title]
+  properties:
+    title: {type: string, maxLength: 255}
+CreateChatConversationStreamRequest:
+  type: object
+  required: [content]
+  properties:
+    content: {type: string, minLength: 1, maxLength: 10000}
+    title:
+      type: [string, 'null']
+      minLength: 1
+      maxLength: 255
+    model:
+      type: [string, 'null']
+      maxLength: 100
+      description: Must be one of the free models accepted by the `free_model` validator.
+    temperature:
+      type: [number, 'null']
+      minimum: 0
+      maximum: 2
+UpdateChatConversationRequest:
+  type: object
+  properties:
+    title: {type: string, maxLength: 255}
+    is_pinned:
+      type: [boolean, 'null']
+CreateChatMessageRequest:
+  type: object
+  required: [content]
+  properties:
+    content: {type: string, minLength: 1, maxLength: 10000}
+    role: {type: string, maxLength: 20}
+    model:
+      type: [string, 'null']
+      maxLength: 100
+      description: Must be one of the free models accepted by the `free_model` validator.
+    temperature:
+      type: [number, 'null']
+      minimum: 0
+      maximum: 2
+ChatConversationResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    title: {type: string}
+    user_id: {type: string, format: uuid}
+    is_pinned: {type: boolean}
+    pinned_at:
+      type: [string, 'null']
+      format: date-time
+    message_count: {type: integer}
+    chat_messages:
+      type: array
+      description: Included only on the conversation detail route, oldest first.
+      items: {$ref: '#/ChatMessageResponse'}
+    created_at: {type: string, format: date-time}
+    updated_at: {type: string, format: date-time}
+ChatMessageResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    conversation_id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    role: {type: string}
+    content: {type: string}
+    model:
+      type: [string, 'null']
+    prompt_tokens: {type: integer}
+    completion_tokens: {type: integer}
+    total_tokens: {type: integer}
+    created_at: {type: string, format: date-time}
+    updated_at: {type: string, format: date-time}
+ChatMessageEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/ChatMessageResponse'}

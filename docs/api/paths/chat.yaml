@@ -1,0 +1,318 @@
+chatConversations:
+  get:
+    tags: [Chat]
+    summary: List the current user's conversations
+    operationId: listConversations
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Conversations with pagination meta. `chat_messages` is not included.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/chat.yaml#/ChatConversationResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Chat]
+    summary: Create an empty conversation
+    operationId: createConversation
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/chat.yaml#/CreateChatConversationRequest}
+    responses:
+      '201':
+        description: Conversation created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/chat.yaml#/ChatConversationResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+chatConversationsStream:
+  post:
+    tags: [Chat]
+    summary: Create a conversation with a first message, streaming the AI reply
+    description: |
+      When streaming is available the response is `text/event-stream`; each event carries
+      a JSON payload `{ "type": ..., "data": ... }`, in this order:
+
+      | `type` | `data` |
+      |--------|--------|
+      | `conversation_created` | `{ conversation_id, user_message }` |
+      | `ai_chunk` | text chunk |
+      | `ai_complete` | the AI `ChatMessageResponse` |
+      | `error` | generic error message |
+
+      The stream terminates with `data: [DONE]`.
+
+      When streaming is unavailable the endpoint answers 201 with the normal envelope and
+      `data` set to an array holding the user message.
+    operationId: createConversationStream
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/chat.yaml#/CreateChatConversationStreamRequest}
+    responses:
+      '200':
+        description: Server-sent event stream.
+        content:
+          text/event-stream:
+            schema: {type: string}
+      '201':
+        description: Streaming unavailable — the stored user message is returned.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/chat.yaml#/ChatMessageResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+chatConversationsById:
+  parameters:
+  - name: id
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    tags: [Chat]
+    summary: Conversation detail with all messages
+    description: Only conversations owned by the token user are returned.
+    operationId: getConversation
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: |
+          Conversation including `chat_messages`, ordered by ascending `created_at`.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/chat.yaml#/ChatConversationResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Chat]
+    summary: Update a conversation's title or pin state
+    operationId: updateConversation
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/chat.yaml#/UpdateChatConversationRequest}
+    responses:
+      '200':
+        description: Updated conversation.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/chat.yaml#/ChatConversationResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Chat]
+    summary: Delete a conversation
+    operationId: deleteConversation
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Conversation deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+chatConversationsByConversationidMessages:
+  parameters:
+  - {$ref: ../parameters.yaml#/ConversationIdPath}
+  get:
+    tags: [Chat]
+    summary: Messages in a conversation
+    operationId: listMessages
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Messages.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/chat.yaml#/ChatMessageResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Chat]
+    summary: Send a message
+    operationId: createMessage
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/chat.yaml#/CreateChatMessageRequest}
+    responses:
+      '201':
+        description: |
+          The stored messages — the user message, plus the AI reply when one is available.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/chat.yaml#/ChatMessageResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+chatConversationsByConversationidMessagesStream:
+  post:
+    tags: [Chat]
+    summary: Send a message and stream the AI reply
+    description: |
+      Same body as the non-streaming endpoint. When streaming is available the response is
+      `text/event-stream` with these events:
+
+      | `type` | `data` |
+      |--------|--------|
+      | `user_message` | the stored `ChatMessageResponse` |
+      | `ai_chunk` | text chunk |
+      | `ai_complete` | the AI `ChatMessageResponse` |
+      | `error` | generic error message |
+
+      The stream terminates with `data: [DONE]`.
+    operationId: createMessageStream
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/ConversationIdPath}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/chat.yaml#/CreateChatMessageRequest}
+    responses:
+      '200':
+        description: Server-sent event stream.
+        content:
+          text/event-stream:
+            schema: {type: string}
+      '201':
+        description: Streaming unavailable — the stored user message is returned.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/chat.yaml#/ChatMessageResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+chatMessagesByMessageid:
+  parameters:
+  - name: messageId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    tags: [Chat]
+    summary: One message
+    operationId: getMessage
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Message.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/chat.yaml#/ChatMessageEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Chat]
+    summary: Delete a message
+    operationId: deleteMessage
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: The deleted message is echoed back.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/chat.yaml#/ChatMessageEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}

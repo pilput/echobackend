@@ -1,0 +1,810 @@
+posts:
+  get:
+    tags: [Posts]
+    summary: List posts
+    description: |
+      `body` is truncated to about 250 runes plus `" ..."` in list responses.
+
+      This is the one endpoint whose `limit` is not capped at 100.
+    operationId: listPosts
+    security: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 10, minimum: 1}
+    - {$ref: ../parameters.yaml#/Offset}
+    - name: search
+      in: query
+      schema: {type: string}
+    - name: sort_by
+      in: query
+      schema:
+        type: string
+        enum: [id, title, created_at, updated_at, view_count, like_count]
+        default: created_at
+    - name: sort_order
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    - name: start_date
+      in: query
+      schema: {type: string, format: date}
+    - name: end_date
+      in: query
+      schema: {type: string, format: date}
+    - name: published
+      in: query
+      schema: {type: boolean}
+    - name: created_by
+      in: query
+      description: Author UUID.
+      schema: {type: string, format: uuid}
+    - name: tags
+      in: query
+      description: Comma-separated tag names.
+      schema: {type: string}
+      example: golang,postgres
+    responses:
+      '200':
+        description: Posts with pagination meta.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Posts]
+    summary: Create a post
+    operationId: createPost
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/CreatePostRequest}
+    responses:
+      '201':
+        description: Post created; only the new ID is returned.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: {type: string, format: uuid}
+            example:
+              success: true
+              message: Successfully created post
+              data: {id: 0195f3c0-0000-7000-8000-000000000000}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsRandom:
+  get:
+    tags: [Posts]
+    summary: Random published posts
+    operationId: getRandomPosts
+    security: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 9, minimum: 1, maximum: 20}
+    responses:
+      '200':
+        description: Posts.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/PostResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsTrending:
+  get:
+    tags: [Posts]
+    summary: Trending posts
+    operationId: getTrendingPosts
+    security: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    responses:
+      '200':
+        description: Posts.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/PostResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsMe:
+  get:
+    tags: [Posts]
+    summary: Posts owned by the current user, including drafts
+    operationId: getMyPosts
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    - name: search
+      in: query
+      description: Case-insensitive match against `posts.title` (`ILIKE '%search%'`).
+      schema: {type: string}
+    - name: published
+      in: query
+      description: |
+        Omit (or send anything other than `true`/`false`) to include both published and
+        draft posts.
+      schema: {type: boolean}
+    responses:
+      '200':
+        description: Posts with pagination meta.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsMeAnalytics:
+  get:
+    tags: [Posts]
+    summary: Aggregated analytics for the current user's posts
+    description: |
+      `view_trend` has one point per day in the range, including days with zero views.
+      `top_posts` holds up to 5 posts with the highest `view_count`.
+    operationId: getMyPostsAnalytics
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: start_date
+      in: query
+      description: Defaults to 30 days ago.
+      schema: {type: string, format: date}
+    - name: end_date
+      in: query
+      description: Defaults to today.
+      schema: {type: string, format: date}
+    responses:
+      '200':
+        description: Analytics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/MyPostsAnalyticsResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsMeAnalyticsLikesByMonth:
+  get:
+    tags: [Posts]
+    summary: Likes received per month by the current user's posts
+    description: |
+      `series` has one point per month (`YYYY-MM`), zero-filled for months without likes.
+    operationId: getMyPostsLikesByMonth
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: months
+      in: query
+      description: Last N calendar months, including the current one.
+      schema: {type: integer, default: 12, minimum: 1, maximum: 24}
+    responses:
+      '200':
+        description: Monthly like series.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/MyPostsLikesByMonthResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsMeById:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  get:
+    tags: [Posts]
+    summary: Read one of the current user's own posts
+    operationId: getMyPost
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Post.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Posts]
+    summary: Update one of the current user's own posts
+    operationId: updateMyPost
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/UpdatePostRequest}
+    responses:
+      '200':
+        description: Updated post.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Posts]
+    summary: Delete one of the current user's own posts
+    description: Posts are hard-deleted since migration 014.
+    operationId: deleteMyPost
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Post deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsFeedForYou:
+  get:
+    tags: [Posts]
+    summary: Personalised feed for the current user
+    operationId: getPostsForYou
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Posts with pagination meta.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsImage:
+  post:
+    tags: [Posts]
+    summary: Upload a post image
+    description: |
+      This route has its own 1 MiB body limit, tighter than the global 10 MB.
+      `path` and `url` currently hold the same stored object key.
+    operationId: uploadPostImage
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [image]
+            properties:
+              image: {type: string, format: binary, description: 'Max 1 MiB (1,048,576 bytes).'}
+    responses:
+      '201':
+        description: Image stored.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      path: {type: string}
+                      url: {type: string}
+            example:
+              success: true
+              message: Successfully uploaded image
+              data: {path: posts/0195f3c0.png, url: posts/0195f3c0.png}
+      '400':
+        description: Empty file, or storage unavailable.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '413': {description: File larger than 1 MiB.}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsSitemap:
+  get:
+    tags: [Posts]
+    summary: Posts formatted for sitemap generation
+    operationId: getPostsForSitemap
+    security: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 50000, minimum: 1, maximum: 50000}
+    responses:
+      '200':
+        description: Sitemap entries.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/SitemapPost}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsUsernameByUsername:
+  get:
+    tags: [Posts]
+    summary: Published posts by author username
+    operationId: getPostsByUsername
+    security: []
+    parameters:
+    - name: username
+      in: path
+      required: true
+      schema: {type: string}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Posts with pagination meta.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsUByUsernameBySlug:
+  get:
+    tags: [Posts]
+    summary: One post by author username and slug
+    description: Full detail — the body is not truncated.
+    operationId: getPostBySlugAndUsername
+    security: []
+    parameters:
+    - name: username
+      in: path
+      required: true
+      schema: {type: string}
+    - name: slug
+      in: path
+      required: true
+      schema: {type: string}
+    responses:
+      '200':
+        description: Post.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostEnvelope}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsTagByTag:
+  get:
+    tags: [Posts]
+    summary: Published posts carrying a tag
+    operationId: getPostsByTag
+    security: []
+    parameters:
+    - name: tag
+      in: path
+      required: true
+      description: Tag name.
+      schema: {type: string}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Posts with pagination meta.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsById:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  get:
+    tags: [Posts]
+    summary: One post by ID (admin)
+    operationId: getPostById
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Post.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Posts]
+    summary: Update any post (admin)
+    operationId: updatePost
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/UpdatePostRequest}
+    responses:
+      '200':
+        description: Updated post.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/PostEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Posts]
+    summary: Delete any post (admin)
+    operationId: deletePost
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Post deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdComments:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  get:
+    tags: [Comments]
+    summary: Comments on a post
+    operationId: getComments
+    security: []
+    responses:
+      '200':
+        description: Comments.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/CommentResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Comments]
+    summary: Add a comment
+    operationId: createComment
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/CommentRequest}
+    responses:
+      '201':
+        description: Comment created.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/CommentEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdCommentsByCommentId:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  - name: comment_id
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  put:
+    tags: [Comments]
+    summary: Edit a comment (owner only)
+    description: There is no admin override for editing.
+    operationId: updateComment
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/CommentRequest}
+    responses:
+      '200':
+        description: Updated comment.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/post.yaml#/CommentEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Comments]
+    summary: Delete a comment (owner or super admin)
+    description: A super admin may delete any user's comment, for moderation.
+    operationId: deleteComment
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Comment deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdView:
+  post:
+    tags: [Post views]
+    summary: Record a view for the current user
+    operationId: recordPostView
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    responses:
+      '200':
+        description: View recorded.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdViews:
+  get:
+    tags: [Post views]
+    summary: List raw view records for a post
+    operationId: getPostViews
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Views with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/PostViewResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdViewStats:
+  get:
+    tags: [Post views]
+    summary: View statistics for a post
+    operationId: getPostViewStats
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    responses:
+      '200':
+        description: Statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/PostViewStats}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdViewed:
+  get:
+    tags: [Post views]
+    summary: Whether the current user has viewed the post
+    operationId: checkUserViewed
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    responses:
+      '200':
+        description: View status.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      has_viewed: {type: boolean}
+            example:
+              success: true
+              message: Successfully checked view status
+              data: {has_viewed: true}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdLike:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  post:
+    tags: [Post likes]
+    summary: Like a post
+    operationId: likePost
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Post liked.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400':
+        description: Invalid post ID, or the post is already liked.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Post likes]
+    summary: Remove a like
+    operationId: unlikePost
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Like removed.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400':
+        description: Invalid post ID, or the post was not liked.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdLikes:
+  get:
+    tags: [Post likes]
+    summary: Users who liked a post
+    description: |
+      Pagination values are returned inside `data`, not in the `meta` envelope field.
+    operationId: getPostLikes
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Likes.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      likes:
+                        type: array
+                        items: {$ref: ../schemas/post.yaml#/PostLikeResponse}
+                      total: {type: integer, format: int64}
+                      limit: {type: integer}
+                      offset: {type: integer}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdLikeStats:
+  get:
+    tags: [Post likes]
+    summary: Like statistics for a post
+    operationId: getPostLikeStats
+    security: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    responses:
+      '200':
+        description: Statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/PostLikeStats}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdLiked:
+  get:
+    tags: [Post likes]
+    summary: Whether the current user has liked the post
+    operationId: checkUserLiked
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/PostIdPath}
+    responses:
+      '200':
+        description: Like status.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      has_liked: {type: boolean}
+                      post_id: {type: string, format: uuid}
+                      user_id: {type: string, format: uuid}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}

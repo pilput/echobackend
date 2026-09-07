@@ -1,0 +1,54 @@
+Limit100:
+  name: limit
+  in: query
+  description: Page size, capped at 100.
+  schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+Offset:
+  name: offset
+  in: query
+  description: Rows to skip.
+  schema: {type: integer, default: 0, minimum: 0}
+UserIdPath:
+  name: id
+  in: path
+  required: true
+  description: User UUID.
+  schema: {type: string, format: uuid}
+PostIdPath:
+  name: id
+  in: path
+  required: true
+  description: Post UUID.
+  schema: {type: string, format: uuid}
+ConversationIdPath:
+  name: conversationId
+  in: path
+  required: true
+  description: Conversation UUID.
+  schema: {type: string, format: uuid}
+BookmarkIdPath:
+  name: bookmark_id
+  in: path
+  required: true
+  description: Bookmark UUID.
+  schema: {type: string, format: uuid}
+MonthQuery:
+  name: month
+  in: query
+  description: Defaults to the current month.
+  schema: {type: integer, minimum: 1, maximum: 12}
+YearQuery:
+  name: year
+  in: query
+  description: Defaults to the current year.
+  schema: {type: integer}
+StartDateQuery:
+  name: startDate
+  in: query
+  description: Inclusive range start, `YYYY-MM-DD`.
+  schema: {type: string, format: date}
+EndDateQuery:
+  name: endDate
+  in: query
+  description: Inclusive range end, `YYYY-MM-DD`.
+  schema: {type: string, format: date}

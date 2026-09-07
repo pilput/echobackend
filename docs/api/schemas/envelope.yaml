@@ -1,0 +1,55 @@
+SuccessEnvelope:
+  type: object
+  description: Standard success envelope. `data` is specialised per endpoint.
+  required: [success, message]
+  properties:
+    success: {type: boolean, const: true}
+    message: {type: string}
+    data: {}
+EmptyEnvelope:
+  type: object
+  description: Success envelope with no `data` payload.
+  required: [success, message]
+  properties:
+    success: {type: boolean, const: true}
+    message: {type: string}
+PaginatedEnvelope:
+  type: object
+  description: Success envelope carrying pagination metadata.
+  required: [success, message, meta]
+  properties:
+    success: {type: boolean, const: true}
+    message: {type: string}
+    data: {}
+    meta: {$ref: '#/PaginationMeta'}
+ErrorEnvelope:
+  type: object
+  required: [success, message]
+  properties:
+    success: {type: boolean, const: false}
+    message: {type: string}
+    error: {type: string, description: Short reason. Never contains internal details on a 500.}
+ValidationErrorEnvelope:
+  type: object
+  required: [success, message]
+  properties:
+    success: {type: boolean, const: false}
+    message: {type: string, const: Validation failed}
+    error: {type: string}
+    errors:
+      type: array
+      items: {$ref: '#/ValidationErrorItem'}
+ValidationErrorItem:
+  type: object
+  properties:
+    field: {type: string}
+    message: {type: string}
+    value: {}
+    tag: {type: string}
+PaginationMeta:
+  type: object
+  properties:
+    total_items: {type: integer}
+    offset: {type: integer}
+    limit: {type: integer}
+    total_pages: {type: integer}

@@ -1,0 +1,56 @@
+exchangeRates:
+  get:
+    tags: [Exchange rates]
+    summary: Exchange rate between two currencies
+    description: |
+      Currency codes are normalised to uppercase; anything other than three alphabetic
+      letters returns 400. When `from` equals `to` the rate is `1`.
+
+      The service first tries the direct pair (`USDIDR=X`); if that is unavailable it
+      tries the inverse pair (`IDRUSD=X`) and returns `1 / rate`.
+
+      Results are cached in Valkey/Redis for 15 minutes when `REDIS_URL`/`VALKEY_URL` is
+      set. Without cache the provider is called on every request.
+    operationId: getExchangeRate
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: from
+      in: query
+      required: true
+      description: Three-letter source currency code.
+      schema: {type: string, minLength: 3, maxLength: 3}
+      example: USD
+    - name: to
+      in: query
+      required: true
+      description: Three-letter target currency code.
+      schema: {type: string, minLength: 3, maxLength: 3}
+      example: IDR
+    responses:
+      '200':
+        description: Rate.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/exchange-rate.yaml#/ExchangeRateResponse}
+            example:
+              success: true
+              message: Exchange rate fetched successfully
+              data: {from: USD, to: IDR, symbol: USDIDR=X, rate: 16250, source: RapidAPI, cached: false,
+                fetchedAt: '2026-06-01T10:00:00Z'}
+      '400':
+        description: '`from` or `to` is not a three-letter currency code.'
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500':
+        description: Provider failure, or the pair could not be resolved.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}

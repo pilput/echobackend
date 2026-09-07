@@ -1,0 +1,132 @@
+RegisterRequest:
+  type: object
+  required: [email, username, password]
+  properties:
+    email: {type: string, format: email}
+    username: {type: string, minLength: 3, maxLength: 30}
+    password:
+      type: string
+      format: password
+      minLength: 8
+      description: |
+        At least 8 characters. Uppercase, lowercase, digit and symbol are recommended
+        but not enforced.
+RegisteredUser:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    email: {type: string, format: email}
+    username:
+      type: [string, 'null']
+LoginRequest:
+  type: object
+  required: [identifier, password]
+  properties:
+    identifier: {type: string, description: Email address or username.}
+    password: {type: string, format: password, minLength: 6}
+ForgotPasswordRequest:
+  type: object
+  required: [email]
+  properties:
+    email: {type: string, format: email}
+ResetPasswordRequest:
+  type: object
+  required: [token, password]
+  properties:
+    token: {type: string}
+    password: {type: string, format: password, minLength: 8}
+RefreshTokenRequest:
+  type: object
+  required: [refresh_token]
+  properties:
+    refresh_token: {type: string}
+LogoutRequest:
+  type: object
+  required: [refresh_token]
+  properties:
+    refresh_token: {type: string}
+ChangePasswordRequest:
+  type: object
+  required: [current_password, new_password]
+  properties:
+    current_password: {type: string, format: password, minLength: 8}
+    new_password: {type: string, format: password, minLength: 8}
+CheckUsernameRequest:
+  type: object
+  required: [username]
+  properties:
+    username: {type: string, minLength: 3, maxLength: 30}
+OAuthExchangeRequest:
+  type: object
+  required: [code]
+  properties:
+    code: {type: string, description: One-time code from the OAuth callback redirect., example: oc_9f2b1c...}
+UpdateProfileRequest:
+  type: object
+  required: [username]
+  properties:
+    username: {type: string, minLength: 3, maxLength: 30}
+    first_name: {type: string, maxLength: 100}
+    last_name: {type: string, maxLength: 100}
+AuthTokenEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data:
+        type: object
+        properties:
+          access_token: {type: string}
+          refresh_token: {type: string}
+          user: {$ref: '#/AuthTokenUser'}
+AuthTokenUser:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    email: {type: string, format: email}
+    username:
+      type: [string, 'null']
+AuthProfile:
+  type: object
+  description: Flat profile returned by `GET`/`PUT /api/auth/profile`.
+  properties:
+    id: {type: string, format: uuid}
+    email: {type: string, format: email}
+    username:
+      type: [string, 'null']
+    first_name:
+      type: [string, 'null']
+    last_name:
+      type: [string, 'null']
+    image:
+      type: [string, 'null']
+    is_super_admin:
+      type: [boolean, 'null']
+    followers_count: {type: integer, format: int64}
+    following_count: {type: integer, format: int64}
+ActivityType:
+  type: string
+  enum: [login, login_failed, logout, register, password_change, password_reset_request, password_reset,
+    token_refresh, oauth_login, oauth_login_failed]
+AuthActivityLog:
+  type: object
+  description: One row of `auth_activity_logs`.
+  properties:
+    id: {type: string, format: uuid}
+    user_id:
+      type: [string, 'null']
+      format: uuid
+    activity_type: {$ref: '#/ActivityType'}
+    ip_address:
+      type: [string, 'null']
+    user_agent:
+      type: [string, 'null']
+    status:
+      type: string
+      enum: [success, failure, pending]
+    error_message:
+      type: [string, 'null']
+    metadata:
+      type: [string, 'null']
+      description: JSON payload, stored and returned as a string.
+    created_at: {type: string, format: date-time}

@@ -1,0 +1,25 @@
+NotificationResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    type:
+      type: string
+      description: |
+        Currently `comment` (a new comment on the user's post) or `follow` (a new
+        follower).
+      examples: [comment, follow]
+    title: {type: string}
+    message:
+      type: [string, 'null']
+    read: {type: boolean}
+    data:
+      type: [object, 'null']
+      description: Free-form payload; shape depends on `type`.
+      additionalProperties: true
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time

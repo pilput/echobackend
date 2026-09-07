@@ -1,0 +1,153 @@
+tags:
+  get:
+    tags: [Tags]
+    summary: List tags
+    operationId: listTags
+    security: []
+    responses:
+      '200':
+        description: Tags.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/tag.yaml#/TagResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Tags]
+    summary: Create a tag
+    operationId: createTag
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/tag.yaml#/TagRequest}
+    responses:
+      '201':
+        description: Tag created.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/tag.yaml#/TagEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+tagsTrending:
+  get:
+    tags: [Tags]
+    summary: The 5 most trending tags
+    description: |
+      Fixed at 5 results — this endpoint takes no `limit`.
+      `trending_score` is computed over published posts as
+      `like_count * 2 + bookmark_count * 2 + view_count`.
+
+      Cached in Valkey/Redis for 30 minutes under the key `tags:trending`
+      (plus the configured cache prefix, if any).
+    operationId: getTrendingTags
+    security: []
+    responses:
+      '200':
+        description: Trending tags.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/tag.yaml#/TrendingTagResponse}
+            example:
+              success: true
+              message: Successfully retrieved trending tags
+              data:
+              - {id: 1, name: golang, total_views: 1500, total_likes: 80, trending_score: 1710}
+      '500': {$ref: ../responses.yaml#/ServerError}
+tagsSitemap:
+  get:
+    tags: [Tags]
+    summary: Tags formatted for sitemap generation
+    operationId: getTagsForSitemap
+    security: []
+    responses:
+      '200':
+        description: Sitemap entries.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/tag.yaml#/SitemapTag}
+      '500': {$ref: ../responses.yaml#/ServerError}
+tagsById:
+  parameters:
+  - name: id
+    in: path
+    required: true
+    schema: {type: integer}
+  get:
+    tags: [Tags]
+    summary: One tag by ID
+    operationId: getTagById
+    security: []
+    responses:
+      '200':
+        description: Tag.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/tag.yaml#/TagEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Tags]
+    summary: Rename a tag (admin)
+    operationId: updateTag
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/tag.yaml#/TagRequest}
+    responses:
+      '200':
+        description: Updated tag.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/tag.yaml#/TagEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Tags]
+    summary: Delete a tag (admin)
+    operationId: deleteTag
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Tag deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}

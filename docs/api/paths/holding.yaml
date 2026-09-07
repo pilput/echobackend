@@ -1,0 +1,375 @@
+holdings:
+  get:
+    tags: [Holdings]
+    summary: List holdings for a month
+    operationId: listHoldings
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/MonthQuery}
+    - {$ref: ../parameters.yaml#/YearQuery}
+    - name: sortBy
+      in: query
+      schema:
+        type: string
+        enum: [created_at, updated_at, name, platform, invested_amount, current_value, holding_type]
+        default: created_at
+    - name: order
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    responses:
+      '200':
+        description: Holdings.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/holding.yaml#/Holding}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Holdings]
+    summary: Create a holding
+    operationId: createHolding
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/holding.yaml#/CreateHoldingRequest}
+    responses:
+      '201':
+        description: |
+          Holding created. `data` is an array with the single created holding.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/holding.yaml#/HoldingListEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsSummary:
+  get:
+    tags: [Holdings]
+    summary: Portfolio aggregate for a month
+    operationId: getHoldingsSummary
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/MonthQuery}
+    - {$ref: ../parameters.yaml#/YearQuery}
+    responses:
+      '200':
+        description: Summary.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/holding.yaml#/HoldingSummaryResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsTrends:
+  get:
+    tags: [Holdings]
+    summary: Multi-year portfolio trend
+    operationId: getHoldingsTrends
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: years
+      in: query
+      description: Comma-separated list of years.
+      schema: {type: string}
+      example: 2024,2025
+    responses:
+      '200':
+        description: Trend points.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/holding.yaml#/HoldingTrendResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsCompare:
+  get:
+    tags: [Holdings]
+    summary: Compare two months
+    description: The default period runs from the previous month to the current month.
+    operationId: compareHoldingMonths
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: fromMonth
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 12}
+    - name: fromYear
+      in: query
+      schema: {type: integer}
+    - name: toMonth
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 12}
+    - name: toYear
+      in: query
+      schema: {type: integer}
+    responses:
+      '200':
+        description: Comparison.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/holding.yaml#/HoldingMonthComparisonResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsMonthly:
+  get:
+    tags: [Holdings]
+    summary: Monthly portfolio series
+    description: |
+      The two endpoints of the range may be passed in either chronological order — the
+      handler normalises them so `start` is the latest month and `end` the oldest. When
+      `end` is omitted it defaults to 11 months before `start`, producing a 12-month series.
+
+      `startYear`/`endYear` must fall between 1990 and the current year + 1, and the
+      resolved range may not span more than 240 months (20 years); both are rejected with
+      a 400.
+    operationId: getHoldingsMonthly
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: startMonth
+      in: query
+      description: Defaults to the current month.
+      schema: {type: integer, minimum: 1, maximum: 12}
+    - name: startYear
+      in: query
+      description: Defaults to the current year.
+      schema: {type: integer, minimum: 1990}
+    - name: endMonth
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 12}
+    - name: endYear
+      in: query
+      schema: {type: integer, minimum: 1990}
+    responses:
+      '200':
+        description: Monthly data points.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/holding.yaml#/HoldingMonthlyDataResponse}
+      '400':
+        description: |
+          Invalid or out-of-range `startYear`/`endYear`, or a range spanning more than
+          240 months.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsCalendar:
+  get:
+    tags: [Holdings]
+    summary: Corporate actions calendar for one month
+    description: |
+      Dividend and RUPS events for IDX stocks. The data is market-wide, not personalised —
+      every authenticated user sees the same calendar.
+
+      Rows are persisted in Postgres (`corporate_actions`). When the requested month
+      already has stored rows they are served straight from the database; otherwise the
+      IDX API is queried, results are upserted, and the stored rows are returned. `cached`
+      is `true` only in the first case.
+    operationId: getCorporateActionCalendar
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/MonthQuery}
+    - {$ref: ../parameters.yaml#/YearQuery}
+    responses:
+      '200':
+        description: Calendar.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/holding.yaml#/CorporateActionCalendarResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsDuplicate:
+  post:
+    tags: [Holdings]
+    summary: Copy every holding from one month into another
+    operationId: duplicateHoldings
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/holding.yaml#/DuplicateHoldingRequest}
+    responses:
+      '201':
+        description: The holdings that were created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/holding.yaml#/DuplicateResultItem}
+      '400':
+        description: Invalid body, or source month equals destination month.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsSync:
+  post:
+    tags: [Holdings]
+    summary: Sync prices for the user's active period
+    operationId: syncHoldingPrices
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Sync result.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/holding.yaml#/HoldingSyncResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingsById:
+  parameters:
+  - name: id
+    in: path
+    required: true
+    schema: {type: integer, format: int64}
+  get:
+    tags: [Holdings]
+    summary: One holding by ID
+    operationId: getHoldingById
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Holding.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/holding.yaml#/Holding}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Holdings]
+    summary: Update a holding
+    operationId: updateHolding
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/holding.yaml#/UpdateHoldingRequest}
+    responses:
+      '200':
+        description: |
+          Updated holding. `data` is an array with the single updated holding.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/holding.yaml#/HoldingListEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Holdings]
+    summary: Delete a holding
+    operationId: deleteHolding
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Holding deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+holdingTypes:
+  get:
+    tags: [Holdings]
+    summary: Asset type list for form dropdowns
+    operationId: listHoldingTypes
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Holding types.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/holding.yaml#/HoldingType}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}

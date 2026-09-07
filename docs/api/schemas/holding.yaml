@@ -1,0 +1,297 @@
+DecimalString:
+  type: string
+  description: A decimal number serialised as a string, for example `"1500000.00"`.
+  examples: ['1500000.00']
+NullableDecimalString:
+  type: [string, 'null']
+  description: A decimal number serialised as a string, or `null`.
+HoldingType:
+  type: object
+  properties:
+    id: {type: integer}
+    code:
+      type: string
+      examples: [STOCK]
+    name:
+      type: string
+      examples: [Saham]
+    notes:
+      type: [string, 'null']
+Holding:
+  type: object
+  properties:
+    id: {type: integer, format: int64}
+    user_id: {type: string, format: uuid}
+    name: {type: string}
+    symbol:
+      type: [string, 'null']
+    platform: {type: string}
+    holding_type_id: {type: integer}
+    holding_type:
+      anyOf:
+      - {$ref: '#/HoldingType'}
+      - {type: 'null'}
+    currency:
+      type: string
+      minLength: 3
+      maxLength: 3
+      examples: [IDR]
+    invested_amount: {$ref: '#/DecimalString'}
+    current_value: {$ref: '#/DecimalString'}
+    gain_amount:
+      allOf:
+      - {$ref: '#/DecimalString'}
+      description: Computed by the database; read-only.
+    gain_percent:
+      allOf:
+      - {$ref: '#/DecimalString'}
+      description: Computed by the database; read-only.
+    units: {$ref: '#/NullableDecimalString'}
+    avg_buy_price: {$ref: '#/NullableDecimalString'}
+    current_price: {$ref: '#/NullableDecimalString'}
+    last_updated:
+      type: [string, 'null']
+      format: date-time
+    notes:
+      type: [string, 'null']
+    month: {type: integer, minimum: 1, maximum: 12}
+    year: {type: integer}
+    created_at: {type: string, format: date-time}
+    updated_at: {type: string, format: date-time}
+HoldingListEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data:
+        type: array
+        items: {$ref: '#/Holding'}
+CreateHoldingRequest:
+  type: object
+  required: [name, platform, holding_type_id, currency, invested_amount, current_value, month, year]
+  properties:
+    name: {type: string}
+    symbol:
+      type: [string, 'null']
+    platform: {type: string}
+    holding_type_id: {type: integer}
+    currency: {type: string, minLength: 3, maxLength: 3}
+    invested_amount: {$ref: '#/DecimalString'}
+    current_value: {$ref: '#/DecimalString'}
+    units: {$ref: '#/NullableDecimalString'}
+    avg_buy_price: {$ref: '#/NullableDecimalString'}
+    current_price: {$ref: '#/NullableDecimalString'}
+    last_updated:
+      type: [string, 'null']
+      format: date-time
+    notes:
+      type: [string, 'null']
+    month: {type: integer, minimum: 1, maximum: 12}
+    year: {type: integer, minimum: 2000}
+UpdateHoldingRequest:
+  type: object
+  description: Every field is optional.
+  properties:
+    name:
+      type: [string, 'null']
+    symbol:
+      type: [string, 'null']
+    platform:
+      type: [string, 'null']
+    holding_type_id:
+      type: [integer, 'null']
+    currency:
+      type: [string, 'null']
+      minLength: 3
+      maxLength: 3
+    invested_amount: {$ref: '#/NullableDecimalString'}
+    current_value: {$ref: '#/NullableDecimalString'}
+    units: {$ref: '#/NullableDecimalString'}
+    avg_buy_price: {$ref: '#/NullableDecimalString'}
+    current_price: {$ref: '#/NullableDecimalString'}
+    last_updated:
+      type: [string, 'null']
+      format: date-time
+    notes:
+      type: [string, 'null']
+    month:
+      type: [integer, 'null']
+      minimum: 1
+      maximum: 12
+    year:
+      type: [integer, 'null']
+      minimum: 2000
+DuplicateHoldingRequest:
+  type: object
+  required: [fromMonth, fromYear, toMonth, toYear]
+  properties:
+    fromMonth: {type: integer, minimum: 1, maximum: 12}
+    fromYear: {type: integer, minimum: 1900, maximum: 2100}
+    toMonth: {type: integer, minimum: 1, maximum: 12}
+    toYear: {type: integer, minimum: 1900, maximum: 2100}
+    overwrite: {type: boolean, default: false}
+DuplicateResultItem:
+  type: object
+  properties:
+    id: {type: string}
+    name: {type: string}
+    month: {type: integer}
+    year: {type: integer}
+HoldingSyncResponse:
+  type: object
+  properties:
+    syncedCount: {type: integer, format: int64}
+    month: {type: integer}
+    year: {type: integer}
+HoldingBreakdown:
+  type: object
+  properties:
+    name: {type: string}
+    invested: {$ref: '#/DecimalString'}
+    current: {$ref: '#/DecimalString'}
+    profitLoss: {$ref: '#/DecimalString'}
+    profitLossPercentage: {$ref: '#/DecimalString'}
+HoldingSummaryResponse:
+  type: object
+  properties:
+    totalInvested: {$ref: '#/DecimalString'}
+    totalCurrentValue: {$ref: '#/DecimalString'}
+    totalProfitLoss: {$ref: '#/DecimalString'}
+    totalProfitLossPercentage: {$ref: '#/DecimalString'}
+    holdingsCount: {type: integer, format: int64}
+    typeBreakdown:
+      type: array
+      items: {$ref: '#/HoldingBreakdown'}
+    platformBreakdown:
+      type: array
+      items: {$ref: '#/HoldingBreakdown'}
+HoldingTrendResponse:
+  type: object
+  properties:
+    date: {type: string}
+    invested: {$ref: '#/DecimalString'}
+    current: {$ref: '#/DecimalString'}
+    profitLoss: {$ref: '#/DecimalString'}
+    profitLossPercentage: {$ref: '#/DecimalString'}
+HoldingMonthlyDataResponse:
+  type: object
+  properties:
+    month: {type: integer}
+    year: {type: integer}
+    date: {type: string}
+    totalCurrentValue: {$ref: '#/DecimalString'}
+    totalInvested: {$ref: '#/DecimalString'}
+    holdingsCount: {type: integer, format: int64}
+HoldingMonthPoint:
+  type: object
+  properties:
+    month: {type: integer}
+    year: {type: integer}
+HoldingNamedBreakdown:
+  type: object
+  description: |
+    Comparison payloads use plain numbers, unlike the summary endpoint's decimal strings.
+  properties:
+    name: {type: string}
+    invested: {type: number}
+    current: {type: number}
+    profitLoss: {type: number}
+    profitLossPercentage: {type: number}
+HoldingSummaryValues:
+  type: object
+  properties:
+    totalInvested: {type: number}
+    totalCurrentValue: {type: number}
+    totalProfitLoss: {type: number}
+    totalProfitLossPercentage: {type: number}
+    holdingsCount: {type: integer, format: int64}
+    typeBreakdown:
+      type: array
+      items: {$ref: '#/HoldingNamedBreakdown'}
+    platformBreakdown:
+      type: array
+      items: {$ref: '#/HoldingNamedBreakdown'}
+HoldingBreakdownValues:
+  type: object
+  properties:
+    invested: {type: number}
+    current: {type: number}
+    profitLoss: {type: number}
+    profitLossPercentage: {type: number}
+HoldingCompareBreakdown:
+  type: object
+  properties:
+    name: {type: string}
+    from: {$ref: '#/HoldingBreakdownValues'}
+    to: {$ref: '#/HoldingBreakdownValues'}
+    investedDiff: {type: number}
+    currentValueDiff: {type: number}
+    profitLossDiff: {type: number}
+    investedDiffPercentage: {type: number}
+    currentValueDiffPercentage: {type: number}
+HoldingMonthComparisonResponse:
+  type: object
+  properties:
+    fromMonth: {$ref: '#/HoldingMonthPoint'}
+    toMonth: {$ref: '#/HoldingMonthPoint'}
+    summary:
+      type: object
+      properties:
+        from: {$ref: '#/HoldingSummaryValues'}
+        to: {$ref: '#/HoldingSummaryValues'}
+        investedDiff: {type: number}
+        currentValueDiff: {type: number}
+        profitLossDiff: {type: number}
+        holdingsCountDiff: {type: integer, format: int64}
+        investedDiffPercentage: {type: number}
+        currentValueDiffPercentage: {type: number}
+        holdingsCountDiffPercentage: {type: number}
+    typeComparison:
+      type: array
+      items: {$ref: '#/HoldingCompareBreakdown'}
+    platformComparison:
+      type: array
+      items: {$ref: '#/HoldingCompareBreakdown'}
+CorporateActionResponse:
+  type: object
+  properties:
+    symbol:
+      type: string
+      examples: [BBCA]
+    name: {type: string, description: Company name.}
+    type:
+      type: string
+      enum: [dividend, rups]
+    date: {type: string, format: date, description: 'Ex-date for dividends, meeting date for RUPS.'}
+    cum_date:
+      type: [string, 'null']
+      format: date
+    rec_date:
+      type: [string, 'null']
+      format: date
+    pay_date:
+      type: [string, 'null']
+      format: date
+      description: Dividend payment date; `null` for RUPS.
+    amount:
+      type: [number, 'null']
+      description: Gross dividend per share; `null` for RUPS.
+    currency:
+      type: string
+      examples: [IDR]
+    note: {type: string, description: 'Meeting agenda for RUPS, or free-form comments.'}
+    market:
+      type: string
+      enum: [IDX, US]
+CorporateActionCalendarResponse:
+  type: object
+  properties:
+    from: {type: string, format: date, description: First day of the requested month.}
+    to: {type: string, format: date, description: Last day of the requested month.}
+    total: {type: integer}
+    cached: {type: boolean, description: '`true` when the rows came from Postgres without a fresh IDX
+        fetch.'}
+    actions:
+      type: array
+      description: Sorted chronologically.
+      items: {$ref: '#/CorporateActionResponse'}

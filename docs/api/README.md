@@ -1,118 +1,106 @@
 # API Documentation - echobackend
 
-HTTP API reference for frontend integration. All business routes are under the `/api` prefix, except the root health check endpoints.
+The HTTP API is described by an OpenAPI 3.1 document, split into small per-module files so
+a reader — human or AI agent — only has to open the module it cares about instead of one
+giant file.
 
-## Base URL
-
-| Environment | URL |
-|-------------|-----|
-| Local | `http://localhost:<PORT>` (see `PORT` in `.env`) |
-| Production | Your deployment / reverse proxy URL |
-
-Full examples: `GET /api/posts`, `POST /api/auth/login`.
-
-## Authentication
-
-Routes that require login must send this header:
-
-```http
-Authorization: Bearer <access_token>
+```
+docs/api/
+├── openapi.yaml        # root: info, servers, security scheme, and the paths index
+├── parameters.yaml      # shared query/path parameters (limit, offset, IDs, ...)
+├── responses.yaml       # shared error responses (400/401/403/404/409/422/429/500)
+├── paths/                # one file per module — the actual endpoint definitions
+│   ├── auth.yaml
+│   ├── user.yaml         # includes follow/unfollow
+│   ├── post.yaml         # includes comments, views, likes
+│   ├── tag.yaml
+│   ├── chat.yaml
+│   ├── bookmark.yaml
+│   ├── notification.yaml
+│   ├── holding.yaml      # includes holding-types and the corporate-actions calendar
+│   ├── exchange-rate.yaml
+│   └── report.yaml
+└── schemas/              # one file per module — request/response schemas
+    ├── envelope.yaml     # SuccessEnvelope, ErrorEnvelope, PaginationMeta, ...
+    ├── auth.yaml
+    ├── user.yaml
+    ├── post.yaml
+    ├── tag.yaml
+    ├── chat.yaml
+    ├── bookmark.yaml
+    ├── notification.yaml
+    ├── holding.yaml
+    ├── exchange-rate.yaml
+    └── report.yaml
 ```
 
-Tokens are returned by `POST /api/auth/login`, `POST /api/auth/refresh`, or `POST /api/auth/oauth/exchange` after GitHub OAuth. JWT claims include `user_id` (UUID).
+`openapi.yaml` never inlines an operation — every path entry is a one-line `$ref` into
+`paths/<module>.yaml`. To look up one endpoint: find its line in `openapi.yaml`, open the
+file it points to. A module's path file and schema file rarely exceed a few hundred lines
+each (the biggest, `paths/post.yaml`, is ~800), against ~4,600 lines combined if this were
+one file — so reading just what's needed costs a fraction of the tokens or scrolling.
 
-Failed auth middleware responses (missing token, invalid token, or non-super-admin user on admin routes) use the standard `success` envelope below, with `success: false` and a generic `error` string:
+This is plain OpenAPI multi-file referencing (`$ref` to external files) — every mainstream
+tool resolves it natively (Redocly, Swagger UI, Postman, openapi-generator, editor
+extensions). Nothing here is bespoke.
 
-| Situation | HTTP | Body |
-|-----------|------|------|
-| Missing / invalid token | 401 | `{"success":false,"message":"...","error":"Unauthorized access"}` |
-| Not a super admin on an admin route | 403 | `{"success":false,"message":"...","error":"Access forbidden"}` |
+## Viewing it
 
-## Standard Response Format
+```bash
+# Interactive docs in the browser (resolves all the split files automatically)
+npx @redocly/cli preview-docs docs/api/openapi.yaml
 
-Most handlers use the `pkg/response` envelope:
-
-```json
-{
-  "success": true,
-  "message": "Human-readable message",
-  "data": {},
-  "meta": {},
-  "error": "...",
-  "errors": []
-}
+# One-off HTML build
+npx @redocly/cli build-docs docs/api/openapi.yaml -o docs/api/index.html
 ```
 
-`data`, `meta`, `error`, and `errors` use `omitempty` — they are omitted from the JSON when empty (for example, success responses have no `error`/`errors` keys, and error responses usually have no `data`/`meta` keys).
+Any OpenAPI viewer works — Swagger UI, Scalar, Bruno, Insomnia, Postman (Import → File),
+or the editor extensions for VS Code / JetBrains. Tools that require a single file (some
+older codegens) need a bundle first — see below.
 
-| Helper | HTTP | Notes |
-|--------|------|-------|
-| Success | 200 | `success: true`, optional `data` |
-| Created | 201 | Same envelope as success |
-| Bad request | 400 | `success: false`, `error` contains details |
-| Unauthorized | 401 | `error`: `"Unauthorized access"` |
-| Forbidden | 403 | `error`: `"Access forbidden"` |
-| Not found | 404 | |
-| Conflict | 409 | Duplicate resource |
-| Validation | 422 | `errors` contains field errors (`field`, `message`, `value`, `tag`) |
-| Server error | 500 | Generic client message; details are logged server-side only |
+## Validating it
 
-### Pagination (`meta`)
-
-Paginated lists use `SuccessWithMeta`:
-
-```json
-{
-  "meta": {
-    "total_items": 100,
-    "offset": 0,
-    "limit": 10,
-    "total_pages": 10
-  }
-}
+```bash
+npx @redocly/cli lint docs/api/openapi.yaml
 ```
 
-Query: `limit` (default varies by endpoint, **maximum 100** on most endpoints — `GET /api/posts` is an exception and currently accepts larger values), `offset` (default `0`).
+Lints the fully resolved document across all the split files. Expected to pass with
+**0 errors**. The remaining warnings are inherent to the service and intentionally left
+in place:
 
-## Global Limits
+- `no-ambiguous-paths` — Echo registers static segments alongside parameterised ones
+  (`/api/posts/random` next to `/api/posts/:id`); Echo resolves the static route first.
+- `operation-4xx-response` — some public read endpoints genuinely only fail with a 500.
+- `operation-2xx-response` — the GitHub OAuth endpoints answer with a 307 redirect only.
+- `no-server-example.com` — the first server entry is `localhost`, for local development.
+- `info-license` — the repository carries no licence file.
 
-- Request body size: **10 MB** (larger requests return **413**).
-- CORS: `HTTP_ALLOW_ORIGINS` (default `*`).
-- Global rate limit: enabled when `HTTP_RATE_LIMIT_RPS` > 0.
-- Auth-specific rate limits use a fixed window per IP. If `VALKEY_URL` is set, counters are stored in Valkey/Redis and work across instances; otherwise they fall back to in-memory per instance:
-  `register`, `login`, and `reset-password` **5 / 5 minutes**;
-  `forgot-password` **3 / 5 minutes**;
-  `refresh` **30 / minute**;
-  `oauth/exchange` **10 / minute**;
-  `check-username` **20 / 5 minutes**.
+## Bundling into one file
 
-## Health & Root
+Needed for tools that don't support multi-file `$ref` (some older codegens), or to hand
+someone a single self-contained file:
 
-| Method | Path | Auth | Response |
-|--------|------|------|----------|
-| GET | `/` | No | Success envelope with welcome message |
-| GET | `/health` | No | `200` `{"status":"ok"}` or `503` `{"status":"unhealthy","reason":"database unreachable"}` |
+```bash
+npx @redocly/cli bundle docs/api/openapi.yaml -o docs/api/openapi.bundled.yaml
+```
 
-## Modules
+Don't hand-edit the bundled output — it's generated; edit the split source files instead
+and re-bundle.
 
-| Module | Base path | Document |
-|--------|-----------|----------|
-| Auth | `/api/auth` | [auth.md](./auth.md) |
-| Users & follow | `/api/users` | [users.md](./users.md) |
-| Posts (comments, views, likes) | `/api/posts` | [posts.md](./posts.md) |
-| Tags | `/api/tags` | [tags.md](./tags.md) |
-| Chat | `/api/chat/conversations`, `/api/chat/messages` | [chat.md](./chat.md) |
-| Holdings | `/api/holdings`, `/api/holding-types` | [holdings.md](./holdings.md) |
-| Exchange rates | `/api/exchange-rates` | [exchange-rates.md](./exchange-rates.md) |
-| Bookmarks | `/api/bookmarks` | [bookmarks.md](./bookmarks.md) |
-| Notifications | `/api/notifications` | [notifications.md](./notifications.md) |
-| Reports (admin) | `/api/reports` | [reports.md](./reports.md) |
+## Generating clients
 
-Debug routes (`/api/debug/pprof/*`) are registered only when `APP_DEBUG=true`; they are not intended for frontend use.
+```bash
+npx @openapitools/openapi-generator-cli generate \
+  -i docs/api/openapi.yaml -g typescript-fetch -o ./client
+```
 
-## Type Conventions
+## Keeping it current
 
-- **UUID**: string primary key for users, posts, comments, and conversations.
-- **Time**: ISO 8601 / RFC3339 (`2026-05-12T08:00:00Z`).
-- **Nullable**: Go pointer fields may be `null` or omitted (`omitempty`).
-- **Financial numbers (holdings)**: decimal strings in JSON (for example `"1500000.00"`), not numbers.
+The spec is written by hand — there is no code generation step, and no build check enforces
+it. When a route, DTO field, or status code changes in `internal/`:
+
+1. Edit the relevant `paths/<module>.yaml` and/or `schemas/<module>.yaml`.
+2. Adding a brand-new endpoint also means adding its one-line `$ref` entry to the `paths:`
+   map in the root `openapi.yaml`.
+3. Re-run `npx @redocly/cli lint docs/api/openapi.yaml` — must stay at 0 errors — in the
+   same commit.

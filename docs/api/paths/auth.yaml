@@ -1,0 +1,471 @@
+authRegister:
+  post:
+    tags: [Auth]
+    summary: Register a new account
+    description: Rate limit — 5 requests per 5 minutes per IP.
+    operationId: register
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/RegisterRequest}
+    responses:
+      '201':
+        description: Account created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/auth.yaml#/RegisteredUser}
+            example:
+              success: true
+              message: User registered successfully
+              data: {id: 0195f3c0-0000-7000-8000-000000000000, email: user@example.com, username: johndoe}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '409': {$ref: ../responses.yaml#/Conflict}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authLogin:
+  post:
+    tags: [Auth]
+    summary: Log in with email or username
+    description: |
+      `identifier` accepts either the email or the username.
+      Rate limit — 5 requests per 5 minutes per IP.
+    operationId: login
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/LoginRequest}
+    responses:
+      '200':
+        description: Tokens issued.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/auth.yaml#/AuthTokenEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authForgotPassword:
+  post:
+    tags: [Auth]
+    summary: Request a password reset
+    description: |
+      The response is identical whether or not the email is registered (anti-enumeration).
+
+      When `SMTP_HOST` is set and the Asynq queue is reachable through `QUEUE_REDIS_URL`
+      or `REDIS_URL`/`VALKEY_URL`, the reset email is enqueued and sent by a worker. The
+      link is built from `FRONTEND_RESET_PASSWORD_URL` with a `token` query parameter.
+      Without SMTP/queue the token is still created and recorded in activity metadata.
+
+      Rate limit — 3 requests per 5 minutes per IP.
+    operationId: forgotPassword
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/ForgotPasswordRequest}
+    responses:
+      '200':
+        description: Always returned, regardless of whether the email exists.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: 'If the email exists, a password reset link has been sent'}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+authResetPassword:
+  post:
+    tags: [Auth]
+    summary: Set a new password with a reset token
+    description: Rate limit — 5 requests per 5 minutes per IP.
+    operationId: resetPassword
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/ResetPasswordRequest}
+    responses:
+      '200':
+        description: Password replaced.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: Password reset successful}
+      '400':
+        description: Invalid, expired or already-used token.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authRefresh:
+  post:
+    tags: [Auth]
+    summary: Exchange a refresh token for a new access token
+    description: |
+      The refresh token is **not** rotated: the same value is echoed back and keeps
+      working until it expires. Calling this endpoint does not extend its lifetime.
+
+      Rate limit — 30 requests per minute per IP.
+    operationId: refreshToken
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/RefreshTokenRequest}
+    responses:
+      '200':
+        description: New access token issued. `refresh_token` is the value that was sent.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/auth.yaml#/AuthTokenEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401':
+        description: Invalid or expired refresh token.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+authCheckUsername:
+  post:
+    tags: [Auth]
+    summary: Check whether a username is taken
+    description: |
+      Public so the register / edit-profile form can validate as the user types.
+      Rate limit — 20 requests per 5 minutes per IP.
+    operationId: checkUsername
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/CheckUsernameRequest}
+    responses:
+      '200':
+        description: Availability result.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      exists: {type: boolean}
+            example:
+              success: true
+              message: Username availability checked
+              data: {exists: true}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authLogout:
+  post:
+    tags: [Auth]
+    summary: Log out by deleting the refresh-token session
+    operationId: logout
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/LogoutRequest}
+    responses:
+      '200':
+        description: Session removed.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: Logout successful}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+authProfile:
+  get:
+    tags: [Auth]
+    summary: Get the current user's auth profile
+    description: |
+      A flat subset of the user fields — no `name`, no nested `profile`.
+      For the full current-user payload use `GET /api/users/me`.
+    operationId: getAuthProfile
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Profile.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/auth.yaml#/AuthProfile}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  put:
+    tags: [Auth]
+    summary: Update username and name of the current user
+    description: Email cannot be changed here.
+    operationId: updateAuthProfile
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/UpdateProfileRequest}
+    responses:
+      '200':
+        description: Updated profile, same shape as `GET /api/auth/profile`.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/auth.yaml#/AuthProfile}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409': {$ref: ../responses.yaml#/Conflict}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authAccount:
+  delete:
+    tags: [Auth]
+    summary: Soft-delete the current user's own account
+    description: |
+      Sets `deleted_at`; the row is not removed. Existing access/refresh tokens are not
+      proactively revoked — the frontend should clear local tokens after this call.
+    operationId: deleteOwnAccount
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Account soft-deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: Account deleted successfully}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authPassword:
+  patch:
+    tags: [Auth]
+    summary: Change the current user's password
+    operationId: changePassword
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/ChangePasswordRequest}
+    responses:
+      '200':
+        description: Password changed.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: Password changed successfully}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401':
+        description: Not authenticated, or the current password is wrong.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+authActivityLogs:
+  get:
+    tags: [Auth]
+    summary: Paginated auth activity log for the current user
+    operationId: getActivityLogs
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: limit
+      in: query
+      description: Page size, capped at 100.
+      schema: {type: integer, default: 20, minimum: 1, maximum: 100}
+    - {$ref: ../parameters.yaml#/Offset}
+    - name: activity_type
+      in: query
+      description: Filter by activity type.
+      schema: {$ref: ../schemas/auth.yaml#/ActivityType}
+    responses:
+      '200':
+        description: Activity logs with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/auth.yaml#/AuthActivityLog}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authActivityLogsRecent:
+  get:
+    tags: [Auth]
+    summary: Recent activity for the current user
+    operationId: getRecentActivity
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: limit
+      in: query
+      description: Page size, capped at 50.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 50}
+    responses:
+      '200':
+        description: Recent activity entries.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/auth.yaml#/AuthActivityLog}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authActivityLogsFailedLogins:
+  get:
+    tags: [Auth]
+    summary: Failed logins across all users (admin monitoring)
+    operationId: getFailedLogins
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    - name: since_hours
+      in: query
+      description: Look back this many hours.
+      schema: {type: integer, default: 24, minimum: 1}
+    responses:
+      '200':
+        description: Failed login entries with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/auth.yaml#/AuthActivityLog}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authOauthGithub:
+  get:
+    tags: [Auth]
+    summary: Redirect to GitHub's authorization page
+    description: |
+      Redirects to
+      `https://github.com/login/oauth/authorize?client_id=...&redirect_uri=...&scope=user:email&state=...`
+      and sets an HttpOnly `github_oauth_state` cookie (10-minute TTL) for CSRF validation
+      on the callback.
+    operationId: githubOAuthRedirect
+    security: []
+    responses:
+      '307':
+        description: Temporary redirect to GitHub.
+        headers:
+          Location:
+            schema: {type: string}
+          Set-Cookie:
+            description: HttpOnly `github_oauth_state` cookie, 10-minute TTL.
+            schema: {type: string}
+authOauthGithubCallback:
+  get:
+    tags: [Auth]
+    summary: GitHub OAuth callback
+    description: |
+      Exchanges `code` for a GitHub access token, fetches the profile (falling back to
+      `https://api.github.com/user/emails` when the email is not public), then creates or
+      finds the local user.
+
+      **Success** — redirects to `{FRONTEND_OAUTH_CALLBACK_URL}?code=oc_...`
+      (default `{FRONTEND_URL}/auth/callback`). That one-time code has a 2-minute TTL and
+      must be exchanged through `POST /api/auth/oauth/exchange`. With Valkey/Redis enabled
+      the code is stored in cache with atomic get-delete; otherwise an in-memory fallback
+      is used, which is safe only for a single instance.
+
+      **Failure** — redirects to `{FRONTEND_OAUTH_CALLBACK_URL}?error=<type>` where
+      `<type>` is one of `missing_code`, `invalid_state`, `github_token_failed`,
+      `github_user_failed`, `oauth_login_failed`, `oauth_exchange_failed`.
+    operationId: githubOAuthCallback
+    security: []
+    parameters:
+    - name: code
+      in: query
+      description: Authorization code from GitHub.
+      schema: {type: string}
+    - name: state
+      in: query
+      description: CSRF state; must match the `github_oauth_state` cookie.
+      schema: {type: string}
+    responses:
+      '307':
+        description: Redirect to the frontend callback URL, with `code` or `error`.
+        headers:
+          Location:
+            schema: {type: string}
+authOauthExchange:
+  post:
+    tags: [Auth]
+    summary: Exchange the one-time OAuth code for application tokens
+    description: |
+      The code is single-use and expires after 2 minutes. In production enable
+      `REDIS_URL`/`VALKEY_URL` so codes work across instances.
+
+      Rate limit — 10 requests per minute per IP.
+    operationId: exchangeOAuthCode
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/OAuthExchangeRequest}
+    responses:
+      '200':
+        description: Tokens issued.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/auth.yaml#/AuthTokenEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401':
+        description: Invalid, expired or already-used code.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}

@@ -1,0 +1,206 @@
+CreatePostRequest:
+  type: object
+  required: [title, slug, body]
+  properties:
+    title: {type: string, minLength: 7}
+    slug: {type: string, minLength: 7}
+    body: {type: string, minLength: 10}
+    photo_url: {type: string}
+    published: {type: boolean, default: false}
+    tags:
+      type: array
+      description: Tag names.
+      items: {type: string}
+UpdatePostRequest:
+  type: object
+  description: Every field is optional.
+  properties:
+    title: {type: string}
+    slug: {type: string}
+    body: {type: string}
+    photo_url: {type: string}
+    published:
+      type: [boolean, 'null']
+    tags:
+      type: array
+      items: {type: string}
+PostResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    title:
+      type: [string, 'null']
+    photo_url:
+      type: [string, 'null']
+    body:
+      type: [string, 'null']
+      description: Truncated to about 250 runes plus `" ..."` in list responses.
+    slug:
+      type: [string, 'null']
+    view_count: {type: integer, format: int64}
+    like_count: {type: integer, format: int64}
+    bookmark_count: {type: integer, format: int64}
+    published:
+      type: [boolean, 'null']
+    published_at:
+      type: [string, 'null']
+      format: date-time
+    user:
+      anyOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    tags:
+      type: array
+      items: {$ref: ./tag.yaml#/TagResponse}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+PostEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/PostResponse'}
+PostListEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/PaginatedEnvelope}
+  - type: object
+    properties:
+      data:
+        type: array
+        items: {$ref: '#/PostResponse'}
+SitemapPost:
+  type: object
+  properties:
+    username:
+      type: [string, 'null']
+    slug:
+      type: [string, 'null']
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+MyPostsAnalyticsResponse:
+  type: object
+  properties:
+    summary:
+      type: object
+      properties:
+        total_posts: {type: integer, format: int64}
+        published_posts: {type: integer, format: int64}
+        total_views: {type: integer, format: int64}
+        total_likes: {type: integer, format: int64}
+    view_trend:
+      type: array
+      items:
+        type: object
+        properties:
+          date: {type: string, format: date}
+          views: {type: integer, format: int64}
+          cumulative_views: {type: integer, format: int64}
+    top_posts:
+      type: array
+      items:
+        type: object
+        properties:
+          id: {type: string, format: uuid}
+          title:
+            type: [string, 'null']
+          slug:
+            type: [string, 'null']
+          view_count: {type: integer, format: int64}
+          like_count: {type: integer, format: int64}
+MyPostsLikesByMonthResponse:
+  type: object
+  properties:
+    months: {type: integer}
+    series:
+      type: array
+      items:
+        type: object
+        properties:
+          month:
+            type: string
+            examples: [2026-05]
+          likes: {type: integer, format: int64}
+    total: {type: integer, format: int64}
+CommentRequest:
+  type: object
+  required: [text]
+  properties:
+    text: {type: string, minLength: 1, maxLength: 1000}
+CommentResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id: {type: string, format: uuid}
+    parent_comment_id:
+      type: [string, 'null']
+      format: uuid
+      description: Read-only; replies cannot be created through this API yet.
+    text: {type: string}
+    user:
+      anyOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+CommentEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/CommentResponse'}
+PostViewResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id: {type: string, format: uuid}
+    user_id:
+      type: [string, 'null']
+      format: uuid
+    ip_address:
+      type: [string, 'null']
+    user_agent:
+      type: [string, 'null']
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+PostViewStats:
+  type: object
+  properties:
+    post_id: {type: string, format: uuid}
+    total_views: {type: integer, format: int64}
+    unique_views: {type: integer, format: int64}
+    anonymous_views: {type: integer, format: int64}
+    authenticated_views: {type: integer, format: int64}
+PostLikeResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    user:
+      anyOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    created_at:
+      type: [string, 'null']
+      format: date-time
+PostLikeStats:
+  type: object
+  properties:
+    post_id: {type: string, format: uuid}
+    total_likes: {type: integer, format: int64}

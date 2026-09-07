@@ -1,0 +1,31 @@
+TagRequest:
+  type: object
+  required: [name]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 30}
+TagResponse:
+  type: object
+  properties:
+    id: {type: integer}
+    name: {type: string}
+TagEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data: {$ref: '#/TagResponse'}
+TrendingTagResponse:
+  type: object
+  properties:
+    id: {type: integer}
+    name: {type: string}
+    total_views: {type: integer, format: int64}
+    total_likes: {type: integer, format: int64}
+    trending_score: {type: integer, format: int64}
+SitemapTag:
+  type: object
+  properties:
+    name: {type: string}
+    created_at:
+      type: [string, 'null']
+      format: date-time
