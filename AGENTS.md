@@ -46,7 +46,7 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 - `config.Load()` reads `.env` (stdlib loader, best-effort) then env vars; system env always wins. Many keys accept fallback aliases (first-set wins) — see `config/config.go`.
 - **Required**: `DATABASE_URL`, `JWT_SECRET` (≥ 32 chars). App panics otherwise.
 - `GOOSE_TABLE=custom.goose_migrations` — non-default table; `custom` schema must exist before first `goose up`.
-- Cache primary key is **`REDIS_URL`** (`VALKEY_URL` alias) — empty disables caching. Fail-open: `NewRedisCache` returns nil and app runs without it. `QUEUE_REDIS_URL` falls back to `REDIS_URL`/`VALKEY_URL` when empty.
+- Cache primary key is **`REDIS_URL`** (`VALKEY_URL` alias) — empty disables caching. Fail-open: `NewRedisCache` returns nil and app runs without it (all `RedisCache` methods are nil-receiver safe, but guard with `if cache != nil` before building keys). `QUEUE_REDIS_URL` falls back to `REDIS_URL`/`VALKEY_URL` when empty.
 - Integrations degrade to disabled/echo when keys are empty (not errors): GitHub OAuth (`GITHUB_CLIENT_*` → `ErrOAuthNotConfigured`), OpenRouter (`OPENROUTER_API_KEY` — streams echo user message), SMTP (`SMTP_HOST` — reset links stay in activity metadata), RapidAPI market data (`RAPIDAPI_KEY`).
 
 ## Handler conventions
@@ -54,7 +54,7 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 - All responses via `pkg/response` (`success` envelope, `omitempty` on data/meta/error/errors):
   `Success` (200), `Created` (201), `BadRequest` (400), `Unauthorized`/`Forbidden` (fixed `"Unauthorized access"`/`"Access forbidden"` strings), `NotFound` (404), `Conflict` (409 — takes a **string** reason, not `error`), `ValidationError`/`FromValidateError` (422), `TooManyRequests` (429), `InternalServerError` (500 — logs `err` server-side only, never sends it to client).
 - Validate with `c.Validate(dto)` (custom validator set in `main.go`, includes `free_model` tag) → on error `return response.FromValidateError(c, err)`.
-- Pagination: `limit, offset := handler.ParsePaginationParams(c, defaultLimit)` (cap 100; `GET /api/posts` is the known exception accepting larger) → `meta := response.CalculatePaginationMeta(total, offset, limit)` → `response.SuccessWithMeta(c, msg, data, meta)`.
+- Pagination: `limit, offset := handler.ParsePaginationParams(c, defaultLimit)` (hard cap 100 everywhere) → `meta := response.CalculatePaginationMeta(total, offset, limit)` → `response.SuccessWithMeta(c, msg, data, meta)`.
 - Global body limit 10 MB (larger → 413); server read/write timeouts 60s (see `cmd/main.go` before changing).
 
 ## Database gotchas
