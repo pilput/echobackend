@@ -96,13 +96,9 @@ func (a *AuthMiddleware) AuthAdmin() echo.MiddlewareFunc {
 				return response.Unauthorized(c, "Authentication required")
 			}
 
-			// Fast-path: check is_super_admin from JWT claims if present
-			if isSuperAdminClaim, exists := claims["is_super_admin"]; exists && isSuperAdminClaim != nil {
-				if isSuperAdmin, ok := isSuperAdminClaim.(bool); ok && isSuperAdmin {
-					return next(c)
-				}
-			}
-
+			// The is_super_admin JWT claim is deliberately ignored: it lives until
+			// the token expires, so a demoted admin would keep access. Admin status
+			// is always read from the database.
 			userID, err := getUserIDFromClaims(claims)
 			if err != nil {
 				log.Warn("auth: admin check failed to resolve user id", "path", c.Request().URL.Path, "remote_ip", c.RealIP(), "error", err)

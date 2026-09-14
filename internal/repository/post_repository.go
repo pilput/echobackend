@@ -142,7 +142,7 @@ func (r *postRepository) GetPostByUsername(ctx context.Context, username string,
 
 	query := r.db.WithContext(ctx).Model(&model.Post{}).
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("users.username = ? AND users.deleted_at IS NULL", username)
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ?", username, true)
 
 	err := query.Count(&count).Error
 	if err != nil {
@@ -153,7 +153,7 @@ func (r *postRepository) GetPostByUsername(ctx context.Context, username string,
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("users.username = ? AND users.deleted_at IS NULL", username).
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ?", username, true).
 		Order("posts.created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -428,11 +428,9 @@ func (r *postRepository) applyPostFilters(db *gorm.DB, filter *dto.PostQueryFilt
 		q = q.Where("posts.title ILIKE ?", likePattern)
 	}
 
-	if filter.Published != nil {
-		q = q.Where("posts.published = ?", *filter.Published)
-	} else {
-		q = q.Where("posts.published = ?", true)
-	}
+	// GetPostsFiltered backs a public endpoint, so drafts are never listed.
+	// Authors see their own drafts through GetPostsByCreatedBy (/posts/me).
+	q = q.Where("posts.published = ?", true)
 
 	if filter.StartDate != "" {
 		q = q.Where("posts.created_at >= ?", filter.StartDate)

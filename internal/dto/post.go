@@ -31,7 +31,6 @@ type PostQueryFilter struct {
 	SortOrder string   `json:"sort_order" query:"sort_order"`
 	StartDate string   `json:"start_date" query:"start_date"`
 	EndDate   string   `json:"end_date" query:"end_date"`
-	Published *bool    `json:"published" query:"published"`
 	CreatedBy string   `json:"created_by" query:"created_by"`
 	Tags      []string `json:"tags" query:"tags"`
 }

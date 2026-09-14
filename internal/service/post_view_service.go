@@ -13,12 +13,15 @@ import (
 
 type PostViewService interface {
 	RecordView(ctx context.Context, postID, userID string, ipAddress, userAgent *string) error
-	GetViewsByPostID(ctx context.Context, postID string, limit, offset int) ([]*dto.PostViewResponse, int64, error)
+	GetViewsByPostID(ctx context.Context, postID, requesterID string, isAdmin bool, limit, offset int) ([]*dto.PostViewResponse, int64, error)
 	GetViewStats(ctx context.Context, postID string) (*dto.PostViewStats, error)
 	HasUserViewedPost(ctx context.Context, postID, userID string) (bool, error)
 	GetMyPostsAnalytics(ctx context.Context, userID string, q *dto.MyPostsAnalyticsQuery) (*dto.MyPostsAnalyticsResponse, error)
 	GetMyPostsLikesByMonth(ctx context.Context, userID string, q *dto.MyPostsLikesByMonthQuery) (*dto.MyPostsLikesByMonthResponse, error)
 }
+
+// maxAnalyticsRange bounds the start_date..end_date span of GetMyPostsAnalytics.
+const maxAnalyticsRange = 366 * 24 * time.Hour
 
 type postViewService struct {
 	postViewRepo repository.PostViewRepository
@@ -87,9 +90,19 @@ func (s *postViewService) RecordView(ctx context.Context, postID, userID string,
 	return nil
 }
 
-func (s *postViewService) GetViewsByPostID(ctx context.Context, postID string, limit, offset int) ([]*dto.PostViewResponse, int64, error) {
+// GetViewsByPostID lists the raw view records of a post. Only the post's author
+// (or a super admin) may see who viewed it.
+func (s *postViewService) GetViewsByPostID(ctx context.Context, postID, requesterID string, isAdmin bool, limit, offset int) ([]*dto.PostViewResponse, int64, error) {
 	if postID == "" {
 		return nil, 0, apperrors.ErrEmptyPostID
+	}
+
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !isAdmin && (post.CreatedBy == nil || *post.CreatedBy != requesterID) {
+		return nil, 0, apperrors.ErrNotAuthor
 	}
 
 	if limit <= 0 {
@@ -161,6 +174,11 @@ func (s *postViewService) GetMyPostsAnalytics(ctx context.Context, userID string
 	}
 	if start.After(end) {
 		start, end = end, start
+	}
+	// view_trend holds one point per day, so an unbounded range would build
+	// an arbitrarily large response.
+	if end.Sub(start) > maxAnalyticsRange {
+		return nil, apperrors.ErrDateRangeTooLarge
 	}
 
 	startKey := start.Format("2006-01-02")

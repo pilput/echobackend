@@ -167,6 +167,30 @@ func TestAuthService_Register_UsesArgon2id(t *testing.T) {
 	}
 }
 
+func TestAuthService_Register_NormalizesEmail(t *testing.T) {
+	var lookedUp string
+	var createdUser *model.User
+	authRepo := &mockAuthRepo{
+		findUserByEmailFn: func(ctx context.Context, email string) (*model.User, error) {
+			lookedUp = email
+			return nil, apperrors.ErrUserNotFound
+		},
+		createUserFn: func(ctx context.Context, user *model.User) error {
+			createdUser = user
+			return nil
+		},
+	}
+
+	svc := NewAuthService(authRepo, &mockUserRepo{}, &mockSessionRepo{}, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
+	if _, err := svc.Register(context.Background(), "  Test@Example.COM ", "testuser", "SecurePass123!"); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	if lookedUp != "test@example.com" || createdUser == nil || createdUser.Email != "test@example.com" {
+		t.Fatalf("expected normalized email, looked up %q, created %+v", lookedUp, createdUser)
+	}
+}
+
 func TestAuthService_Login_Argon2id_Success(t *testing.T) {
 	rawPassword := "ValidPassword123!"
 	argonHash, err := pkgpassword.Hash(rawPassword)
@@ -289,5 +313,71 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	_, _, _, err = svc.Login(context.Background(), "wrong@example.com", "WrongPassword999!", "127.0.0.1", "test-agent")
 	if err == nil || !errors.Is(err, apperrors.ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got: %v", err)
+	}
+}
+
+func TestAuthService_ChangePassword_RevokesSessions(t *testing.T) {
+	rawPassword := "CurrentPassword123!"
+	argonHash, err := pkgpassword.Hash(rawPassword)
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		getByIDFn: func(ctx context.Context, id string, deletedOnly bool) (*model.User, error) {
+			return &model.User{ID: id, Password: &argonHash}, nil
+		},
+	}
+	var revokedFor string
+	sessionRepo := &mockSessionRepo{
+		deleteByUserIDFn: func(ctx context.Context, userID string) error {
+			revokedFor = userID
+			return nil
+		},
+	}
+
+	svc := NewAuthService(&mockAuthRepo{}, userRepo, sessionRepo, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
+	if err := svc.ChangePassword(context.Background(), "u-1", rawPassword, "NewPassword456!", "127.0.0.1", "test-agent"); err != nil {
+		t.Fatalf("ChangePassword failed: %v", err)
+	}
+	if revokedFor != "u-1" {
+		t.Fatalf("expected sessions of u-1 to be revoked, got %q", revokedFor)
+	}
+}
+
+func TestAuthService_DeleteAccount_RevokesSessions(t *testing.T) {
+	var revokedFor string
+	sessionRepo := &mockSessionRepo{
+		deleteByUserIDFn: func(ctx context.Context, userID string) error {
+			revokedFor = userID
+			return nil
+		},
+	}
+
+	svc := NewAuthService(&mockAuthRepo{}, &mockUserRepo{}, sessionRepo, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
+	if err := svc.DeleteAccount(context.Background(), "u-1"); err != nil {
+		t.Fatalf("DeleteAccount failed: %v", err)
+	}
+	if revokedFor != "u-1" {
+		t.Fatalf("expected sessions of u-1 to be revoked, got %q", revokedFor)
+	}
+}
+
+func TestAuthService_RefreshToken_DeletedUserIsInvalidToken(t *testing.T) {
+	sessionRepo := &mockSessionRepo{
+		getSessionByRefreshTokenFn: func(ctx context.Context, tokenHash string) (*model.Session, error) {
+			return &model.Session{UserID: "u-deleted"}, nil
+		},
+	}
+	userRepo := &mockUserRepo{
+		getByIDFn: func(ctx context.Context, id string, deletedOnly bool) (*model.User, error) {
+			return nil, apperrors.ErrUserNotFound
+		},
+	}
+
+	svc := NewAuthService(&mockAuthRepo{}, userRepo, sessionRepo, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
+	_, _, _, err := svc.RefreshToken(context.Background(), "pl_token", "127.0.0.1", "test-agent")
+	if !errors.Is(err, apperrors.ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got: %v", err)
 	}
 }

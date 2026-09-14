@@ -161,8 +161,8 @@ func UserToCurrentUserResponse(u *model.User) *CurrentUserResponse {
 
 type CreateUserRequest struct {
 	Username  string `json:"username" validate:"required,min=3,max=30"`
-	Email     string `json:"email" validate:"required,email"`
-	Password  string `json:"password" validate:"required,min=8"`
+	Email     string `json:"email" validate:"required,email,max=255"`
+	Password  string `json:"password" validate:"required,min=8,max=128"`
 	FirstName string `json:"first_name" validate:"omitempty,max=100"`
 	LastName  string `json:"last_name" validate:"omitempty,max=100"`
 }
@@ -171,7 +171,7 @@ type UpdateUserRequest struct {
 	FirstName    string `json:"first_name" validate:"omitempty,max=100"`
 	LastName     string `json:"last_name" validate:"omitempty,max=100"`
 	Username     string `json:"username" validate:"required,min=3,max=30"`
-	Email        string `json:"email" validate:"required,email"`
+	Email        string `json:"email" validate:"required,email,max=255"`
 	IsSuperAdmin bool   `json:"is_super_admin"`
 }
 

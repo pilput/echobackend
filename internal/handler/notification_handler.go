@@ -31,7 +31,7 @@ func (h *NotificationHandler) GetNotifications(c *echo.Context) error {
 
 	notifications, total, err := h.notificationService.GetNotifications(c.Request().Context(), userID, filter)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get notifications", err)
+		return respondError(c, "Failed to get notifications", err)
 	}
 	meta := response.CalculatePaginationMeta(total, offset, limit)
 	return response.SuccessWithMeta(c, "Notifications fetched successfully", notifications, meta)
@@ -44,7 +44,7 @@ func (h *NotificationHandler) GetUnreadCount(c *echo.Context) error {
 	}
 	count, err := h.notificationService.GetUnreadCount(c.Request().Context(), userID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get unread notification count", err)
+		return respondError(c, "Failed to get unread notification count", err)
 	}
 	return response.Success(c, "Unread notification count fetched successfully", count)
 }
@@ -60,7 +60,7 @@ func (h *NotificationHandler) MarkAsRead(c *echo.Context) error {
 	}
 	notification, err := h.notificationService.MarkAsRead(c.Request().Context(), id, userID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to mark notification as read", err)
+		return respondError(c, "Failed to mark notification as read", err)
 	}
 	return response.Success(c, "Notification marked as read successfully", notification)
 }
@@ -72,7 +72,7 @@ func (h *NotificationHandler) MarkAllAsRead(c *echo.Context) error {
 	}
 	result, err := h.notificationService.MarkAllAsRead(c.Request().Context(), userID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to mark all notifications as read", err)
+		return respondError(c, "Failed to mark all notifications as read", err)
 	}
 	return response.Success(c, "All notifications marked as read successfully", result)
 }

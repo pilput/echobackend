@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
+	"echobackend/internal/model"
 )
 
 func TestPostViewService_GetMyPostsAnalytics(t *testing.T) {
@@ -71,6 +74,32 @@ func TestPostViewService_GetMyPostsAnalytics(t *testing.T) {
 	}
 	if got.ViewTrend[2].Views != 3 || got.ViewTrend[2].CumulativeViews != 28 {
 		t.Fatalf("unexpected last trend point: %+v", got.ViewTrend[2])
+	}
+}
+
+func TestPostViewService_GetMyPostsAnalytics_RejectsLargeRange(t *testing.T) {
+	svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{}, &mockPostLikeRepo{})
+	_, err := svc.GetMyPostsAnalytics(context.Background(), validUserID, &dto.MyPostsAnalyticsQuery{
+		StartDate: "0001-01-01",
+		EndDate:   "2026-05-03",
+	})
+	if !errors.Is(err, apperrors.ErrDateRangeTooLarge) {
+		t.Fatalf("expected ErrDateRangeTooLarge, got %v", err)
+	}
+}
+
+func TestPostViewService_GetViewsByPostID_RejectsNonAuthor(t *testing.T) {
+	postRepo := &mockPostRepo{
+		getPostByIDFn: func(ctx context.Context, id string) (*model.Post, error) {
+			author := "author-id"
+			return &model.Post{ID: id, CreatedBy: &author}, nil
+		},
+	}
+
+	svc := NewPostViewService(&mockPostViewRepo{}, postRepo, &mockPostLikeRepo{})
+	_, _, err := svc.GetViewsByPostID(context.Background(), validPostID, "someone-else", false, 10, 0)
+	if !errors.Is(err, apperrors.ErrNotAuthor) {
+		t.Fatalf("expected ErrNotAuthor, got %v", err)
 	}
 }
 

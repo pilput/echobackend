@@ -73,12 +73,6 @@ func (h *PostHandler) GetPosts(c *echo.Context) error {
 		}
 	}
 
-	if published := c.QueryParam("published"); published != "" {
-		if pubBool, err := strconv.ParseBool(published); err == nil {
-			filter.Published = &pubBool
-		}
-	}
-
 	if tags := c.QueryParam("tags"); tags != "" {
 		filter.Tags = strings.Split(tags, ",")
 		for i, tag := range filter.Tags {
@@ -321,7 +315,7 @@ func (h *PostHandler) GetMyPostsAnalytics(c *echo.Context) error {
 
 	analytics, err := h.postViewService.GetMyPostsAnalytics(c.Request().Context(), userID, q)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get post analytics", err)
+		return respondError(c, "Failed to get post analytics", err)
 	}
 
 	return response.Success(c, "Successfully retrieved post analytics", analytics)

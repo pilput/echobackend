@@ -33,7 +33,7 @@ func (h *UserFollowHandler) FollowUser(c *echo.Context) error {
 
 	followResponse, err := h.userFollowService.FollowUser(c.Request().Context(), userID, followReq.UserID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to follow user", err)
+		return respondError(c, "Failed to follow user", err)
 	}
 
 	return response.Success(c, followResponse.Message, followResponse)
@@ -52,7 +52,7 @@ func (h *UserFollowHandler) UnfollowUser(c *echo.Context) error {
 
 	followResponse, err := h.userFollowService.UnfollowUser(c.Request().Context(), userID, userIDToUnfollow)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to unfollow user", err)
+		return respondError(c, "Failed to unfollow user", err)
 	}
 
 	return response.Success(c, followResponse.Message, followResponse)
@@ -68,7 +68,7 @@ func (h *UserFollowHandler) GetFollowers(c *echo.Context) error {
 
 	followers, total, err := h.userFollowService.GetFollowers(c.Request().Context(), userID, limit, offset)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get followers", err)
+		return respondError(c, "Failed to get followers", err)
 	}
 
 	meta := response.CalculatePaginationMeta(total, offset, limit)
@@ -86,7 +86,7 @@ func (h *UserFollowHandler) GetFollowing(c *echo.Context) error {
 
 	following, total, err := h.userFollowService.GetFollowing(c.Request().Context(), userID, limit, offset)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get following", err)
+		return respondError(c, "Failed to get following", err)
 	}
 
 	meta := response.CalculatePaginationMeta(total, offset, limit)
@@ -102,7 +102,7 @@ func (h *UserFollowHandler) GetFollowStats(c *echo.Context) error {
 
 	stats, err := h.userFollowService.GetFollowStats(c.Request().Context(), userID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get follow statistics", err)
+		return respondError(c, "Failed to get follow statistics", err)
 	}
 
 	return response.Success(c, "Successfully retrieved follow statistics", stats)
@@ -121,7 +121,7 @@ func (h *UserFollowHandler) CheckFollowStatus(c *echo.Context) error {
 
 	isFollowing, err := h.userFollowService.IsFollowing(c.Request().Context(), userID, targetUserID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to check follow status", err)
+		return respondError(c, "Failed to check follow status", err)
 	}
 
 	return response.Success(c, "Successfully checked follow status", map[string]bool{
@@ -142,7 +142,7 @@ func (h *UserFollowHandler) GetMutualFollows(c *echo.Context) error {
 
 	mutualFollows, err := h.userFollowService.GetMutualFollows(c.Request().Context(), userID, otherUserID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to get mutual follows", err)
+		return respondError(c, "Failed to get mutual follows", err)
 	}
 
 	return response.Success(c, "Successfully retrieved mutual follows", mutualFollows)

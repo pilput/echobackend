@@ -8,6 +8,7 @@ import (
 	"echobackend/pkg/applog"
 	"echobackend/pkg/response"
 	"echobackend/pkg/validator"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -82,25 +83,38 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	// A listener failure (e.g. port already in use) must stop the process;
+	// otherwise it would keep waiting for a signal while serving nothing.
+	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("starting server", "port", conf.HTTP.Port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("server exited unexpectedly", "error", err)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
+	// Wait for an interrupt signal or a server failure, then shut down with a timeout of 10 seconds.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
 
-	slog.Info("server is shutting down")
+	exitCode := 0
+	select {
+	case <-quit:
+		slog.Info("server is shutting down")
+	case err := <-serverErr:
+		slog.Error("server exited unexpectedly", "error", err)
+		exitCode = 1
+	}
 
-	// Graceful shutdown with timeout
+	shutdown(server, container)
+	os.Exit(exitCode)
+}
+
+// shutdown gracefully stops the HTTP server and releases container resources.
+func shutdown(server *http.Server, container *di.Container) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Shutdown server
 	if err := server.Shutdown(ctx); err != nil {
 		slog.Error("server forced to shutdown", "error", err)
 	}

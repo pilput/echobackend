@@ -1,8 +1,10 @@
 posts:
   get:
     tags: [Posts]
-    summary: List posts
+    summary: List published posts
     description: |
+      Only published posts are returned; drafts are listed via `GET /api/posts/me`.
+
       `body` is truncated to about 250 runes plus `" ..."` in list responses.
 
       This is the one endpoint whose `limit` is not capped at 100.
@@ -34,9 +36,6 @@ posts:
     - name: end_date
       in: query
       schema: {type: string, format: date}
-    - name: published
-      in: query
-      schema: {type: boolean}
     - name: created_by
       in: query
       description: Author UUID.
@@ -169,6 +168,7 @@ postsMeAnalytics:
     description: |
       `view_trend` has one point per day in the range, including days with zero views.
       `top_posts` holds up to 5 posts with the highest `view_count`.
+      The range between `start_date` and `end_date` must not exceed 366 days (400 otherwise).
     operationId: getMyPostsAnalytics
     security:
     - bearerAuth: []
@@ -611,6 +611,7 @@ postsByIdViews:
   get:
     tags: [Post views]
     summary: List raw view records for a post
+    description: Only the post's author or a super admin may list its views.
     operationId: getPostViews
     security:
     - bearerAuth: []
@@ -633,6 +634,8 @@ postsByIdViews:
                     items: {$ref: ../schemas/post.yaml#/PostViewResponse}
       '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
       '500': {$ref: ../responses.yaml#/ServerError}
 postsByIdViewStats:
   get:

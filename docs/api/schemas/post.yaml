@@ -168,10 +168,6 @@ PostViewResponse:
     user_id:
       type: [string, 'null']
       format: uuid
-    ip_address:
-      type: [string, 'null']
-    user_agent:
-      type: [string, 'null']
     created_at:
       type: [string, 'null']
       format: date-time

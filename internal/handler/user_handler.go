@@ -29,7 +29,7 @@ func (h *UserHandler) GetByID(c *echo.Context) error {
 	if c.QueryParam("deleted") == "true" {
 		userResponse, err := h.userService.GetAdminByID(c.Request().Context(), userID, true)
 		if err != nil {
-			return response.InternalServerError(c, "Failed to retrieve user", err)
+			return respondError(c, "Failed to retrieve user", err)
 		}
 		return response.Success(c, "Successfully retrieved user", userResponse)
 	}
@@ -41,7 +41,7 @@ func (h *UserHandler) GetByID(c *echo.Context) error {
 
 	userResponse, err := h.userFollowService.GetUserWithFollowStatus(c.Request().Context(), userID, currentUserID, true)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to retrieve user", err)
+		return respondError(c, "Failed to retrieve user", err)
 	}
 
 	return response.Success(c, "Successfully retrieved user", userResponse)
@@ -57,12 +57,12 @@ func (h *UserHandler) GetByUsername(c *echo.Context) error {
 
 	user, err := h.userService.GetByUsername(c.Request().Context(), username)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to retrieve user", err)
+		return respondError(c, "Failed to retrieve user", err)
 	}
 
 	userResponse, err := h.userFollowService.GetUserWithFollowStatus(c.Request().Context(), user.ID, currentUserID, false)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to retrieve user", err)
+		return respondError(c, "Failed to retrieve user", err)
 	}
 
 	return response.Success(c, "Successfully retrieved user", userResponse)
@@ -78,7 +78,7 @@ func (h *UserHandler) GetUsers(c *echo.Context) error {
 
 	users, total, err := h.userService.GetUsers(c.Request().Context(), offset, limit, deletedFilter)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to retrieve users", err)
+		return respondError(c, "Failed to retrieve users", err)
 	}
 
 	meta := response.CalculatePaginationMeta(total, offset, limit)
@@ -89,7 +89,7 @@ func (h *UserHandler) DeleteUser(c *echo.Context) error {
 	id := c.Param("id")
 	err := h.userService.Delete(c.Request().Context(), id)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to delete user", err)
+		return respondError(c, "Failed to delete user", err)
 	}
 
 	return response.Success(c, "Successfully deleted user", nil)
@@ -106,7 +106,7 @@ func (h *UserHandler) RestoreUser(c *echo.Context) error {
 		if errors.Is(err, apperrors.ErrUserExists) {
 			return response.Conflict(c, "Cannot restore user", "Email or username already taken by another active user")
 		}
-		return response.InternalServerError(c, "Failed to restore user", err)
+		return respondError(c, "Failed to restore user", err)
 	}
 
 	return response.Success(c, "Successfully restored user", userResponse)
@@ -120,7 +120,7 @@ func (h *UserHandler) GetMe(c *echo.Context) error {
 
 	userResponse, err := h.userService.GetMe(c.Request().Context(), userID)
 	if err != nil {
-		return response.InternalServerError(c, "Failed to retrieve user", err)
+		return respondError(c, "Failed to retrieve user", err)
 	}
 
 	return response.Success(c, "Successfully retrieved current user", userResponse)
@@ -133,7 +133,7 @@ func (h *UserHandler) respondAvatarError(c *echo.Context, message string, err er
 	case errors.Is(err, apperrors.ErrFileNil), errors.Is(err, apperrors.ErrAvatarFileTooLarge), errors.Is(err, apperrors.ErrInvalidFileType), errors.Is(err, apperrors.ErrStorageUnavailable):
 		return response.BadRequest(c, message, err)
 	default:
-		return response.InternalServerError(c, message, err)
+		return respondError(c, message, err)
 	}
 }
 
@@ -176,7 +176,7 @@ func (h *UserHandler) CreateUser(c *echo.Context) error {
 		return response.Conflict(c, "Failed to create user", "Email or username already exists")
 	}
 	if err != nil {
-		return response.InternalServerError(c, "Failed to create user", err)
+		return respondError(c, "Failed to create user", err)
 	}
 
 	return response.Created(c, "User created successfully", userResponse)
@@ -202,7 +202,7 @@ func (h *UserHandler) UpdateUser(c *echo.Context) error {
 		return response.Conflict(c, "Failed to update user", "Email or username already taken")
 	}
 	if err != nil {
-		return response.InternalServerError(c, "Failed to update user", err)
+		return respondError(c, "Failed to update user", err)
 	}
 
 	return response.Success(c, "User updated successfully", userResponse)

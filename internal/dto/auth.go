@@ -1,23 +1,23 @@
 package dto
 
 type LoginRequest struct {
-	Identifier string `json:"identifier" validate:"required"`
+	Identifier string `json:"identifier" validate:"required,max=255"`
 	Password   string `json:"password" validate:"required,min=6"`
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email,max=255"`
 	Username string `json:"username" validate:"required,min=3,max=30"`
-	Password string `json:"password" validate:"required,min=8"`
+	Password string `json:"password" validate:"required,min=8,max=128"`
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email string `json:"email" validate:"required,email,max=255"`
 }
 
 type ResetPasswordRequest struct {
 	Token    string `json:"token" validate:"required"`
-	Password string `json:"password" validate:"required,min=8"`
+	Password string `json:"password" validate:"required,min=8,max=128"`
 }
 
 type RefreshTokenRequest struct {
@@ -26,7 +26,7 @@ type RefreshTokenRequest struct {
 
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password" validate:"required,min=8"`
-	NewPassword     string `json:"new_password" validate:"required,min=8"`
+	NewPassword     string `json:"new_password" validate:"required,min=8,max=128"`
 }
 
 type LogoutRequest struct {

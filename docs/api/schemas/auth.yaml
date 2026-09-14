@@ -2,12 +2,13 @@ RegisterRequest:
   type: object
   required: [email, username, password]
   properties:
-    email: {type: string, format: email}
+    email: {type: string, format: email, maxLength: 255, description: Stored lowercase; matched case-insensitively.}
     username: {type: string, minLength: 3, maxLength: 30}
     password:
       type: string
       format: password
       minLength: 8
+      maxLength: 128
       description: |
         At least 8 characters. Uppercase, lowercase, digit and symbol are recommended
         but not enforced.
@@ -22,19 +23,19 @@ LoginRequest:
   type: object
   required: [identifier, password]
   properties:
-    identifier: {type: string, description: Email address or username.}
+    identifier: {type: string, maxLength: 255, description: Email address (case-insensitive) or username.}
     password: {type: string, format: password, minLength: 6}
 ForgotPasswordRequest:
   type: object
   required: [email]
   properties:
-    email: {type: string, format: email}
+    email: {type: string, format: email, maxLength: 255}
 ResetPasswordRequest:
   type: object
   required: [token, password]
   properties:
     token: {type: string}
-    password: {type: string, format: password, minLength: 8}
+    password: {type: string, format: password, minLength: 8, maxLength: 128}
 RefreshTokenRequest:
   type: object
   required: [refresh_token]
@@ -50,7 +51,7 @@ ChangePasswordRequest:
   required: [current_password, new_password]
   properties:
     current_password: {type: string, format: password, minLength: 8}
-    new_password: {type: string, format: password, minLength: 8}
+    new_password: {type: string, format: password, minLength: 8, maxLength: 128}
 CheckUsernameRequest:
   type: object
   required: [username]

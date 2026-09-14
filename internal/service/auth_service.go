@@ -120,6 +120,7 @@ func NewAuthService(
 }
 
 func (s *authService) Register(ctx context.Context, email, username, password string) (*model.User, error) {
+	email = normalizeEmail(email)
 	_, err := s.authRepo.FindUserByEmail(ctx, email)
 	if err == nil {
 		return nil, apperrors.ErrUserExists
@@ -225,7 +226,7 @@ func (s *authService) ForgotPassword(ctx context.Context, email, ipAddress, user
 
 	resetLink := buildPasswordResetLink(s.frontendConfig.ResetPasswordURL, resetToken)
 	if s.emailService != nil && s.emailService.IsConfigured() {
-		if err := s.emailService.EnqueuePasswordResetEmail(email, resetLink); err != nil {
+		if err := s.emailService.EnqueuePasswordResetEmail(user.Email, resetLink); err != nil {
 			errMsg := "Failed to queue email"
 			s.activityService.LogActivity(ctx, &user.ID, model.ActivityPasswordResetReq, model.StatusFailure, ipAddress, userAgent, &errMsg, nil)
 			authLog.Error("failed to queue password reset email", "error", err, "user_id", user.ID)
@@ -303,6 +304,10 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, ipAddress,
 	}
 
 	user, err := s.userRepo.GetByID(ctx, session.UserID, false)
+	if errors.Is(err, apperrors.ErrUserNotFound) {
+		// The account was deleted after the session was issued.
+		return "", "", nil, apperrors.ErrInvalidToken
+	}
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -346,6 +351,12 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 		return err
 	}
 
+	// Revoke every refresh token so sessions opened with the old password
+	// (possibly by someone else) cannot be extended.
+	if err := s.sessionRepo.DeleteByUserID(ctx, user.ID); err != nil {
+		authLog.Warn("failed to invalidate sessions after password change", "user_id", user.ID, "error", err)
+	}
+
 	s.activityService.LogActivity(ctx, &userID, model.ActivityPasswordChange, model.StatusSuccess, ipAddress, userAgent, nil, nil)
 
 	return nil
@@ -384,9 +395,16 @@ func (s *authService) UpdateProfile(ctx context.Context, userID, username, first
 	return user, nil
 }
 
-// DeleteAccount soft-deletes the authenticated user's own account.
+// DeleteAccount soft-deletes the authenticated user's own account and revokes
+// all of its refresh tokens.
 func (s *authService) DeleteAccount(ctx context.Context, userID string) error {
-	return s.userRepo.SoftDeleteByID(ctx, userID)
+	if err := s.userRepo.SoftDeleteByID(ctx, userID); err != nil {
+		return err
+	}
+	if err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
+		authLog.Warn("failed to invalidate sessions after account deletion", "user_id", userID, "error", err)
+	}
+	return nil
 }
 
 // CheckUsernameExists reports whether a user with the given username already exists.
@@ -463,7 +481,7 @@ func (s *authService) SignInWithGithub(ctx context.Context, githubUser *GithubUs
 	if user == nil || errors.Is(err, apperrors.ErrUserNotFound) {
 		email := ""
 		if githubUser.Email != nil {
-			email = *githubUser.Email
+			email = normalizeEmail(*githubUser.Email)
 		} else {
 			email = fmt.Sprintf("%d@github.placeholder", githubUser.ID)
 		}
@@ -615,6 +633,13 @@ func generateRandomBytes(n int) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+// normalizeEmail canonicalizes an email address before it is stored, so
+// addresses that differ only in case or surrounding spaces map to one account.
+// Lookups additionally compare with LOWER(email) to match legacy rows.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func tokenHash(token string) string {

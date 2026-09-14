@@ -134,8 +134,8 @@ CreateUserRequest:
   required: [username, email, password]
   properties:
     username: {type: string, minLength: 3, maxLength: 30}
-    email: {type: string, format: email}
-    password: {type: string, format: password, minLength: 8}
+    email: {type: string, format: email, maxLength: 255}
+    password: {type: string, format: password, minLength: 8, maxLength: 128}
     first_name: {type: string, maxLength: 100}
     last_name: {type: string, maxLength: 100}
 UpdateUserRequest:
@@ -143,7 +143,7 @@ UpdateUserRequest:
   required: [username, email]
   properties:
     username: {type: string, minLength: 3, maxLength: 30}
-    email: {type: string, format: email}
+    email: {type: string, format: email, maxLength: 255}
     first_name: {type: string, maxLength: 100}
     last_name: {type: string, maxLength: 100}
     is_super_admin: {type: boolean, default: false}

@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"errors"
+
+	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/model"
 
 	"gorm.io/gorm"
@@ -50,6 +53,9 @@ func (r *commentRepository) GetCommentByID(ctx context.Context, id string) (*mod
 		Preload("User", preloadUserBrief).
 		Where("id = ?", id).
 		First(&comment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrCommentNotFound
+		}
 		return nil, err
 	}
 	return &comment, nil

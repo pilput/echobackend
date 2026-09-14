@@ -18,10 +18,13 @@ var (
 	ErrNotAuthor       = errors.New("not author")
 	ErrAlreadyLiked    = errors.New("user has already liked this post")
 	ErrNotLiked        = errors.New("user has not liked this post")
+	ErrCommentNotFound = errors.New("comment not found")
 	ErrCommentNotOwned = errors.New("not authorized to modify this comment")
 	ErrPostNotOwned    = errors.New("not authorized to modify this post")
 	ErrInvalidPostID   = errors.New("invalid post ID format")
 	ErrEmptyPostID     = errors.New("post ID cannot be empty")
+
+	ErrDateRangeTooLarge = errors.New("date range must not exceed 366 days")
 
 	ErrTagNotFound     = errors.New("tag not found")
 	ErrTagNameRequired = errors.New("tag name is required")

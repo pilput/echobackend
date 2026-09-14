@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"time"
-
 	"echobackend/config"
 	"echobackend/pkg/applog"
 
@@ -12,18 +10,38 @@ import (
 
 var log = applog.Component("http")
 
+// InitMiddleware registers global middleware. Order matters — each entry wraps
+// everything registered after it:
+//
+//  1. Request logger: outermost, so every response (including recovered panics,
+//     413 and 429) is logged with its final status.
+//  2. Recover: catches panics in all later middleware and handlers.
+//  3. CORS: answers preflight requests before they reach the rate limiter, and
+//     sets CORS headers before inner middleware can reject the request, so
+//     browsers can read 413/429 error bodies instead of reporting a CORS error.
+//  4. Secure headers, body limit, rate limit.
 func InitMiddleware(e *echo.Echo, config *config.Config) {
+	// Enhanced request logging with structured format
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogURI:     true,
+		LogStatus:  true,
+		LogMethod:  true,
+		LogLatency: true,
+		LogValuesFunc: func(c *echo.Context, values middleware.RequestLoggerValues) error {
+			log.Info("handled request",
+				"method", values.Method,
+				"uri", values.URI,
+				"status", values.Status,
+				"latency_ms", float64(values.Latency.Nanoseconds())/1e6,
+				"remote_ip", c.RealIP(),
+			)
+			return nil
+		},
+	}))
 
-	// Middleware to set start time for latency measurement
-	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
-			c.Set("start", time.Now())
-			return next(c)
-		}
-	})
+	e.Use(RecoverWithLog())
 
-	// Add body limit middleware to prevent memory exhaustion
-	e.Use(middleware.BodyLimit(10 * 1024 * 1024)) // Limit request body to 10MB
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: config.HTTP.AllowOrigins}))
 
 	// Add security headers
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
@@ -35,24 +53,8 @@ func InitMiddleware(e *echo.Echo, config *config.Config) {
 		ReferrerPolicy:        "strict-origin-when-cross-origin",
 	}))
 
-	// Enhanced request logging with structured format
-	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:    true,
-		LogStatus: true,
-		LogMethod: true,
-		LogValuesFunc: func(c *echo.Context, values middleware.RequestLoggerValues) error {
-			start := c.Get("start").(time.Time)
-			latency := time.Since(start)
-			log.Info("handled request",
-				"method", values.Method,
-				"uri", values.URI,
-				"status", values.Status,
-				"latency_ms", float64(latency.Nanoseconds())/1e6,
-				"remote_ip", c.RealIP(),
-			)
-			return nil
-		},
-	}))
+	// Add body limit middleware to prevent memory exhaustion
+	e.Use(middleware.BodyLimit(10 * 1024 * 1024)) // Limit request body to 10MB
 
 	// Global HTTP rate limit (sustained RPS, token bucket; 0 = disabled)
 	if config.HTTP.RateLimitRPS > 0 {
@@ -65,8 +67,4 @@ func InitMiddleware(e *echo.Echo, config *config.Config) {
 		}
 		e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStoreWithConfig(storeCfg)))
 	}
-
-	e.Use(RecoverWithLog())
-
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: config.HTTP.AllowOrigins}))
 }

@@ -285,9 +285,13 @@ func TestAuthAdmin_AllowsSuperAdmin(t *testing.T) {
 	}
 }
 
-func TestAuthAdmin_AllowsSuperAdminFromClaimFastPath(t *testing.T) {
-	// mockUserService has no getAdminByIDFn defined, so if called, it would panic.
-	users := &mockUserService{}
+func TestAuthAdmin_IgnoresStaleSuperAdminClaim(t *testing.T) {
+	falseVal := false
+	users := &mockUserService{
+		getAdminByIDFn: func(ctx context.Context, id string, deletedOnly bool) (*dto.UserResponse, error) {
+			return &dto.UserResponse{ID: id, IsSuperAdmin: &falseVal}, nil
+		},
+	}
 	mw := newAuthMiddlewareForTest("test-secret", users)
 
 	e := echo.New()
@@ -300,15 +304,16 @@ func TestAuthAdmin_AllowsSuperAdminFromClaimFastPath(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	// The token still claims admin, but the user has since been demoted.
 	c.Set("user", jwt.MapClaims{"user_id": "admin-1", "is_super_admin": true})
 
 	if err := handler(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
-	if !called {
-		t.Fatal("next was not called")
+	if called {
+		t.Fatal("next was called for a demoted admin")
 	}
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }

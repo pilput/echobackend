@@ -254,8 +254,9 @@ authAccount:
     tags: [Auth]
     summary: Soft-delete the current user's own account
     description: |
-      Sets `deleted_at`; the row is not removed. Existing access/refresh tokens are not
-      proactively revoked — the frontend should clear local tokens after this call.
+      Sets `deleted_at`; the row is not removed. All refresh tokens are revoked. Access
+      tokens stay valid until they expire, so the frontend should clear local tokens after
+      this call.
     operationId: deleteOwnAccount
     security:
     - bearerAuth: []
@@ -272,6 +273,9 @@ authPassword:
   patch:
     tags: [Auth]
     summary: Change the current user's password
+    description: |
+      Revokes every refresh token of the user, including the caller's. The current access
+      token keeps working until it expires; the user must log in again after that.
     operationId: changePassword
     security:
     - bearerAuth: []

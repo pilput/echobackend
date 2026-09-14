@@ -64,8 +64,6 @@ type PostViewResponse struct {
 	ID        string     `json:"id"`
 	PostID    string     `json:"post_id"`
 	UserID    *string    `json:"user_id"`
-	IPAddress *string    `json:"ip_address"`
-	UserAgent *string    `json:"user_agent"`
 	CreatedAt *time.Time `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 }
@@ -78,8 +76,6 @@ func PostViewToResponse(v *model.PostView) *PostViewResponse {
 		ID:        v.ID,
 		PostID:    v.PostID,
 		UserID:    v.UserID,
-		IPAddress: v.IPAddress,
-		UserAgent: v.UserAgent,
 		CreatedAt: v.CreatedAt,
 		UpdatedAt: v.UpdatedAt,
 	}

@@ -49,6 +49,7 @@ goose create nama_migration sql
 | 012 | `012_add_corporate_actions.sql` | corporate_actions |
 | 013 | `013_add_corporate_action_cum_rec_dates.sql` | `cum_date`/`rec_date` on corporate_actions |
 | 014 | `014_drop_soft_delete_posts_and_post_likes.sql` | **Destructive.** Drop `deleted_at` from `posts` and `post_likes`; purges already-soft-deleted rows first and recomputes `like_count` |
+| 015 | `015_add_users_lower_email_index.sql` | Non-unique index on `LOWER(email)` for case-insensitive email lookups |
 
 ## Notes
 

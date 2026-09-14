@@ -177,6 +177,7 @@ func (s *userService) UploadAvatar(ctx context.Context, userID string, file *mul
 // CreateUser is an admin action that creates a new user account, mirroring
 // AuthService.Register's uniqueness checks and password hashing.
 func (s *userService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error) {
+	req.Email = normalizeEmail(req.Email)
 	if _, err := s.userRepo.GetByEmail(ctx, req.Email); err == nil {
 		return nil, apperrors.ErrUserExists
 	} else if !errors.Is(err, apperrors.ErrUserNotFound) {
@@ -220,6 +221,7 @@ func (s *userService) UpdateUser(ctx context.Context, id string, req *dto.Update
 		return nil, err
 	}
 
+	req.Email = normalizeEmail(req.Email)
 	if user.Email != req.Email {
 		existing, err := s.userRepo.GetByEmail(ctx, req.Email)
 		if err == nil && existing.ID != id {
