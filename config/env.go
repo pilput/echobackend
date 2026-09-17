@@ -58,3 +58,20 @@ func envDuration(keys []string, defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
+
+// resolveJWTExpiry returns JWT_EXPIRY (a Go duration string, e.g. "15m"), or
+// falls back to the legacy JWT_EXPIRY_HOURS (whole hours) for backward
+// compatibility with existing deployments, or defaultValue if neither is set.
+func resolveJWTExpiry(defaultValue time.Duration) time.Duration {
+	if s, ok := os.LookupEnv("JWT_EXPIRY"); ok {
+		if d, err := time.ParseDuration(s); err == nil {
+			return d
+		}
+	}
+	if s, ok := os.LookupEnv("JWT_EXPIRY_HOURS"); ok {
+		if h, err := strconv.Atoi(s); err == nil {
+			return time.Duration(h) * time.Hour
+		}
+	}
+	return defaultValue
+}

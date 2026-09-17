@@ -183,7 +183,7 @@ func Load() (*Config, error) {
 		},
 		Auth: AuthConfig{
 			JWTSecret:          envString([]string{"JWT_SECRET"}, ""),
-			JWTExpiry:          time.Duration(envInt([]string{"JWT_EXPIRY_HOURS"}, 3)) * time.Hour,
+			JWTExpiry:          resolveJWTExpiry(15 * time.Minute),
 			RefreshTokenExpiry: time.Duration(envInt([]string{"REFRESH_TOKEN_EXPIRY_DAYS"}, 7)) * 24 * time.Hour,
 		},
 		Database: DatabaseConfig{
@@ -295,7 +295,7 @@ func (c *Config) validate() error {
 		return errors.New("JWT_SECRET must be at least 32 characters long")
 	}
 	if c.Auth.JWTExpiry <= 0 {
-		return errors.New("JWT_EXPIRY_HOURS must be > 0")
+		return errors.New("JWT_EXPIRY (or legacy JWT_EXPIRY_HOURS) must be > 0")
 	}
 	if c.Auth.RefreshTokenExpiry <= 0 {
 		return errors.New("REFRESH_TOKEN_EXPIRY_DAYS must be > 0")
