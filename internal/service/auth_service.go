@@ -591,12 +591,9 @@ func (s *authService) cleanupExpiredOAuthExchangeCodesLocked(now time.Time) {
 
 func (s *authService) createAccessToken(user *model.User) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id":        user.ID,
-		"username":       user.Username,
-		"email":          user.Email,
-		"is_super_admin": user.IsSuperAdmin,
-		"iat":            time.Now().Unix(),
-		"exp":            time.Now().Add(s.jwtExpiry).Unix(),
+		"user_id": user.ID,
+		"iat":     time.Now().Unix(),
+		"exp":     time.Now().Add(s.jwtExpiry).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 

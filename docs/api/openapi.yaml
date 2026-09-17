@@ -211,6 +211,6 @@ components:
         `Authorization: Bearer <access_token>`.
 
         Tokens come from `POST /api/auth/login`, `POST /api/auth/refresh`, or
-        `POST /api/auth/oauth/exchange`. Claims include `user_id` (UUID). The
-        `is_super_admin` claim is a fast path only — the database is authoritative for
-        admin checks.
+        `POST /api/auth/oauth/exchange`. Claims are limited to `user_id` (UUID),
+        `iat`, and `exp` — everything else (username, email, admin status) is
+        looked up from the database, never trusted from the token.
