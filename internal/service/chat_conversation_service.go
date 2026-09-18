@@ -10,6 +10,7 @@ import (
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
+	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/repository"
 )
 
@@ -22,7 +23,7 @@ type ChatConversationService interface {
 	DeleteConversation(ctx context.Context, id string, userID string) error
 	CreateMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) ([]*dto.ChatMessageResponse, error)
 	CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error)
-	SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, model *string, usage OpenRouterUsage) (*dto.ChatMessageResponse, error)
+	SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, model *string, usage openrouter.Usage) (*dto.ChatMessageResponse, error)
 	GetMessages(ctx context.Context, conversationID, userID string) ([]*dto.ChatMessageResponse, error)
 	GetMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error)
 	DeleteMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error)
@@ -30,11 +31,11 @@ type ChatConversationService interface {
 
 type chatConversationService struct {
 	conversationRepo repository.ChatConversationRepository
-	openRouter       OpenRouterService
+	openRouter       openrouter.Client
 	config           *config.Config
 }
 
-func NewChatConversationService(conversationRepo repository.ChatConversationRepository, openRouter OpenRouterService, cfg *config.Config) ChatConversationService {
+func NewChatConversationService(conversationRepo repository.ChatConversationRepository, openRouter openrouter.Client, cfg *config.Config) ChatConversationService {
 	return &chatConversationService{
 		conversationRepo: conversationRepo,
 		openRouter:       openRouter,
@@ -305,7 +306,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 			return
 		}
 
-		usage := OpenRouterUsage{}
+		usage := openrouter.Usage{}
 		if u, ok := <-usageCh; ok {
 			usage = u
 		}
@@ -324,7 +325,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 	return result, outChunks, complete, errCh, nil
 }
 
-func (s *chatConversationService) SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, modelID *string, usage OpenRouterUsage) (*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, modelID *string, usage openrouter.Usage) (*dto.ChatMessageResponse, error) {
 	now := time.Now()
 	message := &model.ChatMessage{
 		ConversationID:   conversationID,
@@ -422,10 +423,10 @@ func normalizedTemperature(v *float64) float64 {
 	return *v
 }
 
-func toOpenRouterMessages(messages []*model.ChatMessage) []OpenRouterMessage {
-	result := make([]OpenRouterMessage, 0, len(messages))
+func toOpenRouterMessages(messages []*model.ChatMessage) []openrouter.Message {
+	result := make([]openrouter.Message, 0, len(messages))
 	for _, message := range messages {
-		result = append(result, OpenRouterMessage{
+		result = append(result, openrouter.Message{
 			Role:    message.Role,
 			Content: message.Content,
 		})

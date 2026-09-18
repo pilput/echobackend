@@ -7,6 +7,7 @@ import (
 	"echobackend/config"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
+	"echobackend/internal/platform/openrouter"
 )
 
 type mockChatConversationRepo struct {
@@ -73,14 +74,14 @@ func (m *mockChatConversationRepo) DeleteMessage(ctx context.Context, id, userID
 }
 
 type mockOpenRouterService struct {
-	generateStreamFn func(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (<-chan string, <-chan OpenRouterUsage, <-chan error)
+	generateStreamFn func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error)
 }
 
-func (m *mockOpenRouterService) GenerateResponse(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (*OpenRouterResponse, error) {
+func (m *mockOpenRouterService) GenerateResponse(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (*openrouter.Response, error) {
 	return nil, nil
 }
 
-func (m *mockOpenRouterService) GenerateStream(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (<-chan string, <-chan OpenRouterUsage, <-chan error) {
+func (m *mockOpenRouterService) GenerateStream(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
 	if m.generateStreamFn != nil {
 		return m.generateStreamFn(ctx, messages, model, temperature)
 	}
@@ -123,15 +124,15 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 	}
 
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (<-chan string, <-chan OpenRouterUsage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
 			chunks := make(chan string, 2)
-			usageCh := make(chan OpenRouterUsage, 1)
+			usageCh := make(chan openrouter.Usage, 1)
 			errCh := make(chan error, 1)
 
 			chunks <- "Hello "
 			chunks <- "world"
 			close(chunks)
-			usageCh <- OpenRouterUsage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}
+			usageCh <- openrouter.Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}
 			close(usageCh)
 			close(errCh)
 

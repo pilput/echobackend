@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"echobackend/internal/dto"
-	"echobackend/pkg/market"
+	"echobackend/internal/platform/market"
 )
 
 const exchangeRateCacheTTL = 15 * time.Minute

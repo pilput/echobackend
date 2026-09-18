@@ -10,7 +10,10 @@ func (r *Routes) setupHoldingRoutes(api *echo.Group) {
 		holdings.GET("/trends", r.holdingHandler.GetTrends)
 		holdings.GET("/compare", r.holdingHandler.CompareMonths)
 		holdings.GET("/monthly", r.holdingHandler.GetMonthlyData)
+
+		// Corporate Actions calendar (IDX dividends & RUPS)
 		holdings.GET("/calendar", r.corporateActionHandler.GetCalendar)
+
 		holdings.POST("", r.holdingHandler.CreateHolding)
 		holdings.POST("/duplicate", r.holdingHandler.DuplicateHoldings)
 		holdings.POST("/sync", r.holdingHandler.SyncPrices)

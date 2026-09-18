@@ -12,8 +12,8 @@ import (
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
+	"echobackend/internal/platform/market"
 	"echobackend/internal/repository"
-	"echobackend/pkg/market"
 )
 
 // maxMonthlyRangeMonths bounds how many months GetMonthlyData will iterate,

@@ -7,14 +7,18 @@ Managed via [goose](https://github.com/pressly/goose). Env vars configured in `.
 `GOOSE_TABLE=custom.goose_migrations` stores version history in the `custom` schema. Create that schema once before the first run:
 
 ```bash
-psql "$DATABASE_URL" -f scripts/bootstrap-goose-schema.sql
+# External Postgres only (Docker Compose applies scripts/init-db.sql automatically on init):
+psql "$DATABASE_URL" -f scripts/init-db.sql
 goose up
 ```
 
-On Windows (PowerShell):
+On Windows (PowerShell / Command Prompt):
 
 ```powershell
-.\scripts\migrate-up.ps1
+# Ensure GOOSE_* variables are set in .env, then run:
+goose up
+# Or via make (under Git Bash/WSL):
+make migrate-up
 ```
 
 ```bash

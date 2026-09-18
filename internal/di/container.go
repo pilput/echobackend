@@ -8,11 +8,12 @@ import (
 	"echobackend/internal/platform/cache"
 	"echobackend/internal/platform/database"
 	"echobackend/internal/platform/email"
+	"echobackend/internal/platform/market"
+	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/platform/storage"
 	"echobackend/internal/repository"
 	"echobackend/internal/routes"
 	"echobackend/internal/service"
-	"echobackend/pkg/market"
 
 	"gorm.io/gorm"
 )
@@ -73,7 +74,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	corporateActionRepo := repository.NewCorporateActionRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
-	openRouterService := service.NewOpenRouterService(cfg.OpenRouter)
+	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
 	userService := service.NewUserService(userRepo, s3Storage)
 	tagService := service.NewTagService(tagRepo, redisCache)
 	postService := service.NewPostService(postRepo, tagService, s3Storage, redisCache)
@@ -83,7 +84,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postViewService := service.NewPostViewService(postViewRepo, postRepo, postLikeRepo)
 	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
-	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterService, cfg)
+	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterClient, cfg)
 
 	// Market quotes (RapidAPI with shared Redis caching decorator)
 	rawQuoteClient := market.NewRapidAPIQuoteClient(cfg.MarketData.RapidAPIKey, nil)

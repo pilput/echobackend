@@ -24,3 +24,6 @@ type PostComment struct {
 func (PostComment) TableName() string {
 	return "post_comments"
 }
+
+// Comment is an alias for PostComment to ensure naming consistency across layers.
+type Comment = PostComment

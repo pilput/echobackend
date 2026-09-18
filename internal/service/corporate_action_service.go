@@ -7,8 +7,8 @@ import (
 
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
+	"echobackend/internal/platform/market"
 	"echobackend/internal/repository"
-	"echobackend/pkg/market"
 )
 
 const calendarDateFormat = "2006-01-02"

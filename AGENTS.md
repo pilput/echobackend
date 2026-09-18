@@ -35,8 +35,8 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 - **Entry**: `cmd/main.go` — `config.Load()` → `di.NewContainer` → `container.Routes.Setup(e)` → server with graceful shutdown (10s) + resource cleanup (5s).
 - **DI**: manual wiring in `internal/di/container.go`. No DI framework. New handler/service/repo must be wired there and passed to `routes.NewRoutes`.
 - **Layering**: `handler` → `service` → `repository`. `internal/model/` = GORM entities, `internal/dto/` = request/response structs, `internal/apperror/` = shared error sentinels.
-- **`internal/platform/`** = app-owned infra adapters (`cache`, `database`, `email`, `queue`, `storage`). **`pkg/`** = reusable helpers (`response`, `validator`, `applog`, `market`).
-- **Routes**: all under `/api/*`. Single `Routes` struct (`internal/routes/routes.go`); per-module `setupXxxRoutes` live in `*Routes.go` files.
+- **`internal/platform/`** = app-owned infra adapters (`cache`, `database`, `email`, `market`, `openrouter`, `storage`). **`pkg/`** = reusable helpers (`response`, `validator`, `applog`, `password`).
+- **Routes**: all under `/api/*`. Single `Routes` struct (`internal/routes/routes.go`); per-module `setupXxxRoutes` live in `*_routes.go` files.
 - **Auth**: `r.authMiddleware.Auth()` for login-required; admin routes must chain `Auth()` **first**, then `AuthAdmin()` (`AuthAdmin` reads `c.Get("user")` set by `Auth()` and returns 401 without it). `OptionalAuth()` exists for public-but-personalized endpoints. Claims shortcut `is_super_admin` is a fast path only — DB (`GetAdminByID`) is authoritative.
 - **Health**: `GET /health` pings DB (200/503). `GET /` returns Hello World via `response.Success`.
 - **Docs**: endpoint reference is a hand-written OpenAPI 3.1 spec rooted at `docs/api/openapi.yaml`, split per-module into `docs/api/paths/<module>.yaml` and `docs/api/schemas/<module>.yaml` (see `docs/api/README.md` for the layout) — no codegen, update the relevant module file(s) in the same commit as route/DTO changes; `npx @redocly/cli lint docs/api/openapi.yaml` must stay at 0 errors. Migration notes in `migrations/README.md`.
@@ -46,7 +46,7 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 - `config.Load()` reads `.env` (stdlib loader, best-effort) then env vars; system env always wins. Many keys accept fallback aliases (first-set wins) — see `config/config.go`.
 - **Required**: `DATABASE_URL`, `JWT_SECRET` (≥ 32 chars). App panics otherwise.
 - `GOOSE_TABLE=custom.goose_migrations` — non-default table; `custom` schema must exist before first `goose up`.
-- Cache primary key is **`REDIS_URL`** (`VALKEY_URL` alias) — empty disables caching. Fail-open: `NewRedisCache` returns nil and app runs without it (all `RedisCache` methods are nil-receiver safe, but guard with `if cache != nil` before building keys). `QUEUE_REDIS_URL` falls back to `REDIS_URL`/`VALKEY_URL` when empty.
+- Cache primary key is **`REDIS_URL`** (`VALKEY_URL` alias) — empty disables caching. Fail-open: `NewRedisCache` returns nil and app runs without it (all `RedisCache` methods are nil-receiver safe, but guard with `if cache != nil` before building keys).
 - Integrations degrade to disabled/echo when keys are empty (not errors): GitHub OAuth (`GITHUB_CLIENT_*` → `ErrOAuthNotConfigured`), OpenRouter (`OPENROUTER_API_KEY` — streams echo user message), SMTP (`SMTP_HOST` — reset links stay in activity metadata), RapidAPI market data (`RAPIDAPI_KEY`).
 
 ## Handler conventions

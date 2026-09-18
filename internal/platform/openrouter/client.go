@@ -1,4 +1,4 @@
-package service
+package openrouter
 
 import (
 	"bufio"
@@ -13,47 +13,50 @@ import (
 	"time"
 
 	"echobackend/config"
+	"echobackend/pkg/applog"
 )
 
-type OpenRouterMessage struct {
+var log = applog.Component("openrouter")
+
+type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type OpenRouterUsage struct {
+type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-type OpenRouterChoice struct {
+type Choice struct {
 	Message struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"message"`
 }
 
-type OpenRouterResponse struct {
-	Choices []OpenRouterChoice `json:"choices"`
-	Usage   OpenRouterUsage    `json:"usage"`
+type Response struct {
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
 }
 
-type OpenRouterService interface {
-	GenerateResponse(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (*OpenRouterResponse, error)
-	GenerateStream(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (<-chan string, <-chan OpenRouterUsage, <-chan error)
+type Client interface {
+	GenerateResponse(ctx context.Context, messages []Message, model *string, temperature float64) (*Response, error)
+	GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan string, <-chan Usage, <-chan error)
 }
 
-type openRouterService struct {
+type client struct {
 	cfg        config.OpenRouterConfig
 	httpClient *http.Client
 }
 
-func NewOpenRouterService(cfg config.OpenRouterConfig) OpenRouterService {
+func NewClient(cfg config.OpenRouterConfig) Client {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 90 * time.Second
 	}
-	return &openRouterService{
+	return &client{
 		cfg: cfg,
 		httpClient: &http.Client{
 			Timeout: timeout,
@@ -61,23 +64,23 @@ func NewOpenRouterService(cfg config.OpenRouterConfig) OpenRouterService {
 	}
 }
 
-func (s *openRouterService) GenerateResponse(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (*OpenRouterResponse, error) {
-	resp, err := s.callAPI(ctx, messages, model, false, temperature)
+func (c *client) GenerateResponse(ctx context.Context, messages []Message, model *string, temperature float64) (*Response, error) {
+	resp, err := c.callAPI(ctx, messages, model, false, temperature)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	var payload OpenRouterResponse
+	var payload Response
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("failed to decode OpenRouter response: %w", err)
 	}
 	return &payload, nil
 }
 
-func (s *openRouterService) GenerateStream(ctx context.Context, messages []OpenRouterMessage, model *string, temperature float64) (<-chan string, <-chan OpenRouterUsage, <-chan error) {
+func (c *client) GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan string, <-chan Usage, <-chan error) {
 	chunks := make(chan string)
-	usageCh := make(chan OpenRouterUsage, 1)
+	usageCh := make(chan Usage, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -85,7 +88,7 @@ func (s *openRouterService) GenerateStream(ctx context.Context, messages []OpenR
 		defer close(usageCh)
 		defer close(errCh)
 
-		resp, err := s.callAPI(ctx, messages, model, true, temperature)
+		resp, err := c.callAPI(ctx, messages, model, true, temperature)
 		if err != nil {
 			errCh <- err
 			return
@@ -95,7 +98,7 @@ func (s *openRouterService) GenerateStream(ctx context.Context, messages []OpenR
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-		var usage OpenRouterUsage
+		var usage Usage
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if line == "" || !strings.HasPrefix(line, "data: ") {
@@ -114,7 +117,7 @@ func (s *openRouterService) GenerateStream(ctx context.Context, messages []OpenR
 						Content string `json:"content"`
 					} `json:"delta"`
 				} `json:"choices"`
-				Usage *OpenRouterUsage `json:"usage"`
+				Usage *Usage `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(data), &payload); err != nil {
 				continue
@@ -144,12 +147,12 @@ func (s *openRouterService) GenerateStream(ctx context.Context, messages []OpenR
 	return chunks, usageCh, errCh
 }
 
-func (s *openRouterService) callAPI(ctx context.Context, messages []OpenRouterMessage, model *string, stream bool, temperature float64) (*http.Response, error) {
-	if s.cfg.APIKey == "" {
+func (c *client) callAPI(ctx context.Context, messages []Message, model *string, stream bool, temperature float64) (*http.Response, error) {
+	if c.cfg.APIKey == "" {
 		return nil, errors.New("OPENROUTER_API_KEY is not configured")
 	}
 
-	finalModel := strings.TrimSpace(s.cfg.DefaultModel)
+	finalModel := strings.TrimSpace(c.cfg.DefaultModel)
 	if model != nil && strings.TrimSpace(*model) != "" {
 		finalModel = strings.TrimSpace(*model)
 	}
@@ -170,22 +173,22 @@ func (s *openRouterService) callAPI(ctx context.Context, messages []OpenRouterMe
 		return nil, fmt.Errorf("failed to encode OpenRouter request: %w", err)
 	}
 
-	url := strings.TrimRight(s.cfg.BaseURL, "/") + "/chat/completions"
+	url := strings.TrimRight(c.cfg.BaseURL, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OpenRouter request: %w", err)
 	}
-	openRouterLog.Debug("sending chat completion request", "model", finalModel, "stream", stream)
-	req.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+	log.Debug("sending chat completion request", "model", finalModel, "stream", stream)
+	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	if s.cfg.HTTPReferer != "" {
-		req.Header.Set("HTTP-Referer", s.cfg.HTTPReferer)
+	if c.cfg.HTTPReferer != "" {
+		req.Header.Set("HTTP-Referer", c.cfg.HTTPReferer)
 	}
-	if s.cfg.Title != "" {
-		req.Header.Set("X-Title", s.cfg.Title)
+	if c.cfg.Title != "" {
+		req.Header.Set("X-Title", c.cfg.Title)
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OpenRouter request failed: %w", err)
 	}
