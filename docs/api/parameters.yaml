@@ -52,3 +52,9 @@ EndDateQuery:
   in: query
   description: Inclusive range end, `YYYY-MM-DD`.
   schema: {type: string, format: date}
+GuildSlugPath:
+  name: slug
+  in: path
+  required: true
+  description: Guild slug (lowercase, hyphenated).
+  schema: {type: string}

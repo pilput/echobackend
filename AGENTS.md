@@ -60,8 +60,8 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 ## Database gotchas
 
 - Goose + raw SQL in `migrations/`. New PK defaults are **`uuidv7()`** (Postgres 18+); migration 009 switched from v4, 010 dropped `uuid-ossp`.
-- Triggers maintain `view/like/bookmark/followers/following_count` — don't update counts by hand.
-- Soft deletes via `deleted_at` apply to `users`, `post_views`, `post_comments`, `user_follows`, `files`, `chat_conversations` only. **`posts` and `post_likes` are hard-deleted since 014** (destructive migration that also purges old soft-deleted rows).
+- Triggers maintain `view/like/bookmark/followers/following_count` and `guilds.member_count` — don't update counts by hand.
+- Soft deletes via `deleted_at` apply to `users`, `post_views`, `post_comments`, `user_follows`, `files`, `chat_conversations` only. **`posts` and `post_likes` are hard-deleted since 014** (destructive migration that also purges old soft-deleted rows). **`guilds` and `guild_members` are hard-deleted too** — deleting a guild cascades to its memberships and cannot be undone.
 - `.Table(...)` opts out of GORM's soft-delete scope — add `deleted_at IS NULL` by hand in raw/`Table` queries (see `post_repository.go`, `report_repository.go`).
 
 ## Testing

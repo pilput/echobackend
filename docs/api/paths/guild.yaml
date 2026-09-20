@@ -1,0 +1,263 @@
+guilds:
+  get:
+    tags: [Guilds]
+    summary: List public guilds
+    description: |
+      The public guild directory, ordered by member count then recency. Open to
+      anonymous callers, so no viewer-relative fields (`is_member`, `my_role`) are set.
+    operationId: listGuilds
+    security: []
+    parameters:
+    - name: search
+      in: query
+      description: Case-insensitive substring match on `name` or `slug`.
+      schema: {type: string}
+    - name: limit
+      in: query
+      schema: {type: integer, default: 20, minimum: 1, maximum: 100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Guilds with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/guild.yaml#/GuildResponse}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Guilds]
+    summary: Create a guild
+    description: |
+      The caller becomes the owner and is inserted as a member with role `owner` in the
+      same transaction, so a new guild starts with `member_count` of 1.
+    operationId: createGuild
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild.yaml#/CreateGuildRequest}
+    responses:
+      '201':
+        description: Guild created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild.yaml#/GuildResponse}
+      '400':
+        description: |
+          The name contains no letters or digits, so no slug could be derived, or the
+          resulting slug is reserved by a static route (for example `me`).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '409':
+        description: Slug already taken.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildsMe:
+  get:
+    tags: [Guilds]
+    summary: List the guilds the current user belongs to
+    description: Includes private guilds, since the caller is a member of them.
+    operationId: listMyGuilds
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 20, minimum: 1, maximum: 100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Guilds with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/guild.yaml#/GuildResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildsBySlug:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  get:
+    tags: [Guilds]
+    summary: Get a guild by slug
+    description: |
+      Authentication is optional: signing in adds `is_member` and `my_role`. A private
+      guild answers `404` for non-members so that its existence does not leak.
+    operationId: getGuild
+    security:
+    - {}
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Guild.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild.yaml#/GuildResponse}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  patch:
+    tags: [Guilds]
+    summary: Update a guild
+    description: Requires the `owner` or `admin` role. The slug cannot be changed.
+    operationId: updateGuild
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild.yaml#/UpdateGuildRequest}
+    responses:
+      '200':
+        description: Guild updated.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild.yaml#/GuildResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Guilds]
+    summary: Delete a guild
+    description: |
+      Owner only. Memberships are removed with the guild through `ON DELETE CASCADE`;
+      this is a hard delete and cannot be undone.
+    operationId: deleteGuild
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Guild deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildsBySlugJoin:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  post:
+    tags: [Guilds]
+    summary: Join a guild
+    description: |
+      Public guilds only; a private guild answers `404`. The new member gets the
+      `member` role.
+    operationId: joinGuild
+    security:
+    - bearerAuth: []
+    responses:
+      '201':
+        description: Membership created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild.yaml#/GuildMemberResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409':
+        description: Already a member of this guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildsBySlugLeave:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  delete:
+    tags: [Guilds]
+    summary: Leave a guild
+    description: |
+      The owner cannot leave (`400`): the guild would be left with nobody able to
+      administer it. Delete the guild instead.
+    operationId: leaveGuild
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Left the guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400':
+        description: Caller is the owner, or is not a member of this guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildsBySlugMembers:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  get:
+    tags: [Guilds]
+    summary: List guild members
+    description: |
+      Public for a public guild. For a private guild only members may list, and
+      everyone else gets `404`.
+    operationId: listGuildMembers
+    security:
+    - {}
+    - bearerAuth: []
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, default: 50, minimum: 1, maximum: 100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Members with pagination meta.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/PaginatedEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/guild.yaml#/GuildMemberResponse}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}

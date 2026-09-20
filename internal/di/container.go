@@ -72,6 +72,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	passwordResetTokenRepo := repository.NewPasswordResetTokenRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 	corporateActionRepo := repository.NewCorporateActionRepository(db)
+	guildRepo := repository.NewGuildRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
 	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
@@ -94,6 +95,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	exchangeRateService := service.NewExchangeRateService(quoteClient, redisCache)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	reportService := service.NewReportService(reportRepo)
+	guildService := service.NewGuildService(guildRepo)
 
 	// Corporate actions: IDX
 	idxCorporateClient := market.NewRapidAPIIDXClient(cfg.MarketData.RapidAPIKey, nil)
@@ -114,6 +116,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	reportHandler := handler.NewReportHandler(reportService)
 	corporateActionHandler := handler.NewCorporateActionHandler(corporateActionService)
+	guildHandler := handler.NewGuildHandler(guildService)
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
@@ -135,6 +138,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		notificationHandler,
 		reportHandler,
 		corporateActionHandler,
+		guildHandler,
 	)
 
 	return &Container{

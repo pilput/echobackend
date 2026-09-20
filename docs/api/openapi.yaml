@@ -73,6 +73,7 @@ tags:
 - {name: Bookmarks, description: Post bookmarks and folders.}
 - {name: Notifications, description: In-app notifications.}
 - {name: Reports, description: Admin statistics dashboard.}
+- {name: Guilds, description: 'Guild directory, membership and roles.'}
 paths:
   /:
     get:
@@ -201,6 +202,12 @@ paths:
   /api/reports/users: {$ref: ./paths/report.yaml#/reportsUsers}
   /api/reports/posts: {$ref: ./paths/report.yaml#/reportsPosts}
   /api/reports/engagement: {$ref: ./paths/report.yaml#/reportsEngagement}
+  /api/guilds: {$ref: ./paths/guild.yaml#/guilds}
+  /api/guilds/me: {$ref: ./paths/guild.yaml#/guildsMe}
+  /api/guilds/{slug}: {$ref: ./paths/guild.yaml#/guildsBySlug}
+  /api/guilds/{slug}/join: {$ref: ./paths/guild.yaml#/guildsBySlugJoin}
+  /api/guilds/{slug}/leave: {$ref: ./paths/guild.yaml#/guildsBySlugLeave}
+  /api/guilds/{slug}/members: {$ref: ./paths/guild.yaml#/guildsBySlugMembers}
 components:
   securitySchemes:
     bearerAuth:

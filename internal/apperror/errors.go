@@ -55,6 +55,15 @@ var (
 	ErrBookmarkFolderNotFound = errors.New("bookmark folder not found")
 	ErrNotificationNotFound   = errors.New("notification not found")
 
+	ErrGuildNotFound         = errors.New("guild not found")
+	ErrGuildSlugExists       = errors.New("guild slug already taken")
+	ErrGuildSlugInvalid      = errors.New("guild name must contain at least one letter or digit")
+	ErrGuildSlugReserved     = errors.New("guild slug is reserved")
+	ErrGuildNotOwned         = errors.New("not authorized to modify this guild")
+	ErrAlreadyGuildMember    = errors.New("already a member of this guild")
+	ErrNotGuildMember        = errors.New("not a member of this guild")
+	ErrGuildOwnerCannotLeave = errors.New("guild owner cannot leave; transfer ownership or delete the guild")
+
 	ErrPasswordTooShort          = errors.New("password must be at least 8 characters")
 	ErrPasswordTooLong           = errors.New("password must be at most 128 characters")
 	ErrPasswordNoUpper           = errors.New("password must contain at least one uppercase letter")

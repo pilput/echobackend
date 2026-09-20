@@ -1,0 +1,82 @@
+CreateGuildRequest:
+  type: object
+  required: [name]
+  properties:
+    name: {type: string, minLength: 3, maxLength: 100}
+    slug:
+      type: [string, 'null']
+      minLength: 3
+      maxLength: 100
+      description: |
+        Optional. When omitted the slug is derived from `name`; either way the value is
+        normalised to lowercase with hyphens. The slug is immutable after creation.
+    description:
+      type: [string, 'null']
+      maxLength: 2000
+    avatar_url:
+      type: [string, 'null']
+      format: uri
+      maxLength: 2048
+    is_public:
+      type: [boolean, 'null']
+      default: true
+      description: |
+        Public guilds appear in the directory and anyone may join. Private guilds are
+        hidden from non-members and have no open join path yet.
+UpdateGuildRequest:
+  type: object
+  description: All fields optional. `slug` cannot be changed.
+  properties:
+    name:
+      type: [string, 'null']
+      minLength: 3
+      maxLength: 100
+    description:
+      type: [string, 'null']
+      maxLength: 2000
+    avatar_url:
+      type: [string, 'null']
+      format: uri
+      maxLength: 2048
+    is_public: {type: [boolean, 'null']}
+GuildResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string}
+    slug: {type: string}
+    description: {type: [string, 'null']}
+    avatar_url: {type: [string, 'null']}
+    is_public: {type: boolean}
+    member_count:
+      type: integer
+      format: int64
+      description: Maintained by a database trigger; the owner counts as a member.
+    owner_id: {type: string, format: uuid}
+    owner:
+      oneOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    is_member:
+      type: boolean
+      description: Absent for anonymous callers.
+    my_role:
+      type: string
+      enum: [owner, admin, member]
+      description: Absent for anonymous callers and for signed-in non-members.
+    created_at: {type: [string, 'null'], format: date-time}
+    updated_at: {type: [string, 'null'], format: date-time}
+GuildMemberResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    guild_id: {type: string, format: uuid}
+    user_id: {type: string, format: uuid}
+    role:
+      type: string
+      enum: [owner, admin, member]
+    user:
+      oneOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    created_at: {type: [string, 'null'], format: date-time}
