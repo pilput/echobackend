@@ -128,6 +128,8 @@ paths:
   /api/auth/activity-logs: {$ref: ./paths/auth.yaml#/authActivityLogs}
   /api/auth/activity-logs/recent: {$ref: ./paths/auth.yaml#/authActivityLogsRecent}
   /api/auth/activity-logs/failed-logins: {$ref: ./paths/auth.yaml#/authActivityLogsFailedLogins}
+  /api/auth/sessions/revoke-all: {$ref: ./paths/auth.yaml#/authSessionsRevokeAll}
+  /api/auth/sessions/{userId}: {$ref: ./paths/auth.yaml#/authSessionsByUser}
   /api/auth/oauth/github: {$ref: ./paths/auth.yaml#/authOauthGithub}
   /api/auth/oauth/github/callback: {$ref: ./paths/auth.yaml#/authOauthGithubCallback}
   /api/auth/oauth/exchange: {$ref: ./paths/auth.yaml#/authOauthExchange}

@@ -30,6 +30,13 @@ const (
 	ActivityPasswordResetReq = "password_reset_request"
 	ActivityPasswordReset    = "password_reset"
 	ActivityTokenRefresh     = "token_refresh"
+	// ActivityTokenReuse records a refresh token replayed after rotation —
+	// the signal that a token leaked. Logged with StatusFailure.
+	ActivityTokenReuse = "token_reuse_detected"
+	// ActivitySessionRevoked records an administrator terminating sessions.
+	// The acting admin is in the metadata, the affected user in user_id
+	// (nil when every user was revoked at once).
+	ActivitySessionRevoked   = "session_revoked"
 	ActivityOAuthLogin       = "oauth_login"
 	ActivityOAuthLoginFailed = "oauth_login_failed"
 

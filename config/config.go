@@ -67,8 +67,19 @@ type AuthConfig struct {
 	JWTSecret string
 	// JWTExpiry is the duration for which JWT access tokens remain valid.
 	JWTExpiry time.Duration
-	// RefreshTokenExpiry is the duration for which refresh tokens remain valid.
+	// RefreshTokenExpiry is the sliding inactivity window (OWASP ASVS v5.0
+	// 7.3.1). Every rotation moves a session's deadline to now + this value, so
+	// it measures time since the last refresh, not time since login.
 	RefreshTokenExpiry time.Duration
+	// RefreshTokenAbsoluteExpiry caps the total lifetime of a rotation chain
+	// however active it is (ASVS 7.3.2). Past it the user must log in again.
+	RefreshTokenAbsoluteExpiry time.Duration
+	// RefreshTokenGracePeriod keeps a just-rotated refresh token usable for a
+	// short while so a client firing several refreshes at once is not logged
+	// out by its own race. Each call inside the window mints a sibling token in
+	// the same family; outside it, the same token counts as a replay. 0
+	// disables the grace window entirely.
+	RefreshTokenGracePeriod time.Duration
 }
 
 // DatabaseConfig contains the PostgreSQL DSN and connection pool tuning.
@@ -182,9 +193,11 @@ func Load() (*Config, error) {
 			AllowOrigins:    parseOrigins(envString([]string{"HTTP_ALLOW_ORIGINS"}, "*")),
 		},
 		Auth: AuthConfig{
-			JWTSecret:          envString([]string{"JWT_SECRET"}, ""),
-			JWTExpiry:          resolveJWTExpiry(15 * time.Minute),
-			RefreshTokenExpiry: time.Duration(envInt([]string{"REFRESH_TOKEN_EXPIRY_DAYS"}, 7)) * 24 * time.Hour,
+			JWTSecret:                  envString([]string{"JWT_SECRET"}, ""),
+			JWTExpiry:                  resolveJWTExpiry(15 * time.Minute),
+			RefreshTokenExpiry:         resolveRefreshTokenExpiry(3 * 24 * time.Hour),
+			RefreshTokenAbsoluteExpiry: envDuration([]string{"REFRESH_TOKEN_ABSOLUTE_EXPIRY"}, 30*24*time.Hour),
+			RefreshTokenGracePeriod:    envDuration([]string{"REFRESH_TOKEN_GRACE_PERIOD"}, 60*time.Second),
 		},
 		Database: DatabaseConfig{
 			DSN:             envString([]string{"DATABASE_URL"}, ""),
@@ -298,7 +311,18 @@ func (c *Config) validate() error {
 		return errors.New("JWT_EXPIRY (or legacy JWT_EXPIRY_HOURS) must be > 0")
 	}
 	if c.Auth.RefreshTokenExpiry <= 0 {
-		return errors.New("REFRESH_TOKEN_EXPIRY_DAYS must be > 0")
+		return errors.New("REFRESH_TOKEN_EXPIRY (or legacy REFRESH_TOKEN_EXPIRY_DAYS) must be > 0")
+	}
+	if c.Auth.RefreshTokenAbsoluteExpiry <= 0 {
+		return errors.New("REFRESH_TOKEN_ABSOLUTE_EXPIRY must be > 0")
+	}
+	// An absolute cap below the sliding window would silently override it and
+	// make the sliding setting meaningless.
+	if c.Auth.RefreshTokenAbsoluteExpiry < c.Auth.RefreshTokenExpiry {
+		return errors.New("REFRESH_TOKEN_ABSOLUTE_EXPIRY must be >= REFRESH_TOKEN_EXPIRY")
+	}
+	if c.Auth.RefreshTokenGracePeriod < 0 {
+		return errors.New("REFRESH_TOKEN_GRACE_PERIOD must be >= 0")
 	}
 	if c.Database.DSN == "" {
 		return errors.New("DATABASE_URL is required")

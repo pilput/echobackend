@@ -239,6 +239,64 @@ func (h *AuthHandler) Logout(c *echo.Context) error {
 	return response.Success(c, "Logout successful", nil)
 }
 
+// RevokeUserSessions terminates every session of one user. Admin only —
+// `Auth()` then `AuthAdmin()` on the route.
+func (h *AuthHandler) RevokeUserSessions(c *echo.Context) error {
+	actorID, ok := GetUserIDFromClaims(c)
+	if !ok {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+
+	targetUserID := c.Param("userId")
+	if targetUserID == "" {
+		return response.BadRequest(c, "User ID is required", nil)
+	}
+
+	revoked, err := h.authService.RevokeUserSessions(
+		c.Request().Context(), targetUserID, actorID, c.RealIP(), c.Request().UserAgent())
+	if errors.Is(err, apperrors.ErrInvalidUserID) {
+		return response.BadRequest(c, "Invalid user ID format", err)
+	}
+	if errors.Is(err, apperrors.ErrUserNotFound) {
+		return response.NotFound(c, "User not found", err)
+	}
+	if err != nil {
+		return response.InternalServerError(c, "Failed to revoke sessions", err)
+	}
+
+	return response.Success(c, "Sessions revoked successfully", map[string]any{
+		"user_id":          targetUserID,
+		"revoked_sessions": revoked,
+	})
+}
+
+// RevokeAllSessions logs every user out, including the administrator making the
+// call. Requires an explicit `confirm: true` in the body.
+func (h *AuthHandler) RevokeAllSessions(c *echo.Context) error {
+	actorID, ok := GetUserIDFromClaims(c)
+	if !ok {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+
+	var req dto.RevokeAllSessionsRequest
+	if err := c.Bind(&req); err != nil {
+		return response.BadRequest(c, "Invalid request format", err)
+	}
+	if !req.Confirm {
+		return response.BadRequest(c, "Set \"confirm\": true to log out every user", nil)
+	}
+
+	revoked, err := h.authService.RevokeAllSessions(
+		c.Request().Context(), actorID, c.RealIP(), c.Request().UserAgent())
+	if err != nil {
+		return response.InternalServerError(c, "Failed to revoke sessions", err)
+	}
+
+	return response.Success(c, "All sessions revoked successfully", map[string]any{
+		"revoked_sessions": revoked,
+	})
+}
+
 func (h *AuthHandler) GetProfile(c *echo.Context) error {
 	userID, ok := GetUserIDFromClaims(c)
 	if !ok {

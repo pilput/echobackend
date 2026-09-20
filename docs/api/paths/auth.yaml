@@ -114,10 +114,17 @@ authResetPassword:
 authRefresh:
   post:
     tags: [Auth]
-    summary: Exchange a refresh token for a new access token
+    summary: Exchange a refresh token for a new access token and a new refresh token
     description: |
-      The refresh token is **not** rotated: the same value is echoed back and keeps
-      working until it expires. Calling this endpoint does not extend its lifetime.
+      The refresh token **is rotated**: the response carries a new
+      `refresh_token` and the one that was sent stops working. Clients must
+      store the new value — replaying the old one after a short grace window is
+      treated as a stolen token and revokes every session from that login
+      (RFC 9700 §4.14).
+
+      Each rotation also slides the session deadline forward, up to a fixed
+      maximum lifetime measured from the original login. Past that maximum the
+      user must log in again, however recently they refreshed.
 
       Rate limit — 30 requests per minute per IP.
     operationId: refreshToken
@@ -129,13 +136,16 @@ authRefresh:
           schema: {$ref: ../schemas/auth.yaml#/RefreshTokenRequest}
     responses:
       '200':
-        description: New access token issued. `refresh_token` is the value that was sent.
+        description: New access token issued. `refresh_token` is a new value that replaces the one that was sent.
         content:
           application/json:
             schema: {$ref: ../schemas/auth.yaml#/AuthTokenEnvelope}
       '400': {$ref: ../responses.yaml#/BadRequest}
       '401':
-        description: Invalid or expired refresh token.
+        description: |
+          Invalid, expired, or already-rotated refresh token. A replayed token
+          also revokes every other session from the same login, so the client
+          must send the user back to the login screen rather than retry.
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
@@ -179,7 +189,13 @@ authCheckUsername:
 authLogout:
   post:
     tags: [Auth]
-    summary: Log out by deleting the refresh-token session
+    summary: Log out by revoking the refresh-token session
+    description: |
+      Revokes the whole rotation chain the token belongs to, not just the value
+      that was sent. Unknown or already-revoked tokens still return 200 —
+      logging out is idempotent.
+
+      The access token is **not** revoked and stays valid until it expires.
     operationId: logout
     security:
     - bearerAuth: []
@@ -190,7 +206,7 @@ authLogout:
           schema: {$ref: ../schemas/auth.yaml#/LogoutRequest}
     responses:
       '200':
-        description: Session removed.
+        description: Session revoked.
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
@@ -356,6 +372,82 @@ authActivityLogsRecent:
                     type: array
                     items: {$ref: ../schemas/auth.yaml#/AuthActivityLog}
       '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authSessionsByUser:
+  delete:
+    tags: [Auth]
+    summary: Revoke every session of one user (admin)
+    description: |
+      Terminates all refresh-token sessions belonging to `userId`, logging that
+      user out of every device (OWASP ASVS v5.0 7.4.5).
+
+      Access tokens already issued are **not** revoked and stay valid until they
+      expire, so the user keeps API access for up to the JWT lifetime.
+
+      Requires an administrator account.
+    operationId: revokeUserSessions
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: userId
+      in: path
+      required: true
+      description: The user whose sessions are terminated.
+      schema: {type: string, format: uuid}
+    responses:
+      '200':
+        description: Sessions revoked.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/auth.yaml#/RevokedSessionsEnvelope}
+            example:
+              success: true
+              message: Sessions revoked successfully
+              data: {user_id: 0195f3c0-0000-7000-8000-000000000000, revoked_sessions: 3}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+authSessionsRevokeAll:
+  post:
+    tags: [Auth]
+    summary: Revoke every session of every user (admin)
+    description: |
+      Terminates all refresh-token sessions on the platform — the second half of
+      OWASP ASVS v5.0 7.4.5, for when a leak is suspected but its blast radius
+      is unknown.
+
+      **This logs out the calling administrator too.** The body must carry
+      `"confirm": true`; anything else is rejected with 400 so the endpoint
+      cannot fire by accident.
+
+      As above, already-issued access tokens remain valid until they expire.
+    operationId: revokeAllSessions
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/RevokeAllSessionsRequest}
+    responses:
+      '200':
+        description: All sessions revoked.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/auth.yaml#/RevokedSessionsEnvelope}
+            example:
+              success: true
+              message: All sessions revoked successfully
+              data: {revoked_sessions: 128}
+      '400':
+        description: Missing or false `confirm` flag.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
       '500': {$ref: ../responses.yaml#/ServerError}
 authActivityLogsFailedLogins:
   get:

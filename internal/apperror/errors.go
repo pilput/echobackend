@@ -6,6 +6,9 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrTokenExpired       = errors.New("token has expired")
+	// ErrSessionAlreadyRotated is returned when a concurrent refresh rotated the
+	// session first. It is an internal signal, never surfaced to the client.
+	ErrSessionAlreadyRotated = errors.New("session already rotated")
 
 	ErrUserNotFound     = errors.New("user not found")
 	ErrUserExists       = errors.New("user already exists")

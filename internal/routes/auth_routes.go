@@ -31,6 +31,12 @@ func (r *Routes) setupAuthRoutes(api *echo.Group) {
 		auth.GET("/activity-logs", r.authHandler.GetActivityLogs, r.authMiddleware.Auth())
 		auth.GET("/activity-logs/recent", r.authHandler.GetRecentActivity, r.authMiddleware.Auth())
 		auth.GET("/activity-logs/failed-logins", r.authHandler.GetFailedLogins, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		// Admin session termination (OWASP ASVS v5.0 7.4.5). The platform-wide
+		// revoke is a POST, not a DELETE on the collection, so it cannot be
+		// triggered by trimming a user id off the URL below — and it takes a
+		// confirmation body.
+		auth.POST("/sessions/revoke-all", r.authHandler.RevokeAllSessions, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		auth.DELETE("/sessions/:userId", r.authHandler.RevokeUserSessions, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		auth.GET("/oauth/github", r.authHandler.GithubOAuthRedirect)
 		auth.GET("/oauth/github/callback", r.authHandler.GithubOAuthCallback)
 		auth.POST("/oauth/exchange", r.authHandler.ExchangeOAuthCode, oauthExchangeRateLimit)

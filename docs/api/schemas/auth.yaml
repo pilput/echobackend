@@ -69,6 +69,25 @@ UpdateProfileRequest:
     username: {type: string, minLength: 3, maxLength: 30}
     first_name: {type: string, maxLength: 100}
     last_name: {type: string, maxLength: 100}
+RevokeAllSessionsRequest:
+  type: object
+  required: [confirm]
+  description: Explicit acknowledgement that every user is about to be logged out.
+  properties:
+    confirm: {type: boolean, enum: [true]}
+RevokedSessionsEnvelope:
+  allOf:
+  - {$ref: ./envelope.yaml#/SuccessEnvelope}
+  - type: object
+    properties:
+      data:
+        type: object
+        properties:
+          user_id:
+            type: string
+            format: uuid
+            description: Omitted when every user was revoked at once.
+          revoked_sessions: {type: integer, description: How many session rows were deleted.}
 AuthTokenEnvelope:
   allOf:
   - {$ref: ./envelope.yaml#/SuccessEnvelope}

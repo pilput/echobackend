@@ -17,6 +17,7 @@ import (
 	"echobackend/pkg/response"
 	"echobackend/pkg/validator"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 )
 
@@ -26,8 +27,10 @@ var (
 )
 
 type mockAuthService struct {
-	loginFn             func(ctx context.Context, identifier, password, ipAddress, userAgent string) (string, string, *model.User, error)
-	getGithubOAuthURLFn func(state string) string
+	loginFn              func(ctx context.Context, identifier, password, ipAddress, userAgent string) (string, string, *model.User, error)
+	getGithubOAuthURLFn  func(state string) string
+	revokeUserSessionsFn func(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error)
+	revokeAllSessionsFn  func(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 }
 
 func (m *mockAuthService) Register(ctx context.Context, email, username, password string) (*model.User, error) {
@@ -59,6 +62,20 @@ func (m *mockAuthService) ChangePassword(ctx context.Context, userID, currentPas
 
 func (m *mockAuthService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
+}
+
+func (m *mockAuthService) RevokeUserSessions(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error) {
+	if m.revokeUserSessionsFn != nil {
+		return m.revokeUserSessionsFn(ctx, targetUserID, actorID, ipAddress, userAgent)
+	}
+	return 0, nil
+}
+
+func (m *mockAuthService) RevokeAllSessions(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error) {
+	if m.revokeAllSessionsFn != nil {
+		return m.revokeAllSessionsFn(ctx, actorID, ipAddress, userAgent)
+	}
+	return 0, nil
 }
 
 func (m *mockAuthService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
@@ -238,5 +255,157 @@ func TestAppendQueryParamPreservesExistingQuery(t *testing.T) {
 
 	if !strings.Contains(got, "from=github") || !strings.Contains(got, "code=oc_123") {
 		t.Fatalf("query params not preserved, got %q", got)
+	}
+}
+
+// serveAuthRoute registers one route and drives a request through the router,
+// which is the only way a handler reading c.Param sees its path parameters.
+// actorID, when non-empty, stands in for what the auth middleware would set.
+func serveAuthRoute(
+	t *testing.T,
+	register func(e *echo.Echo, h *AuthHandler),
+	h *AuthHandler,
+	method, target, body, actorID string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.Validator = validator.NewValidator()
+	if actorID != "" {
+		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c *echo.Context) error {
+				c.Set("user", jwt.MapClaims{"user_id": actorID})
+				return next(c)
+			}
+		})
+	}
+	register(e, h)
+
+	req := httptest.NewRequestWithContext(context.Background(), method, target, bytes.NewBufferString(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func registerRevokeUser(e *echo.Echo, h *AuthHandler) {
+	e.DELETE("/api/auth/sessions/:userId", h.RevokeUserSessions)
+}
+
+func registerRevokeAll(e *echo.Echo, h *AuthHandler) {
+	e.POST("/api/auth/sessions/revoke-all", h.RevokeAllSessions)
+}
+
+func TestAuthHandlerRevokeUserSessions(t *testing.T) {
+	var gotTarget, gotActor string
+	h := NewAuthHandler(&mockAuthService{
+		revokeUserSessionsFn: func(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error) {
+			gotTarget, gotActor = targetUserID, actorID
+			return 3, nil
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerRevokeUser, h, http.MethodDelete, "/api/auth/sessions/user-9", "", "admin-1")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotTarget != "user-9" {
+		t.Errorf("expected the path parameter to reach the service, got %q", gotTarget)
+	}
+	if gotActor != "admin-1" {
+		t.Errorf("expected the acting admin to be passed through, got %q", gotActor)
+	}
+
+	out := decodeAuthResponse(t, rec)
+	data, ok := out.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", out.Data)
+	}
+	if data["revoked_sessions"] != float64(3) {
+		t.Errorf("expected the revoked count in the response, got %v", data["revoked_sessions"])
+	}
+}
+
+func TestAuthHandlerRevokeUserSessionsRequiresUser(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{}, &mockAuthActivityService{}, config.FrontendConfig{})
+	rec := serveAuthRoute(t, registerRevokeUser, h, http.MethodDelete, "/api/auth/sessions/user-9", "", "")
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthHandlerRevokeUserSessionsNotFound(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{
+		revokeUserSessionsFn: func(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error) {
+			return 0, apperrors.ErrUserNotFound
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerRevokeUser, h, http.MethodDelete, "/api/auth/sessions/user-9", "", "admin-1")
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthHandlerRevokeUserSessionsInvalidID(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{
+		revokeUserSessionsFn: func(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error) {
+			return 0, apperrors.ErrInvalidUserID
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerRevokeUser, h, http.MethodDelete, "/api/auth/sessions/not-a-uuid", "", "admin-1")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthHandlerRevokeAllSessions(t *testing.T) {
+	called := false
+	h := NewAuthHandler(&mockAuthService{
+		revokeAllSessionsFn: func(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error) {
+			called = true
+			return 12, nil
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerRevokeAll, h, http.MethodPost, "/api/auth/sessions/revoke-all", `{"confirm":true}`, "admin-1")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !called {
+		t.Fatal("expected the service to be called")
+	}
+}
+
+func TestAuthHandlerRevokeAllSessionsRequiresConfirmation(t *testing.T) {
+	// Without an explicit acknowledgement the platform-wide logout must not
+	// fire, however well-formed the request is.
+	for _, body := range []string{`{}`, `{"confirm":false}`} {
+		h := NewAuthHandler(&mockAuthService{
+			revokeAllSessionsFn: func(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error) {
+				t.Errorf("service must not be called for body %s", body)
+				return 0, nil
+			},
+		}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+		rec := serveAuthRoute(t, registerRevokeAll, h, http.MethodPost, "/api/auth/sessions/revoke-all", body, "admin-1")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %s: status=%d body=%s", body, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestAuthHandlerRevokeAllSessionsRequiresUser(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{}, &mockAuthActivityService{}, config.FrontendConfig{})
+	rec := serveAuthRoute(t, registerRevokeAll, h, http.MethodPost, "/api/auth/sessions/revoke-all", `{"confirm":true}`, "")
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

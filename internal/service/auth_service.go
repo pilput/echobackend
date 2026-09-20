@@ -21,6 +21,8 @@ import (
 	"echobackend/internal/repository"
 
 	pkgpassword "echobackend/pkg/password"
+	"echobackend/pkg/uid"
+	"echobackend/pkg/validator"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -33,6 +35,8 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, refreshToken, ipAddress, userAgent string) (string, string, *model.User, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ipAddress, userAgent string) error
 	Logout(ctx context.Context, refreshToken string) error
+	RevokeUserSessions(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error)
+	RevokeAllSessions(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 	GetProfile(ctx context.Context, userID string) (*model.User, error)
 	UpdateProfile(ctx context.Context, userID, username, firstName, lastName string) (*model.User, error)
 	DeleteAccount(ctx context.Context, userID string) error
@@ -73,6 +77,8 @@ type authService struct {
 	jwtSecret              []byte
 	jwtExpiry              time.Duration
 	refreshTokenExpiry     time.Duration
+	refreshTokenAbsolute   time.Duration
+	refreshTokenGrace      time.Duration
 	githubConfig           config.GitHubConfig
 	frontendConfig         config.FrontendConfig
 	emailService           EmailSender
@@ -110,6 +116,8 @@ func NewAuthService(
 		jwtSecret:              []byte(config.Auth.JWTSecret),
 		jwtExpiry:              config.Auth.JWTExpiry,
 		refreshTokenExpiry:     config.Auth.RefreshTokenExpiry,
+		refreshTokenAbsolute:   config.Auth.RefreshTokenAbsoluteExpiry,
+		refreshTokenGrace:      config.Auth.RefreshTokenGracePeriod,
 		githubConfig:           config.GitHub,
 		frontendConfig:         config.Frontend,
 		emailService:           emailService,
@@ -177,7 +185,7 @@ func (s *authService) Login(ctx context.Context, identifier, password, ipAddress
 		}
 	}
 
-	tokenString, refreshToken, err := s.createTokenAndSession(ctx, user)
+	tokenString, refreshToken, err := s.createTokenAndSession(ctx, user, ipAddress, userAgent)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -280,7 +288,7 @@ func (s *authService) ResetPassword(ctx context.Context, token, password, ipAddr
 		authLog.Warn("failed to mark password reset token as used", "token_id", tokenEntry.ID, "error", err)
 	}
 
-	if err := s.sessionRepo.DeleteByUserID(ctx, user.ID); err != nil {
+	if _, err := s.sessionRepo.DeleteByUserID(ctx, user.ID); err != nil {
 		authLog.Warn("failed to invalidate sessions after password reset", "user_id", user.ID, "error", err)
 	}
 
@@ -289,21 +297,80 @@ func (s *authService) ResetPassword(ctx context.Context, token, password, ipAddr
 	return nil
 }
 
+// RefreshToken exchanges a refresh token for a fresh access token and a fresh
+// refresh token, rotating the chain forward (RFC 9700 §4.14).
+//
+// The returned refresh token always replaces the one that was sent: callers
+// must persist it. Rotation is what makes a stolen token detectable — a token
+// presented after it was already exchanged is treated as a replay and takes the
+// entire family down with it.
 func (s *authService) RefreshToken(ctx context.Context, refreshToken, ipAddress, userAgent string) (string, string, *model.User, error) {
 	refreshTokenHash := tokenHash(refreshToken)
 	session, err := s.sessionRepo.GetSessionByRefreshToken(ctx, refreshTokenHash)
-	if err != nil {
+	if err != nil || session == nil {
 		return "", "", nil, apperrors.ErrInvalidToken
 	}
 
-	if session.ExpiresAt != nil && time.Now().After(*session.ExpiresAt) {
+	now := time.Now()
+
+	// Checked before anything else: once a family is past its maximum lifetime
+	// nothing in it can be revived, not even through the grace window below.
+	if now.After(session.AbsoluteExpiresAt) {
+		// ASVS 7.3.2 — drop the whole family at once, since every row in it
+		// shares this deadline.
+		if err := s.sessionRepo.DeleteByFamilyID(ctx, session.FamilyID); err != nil {
+			authLog.Warn("failed to delete session family past absolute expiry", "user_id", session.UserID, "error", err)
+		}
+		return "", "", nil, apperrors.ErrTokenExpired
+	}
+
+	if session.Rotated() {
+		// Inside the grace window this is almost certainly the client's own
+		// concurrent refresh, not an attacker, so it is served rather than
+		// punished. Grace is anchored to the first rotation, so replaying the
+		// same token cannot keep pushing the window forward.
+		if s.refreshTokenGrace > 0 && !now.After(session.RotatedAt.Add(s.refreshTokenGrace)) {
+			return s.issueRotatedToken(ctx, session, nil, ipAddress, userAgent)
+		}
+
+		// Past the window, assume the token leaked: whoever holds the successor
+		// may be the attacker, so the whole chain goes.
+		if err := s.sessionRepo.DeleteByFamilyID(ctx, session.FamilyID); err != nil {
+			authLog.Error("failed to revoke session family after refresh token reuse",
+				"user_id", session.UserID, "family_id", session.FamilyID, "error", err)
+		}
+		s.activityService.LogActivity(ctx, &session.UserID, model.ActivityTokenReuse, model.StatusFailure,
+			ipAddress, userAgent, nil, map[string]any{"family_id": session.FamilyID})
+		authLog.Warn("refresh token reuse detected, session family revoked",
+			"user_id", session.UserID, "family_id", session.FamilyID)
+		return "", "", nil, apperrors.ErrInvalidToken
+	}
+
+	if now.After(session.ExpiresAt) {
+		// Only this leaf is dead. Sibling tokens minted during a grace window
+		// carry their own deadlines, so the family is left alone.
 		if err := s.sessionRepo.DeleteSession(ctx, refreshTokenHash); err != nil {
 			authLog.Warn("failed to delete expired session", "user_id", session.UserID, "error", err)
 		}
 		return "", "", nil, apperrors.ErrTokenExpired
 	}
 
-	user, err := s.userRepo.GetByID(ctx, session.UserID, false)
+	return s.issueRotatedToken(ctx, session, session, ipAddress, userAgent)
+}
+
+// issueRotatedToken mints the successor of current and returns it along with a
+// fresh access token.
+//
+// When rotateFrom is non-nil the successor replaces it atomically; when it is
+// nil (the grace path) the successor is inserted as a sibling and the parent is
+// left as it is, since it was already rotated by the request that won the race.
+func (s *authService) issueRotatedToken(
+	ctx context.Context,
+	current *model.Session,
+	rotateFrom *model.Session,
+	ipAddress, userAgent string,
+) (string, string, *model.User, error) {
+	user, err := s.userRepo.GetByID(ctx, current.UserID, false)
 	if errors.Is(err, apperrors.ErrUserNotFound) {
 		// The account was deleted after the session was issued.
 		return "", "", nil, apperrors.ErrInvalidToken
@@ -312,17 +379,47 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, ipAddress,
 		return "", "", nil, err
 	}
 
-	tokenString, err := s.createAccessToken(user)
+	accessToken, err := s.createAccessToken(user)
 	if err != nil {
 		return "", "", nil, err
 	}
 
+	nextToken, next, err := s.buildSession(user.ID, current.FamilyID, current.AbsoluteExpiresAt, ipAddress, userAgent)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	if rotateFrom != nil {
+		err = s.sessionRepo.RotateSession(ctx, rotateFrom.ID, next)
+		if errors.Is(err, apperrors.ErrSessionAlreadyRotated) {
+			// A concurrent refresh rotated this row between our read and our
+			// write. With a grace window configured that is the same benign
+			// race handled above, so mint a sibling instead of failing.
+			if s.refreshTokenGrace <= 0 {
+				return "", "", nil, apperrors.ErrInvalidToken
+			}
+			err = s.sessionRepo.CreateSession(ctx, next)
+		}
+	} else {
+		err = s.sessionRepo.CreateSession(ctx, next)
+	}
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	s.pruneExpiredSessions(ctx, user.ID)
 	s.activityService.LogActivity(ctx, &user.ID, model.ActivityTokenRefresh, model.StatusSuccess, ipAddress, userAgent, nil, nil)
 
-	// The refresh token itself is not rotated: the same session/refresh token
-	// keeps being reused until it expires, at which point the user must log in
-	// again to obtain a new one.
-	return tokenString, refreshToken, user, nil
+	return accessToken, nextToken, user, nil
+}
+
+// pruneExpiredSessions drops the user's dead rows. Rotation appends a row per
+// refresh, so without this the table would grow with every access-token
+// renewal. Best-effort: a failure here must not fail the refresh.
+func (s *authService) pruneExpiredSessions(ctx context.Context, userID string) {
+	if _, err := s.sessionRepo.DeleteExpired(ctx, userID); err != nil {
+		authLog.Warn("failed to prune expired sessions", "user_id", userID, "error", err)
+	}
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ipAddress, userAgent string) error {
@@ -353,7 +450,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 
 	// Revoke every refresh token so sessions opened with the old password
 	// (possibly by someone else) cannot be extended.
-	if err := s.sessionRepo.DeleteByUserID(ctx, user.ID); err != nil {
+	if _, err := s.sessionRepo.DeleteByUserID(ctx, user.ID); err != nil {
 		authLog.Warn("failed to invalidate sessions after password change", "user_id", user.ID, "error", err)
 	}
 
@@ -362,8 +459,67 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 	return nil
 }
 
+// Logout ends the whole rotation chain the token belongs to, not just the token
+// itself, so that any sibling minted during a grace window dies with it
+// (ASVS 7.4.1). Unknown tokens are a no-op: logging out is idempotent.
 func (s *authService) Logout(ctx context.Context, refreshToken string) error {
-	return s.sessionRepo.DeleteSession(ctx, tokenHash(refreshToken))
+	session, err := s.sessionRepo.GetSessionByRefreshToken(ctx, tokenHash(refreshToken))
+	if err != nil || session == nil {
+		return nil //nolint:nilerr // logging out an unknown token is not an error
+	}
+	return s.sessionRepo.DeleteByFamilyID(ctx, session.FamilyID)
+}
+
+// RevokeUserSessions terminates every session belonging to one user and
+// reports how many were killed (OWASP ASVS v5.0 7.4.5).
+//
+// The caller is expected to be an administrator; authorisation is enforced by
+// the route's middleware, not here. actorID is recorded so the activity log
+// shows who did it, not just that it happened.
+//
+// Access tokens already issued are not affected and stay valid until they
+// expire, so the user keeps API access for up to the JWT lifetime.
+func (s *authService) RevokeUserSessions(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error) {
+	if !validator.IsValidUUID(targetUserID) {
+		return 0, apperrors.ErrInvalidUserID
+	}
+
+	// Look the user up first so a typo in the id is a 404 rather than a
+	// success that silently revoked nothing.
+	if _, err := s.userRepo.GetByID(ctx, targetUserID, false); err != nil {
+		return 0, err
+	}
+
+	revoked, err := s.sessionRepo.DeleteByUserID(ctx, targetUserID)
+	if err != nil {
+		return 0, err
+	}
+
+	s.activityService.LogActivity(ctx, &targetUserID, model.ActivitySessionRevoked, model.StatusSuccess,
+		ipAddress, userAgent, nil, map[string]any{"revoked_by": actorID, "revoked_sessions": revoked})
+	authLog.Info("administrator revoked user sessions",
+		"target_user_id", targetUserID, "actor_id", actorID, "revoked_sessions", revoked)
+
+	return revoked, nil
+}
+
+// RevokeAllSessions terminates every session of every user — the second half of
+// ASVS 7.4.5, for when a leak is suspected but its blast radius is not known.
+//
+// This logs out the acting administrator too. It is deliberately not something
+// any other code path calls.
+func (s *authService) RevokeAllSessions(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error) {
+	revoked, err := s.sessionRepo.DeleteAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	// user_id is left nil: this event belongs to no single account.
+	s.activityService.LogActivity(ctx, nil, model.ActivitySessionRevoked, model.StatusSuccess,
+		ipAddress, userAgent, nil, map[string]any{"revoked_by": actorID, "revoked_sessions": revoked, "scope": "all_users"})
+	authLog.Warn("administrator revoked every session", "actor_id", actorID, "revoked_sessions", revoked)
+
+	return revoked, nil
 }
 
 func (s *authService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
@@ -401,7 +557,7 @@ func (s *authService) DeleteAccount(ctx context.Context, userID string) error {
 	if err := s.userRepo.SoftDeleteByID(ctx, userID); err != nil {
 		return err
 	}
-	if err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
+	if _, err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
 		authLog.Warn("failed to invalidate sessions after account deletion", "user_id", userID, "error", err)
 	}
 	return nil
@@ -501,7 +657,7 @@ func (s *authService) SignInWithGithub(ctx context.Context, githubUser *GithubUs
 		user = newUser
 	}
 
-	tokenString, refreshToken, err := s.createTokenAndSession(ctx, user)
+	tokenString, refreshToken, err := s.createTokenAndSession(ctx, user, ipAddress, userAgent)
 	if err != nil {
 		s.activityService.LogActivity(ctx, &user.ID, model.ActivityOAuthLoginFailed, model.StatusFailure, ipAddress, userAgent, nil, map[string]any{"provider": "github"})
 		return "", "", nil, err
@@ -600,28 +756,80 @@ func (s *authService) createAccessToken(user *model.User) (string, error) {
 	return token.SignedString(s.jwtSecret)
 }
 
-func (s *authService) createTokenAndSession(ctx context.Context, user *model.User) (string, string, error) {
+// createTokenAndSession starts a new rotation chain: the session it creates is
+// the root of its own family and sets the absolute deadline every later
+// rotation inherits.
+func (s *authService) createTokenAndSession(ctx context.Context, user *model.User, ipAddress, userAgent string) (string, string, error) {
 	tokenString, err := s.createAccessToken(user)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshBytes := make([]byte, 64)
-	if _, err := rand.Read(refreshBytes); err != nil {
+	absoluteExpiresAt := time.Now().Add(s.refreshTokenAbsolute)
+	refreshToken, sess, err := s.buildSession(user.ID, "", absoluteExpiresAt, ipAddress, userAgent)
+	if err != nil {
 		return "", "", err
 	}
-	refreshToken := "pl_" + base64.RawURLEncoding.EncodeToString(refreshBytes)
 
-	sess := &model.Session{
-		RefreshToken: tokenHash(refreshToken),
-		UserID:       user.ID,
-		ExpiresAt:    new(time.Now().Add(s.refreshTokenExpiry)),
-	}
 	if err := s.sessionRepo.CreateSession(ctx, sess); err != nil {
 		return "", "", err
 	}
 
+	s.pruneExpiredSessions(ctx, user.ID)
+
 	return tokenString, refreshToken, nil
+}
+
+// buildSession mints a refresh token and the row that will hold its hash,
+// returning the raw token (the only time it exists in plaintext) and the
+// unsaved session.
+//
+// An empty familyID starts a new family, in which case the row's own id is used
+// so the root belongs to the family it heads.
+func (s *authService) buildSession(
+	userID, familyID string,
+	absoluteExpiresAt time.Time,
+	ipAddress, userAgent string,
+) (string, *model.Session, error) {
+	refreshBytes, err := generateRandomBytes(64)
+	if err != nil {
+		return "", nil, err
+	}
+	refreshToken := "pl_" + base64.RawURLEncoding.EncodeToString(refreshBytes)
+
+	now := time.Now()
+	// The sliding window never outlives the absolute cap, so a chain that is
+	// refreshed right before the deadline does not gain extra time from it.
+	expiresAt := now.Add(s.refreshTokenExpiry)
+	if expiresAt.After(absoluteExpiresAt) {
+		expiresAt = absoluteExpiresAt
+	}
+
+	id, err := uid.NewV7()
+	if err != nil {
+		return "", nil, err
+	}
+	if familyID == "" {
+		familyID = id
+	}
+
+	sess := &model.Session{
+		ID:                id,
+		FamilyID:          familyID,
+		RefreshToken:      tokenHash(refreshToken),
+		UserID:            userID,
+		CreatedAt:         now,
+		ExpiresAt:         expiresAt,
+		AbsoluteExpiresAt: absoluteExpiresAt,
+	}
+	if ipAddress != "" {
+		sess.IPAddress = &ipAddress
+	}
+	if userAgent != "" {
+		sess.UserAgent = &userAgent
+	}
+
+	return refreshToken, sess, nil
 }
 
 func generateRandomBytes(n int) ([]byte, error) {

@@ -33,6 +33,12 @@ type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
+// RevokeAllSessionsRequest guards the platform-wide logout behind an explicit
+// acknowledgement, so the endpoint cannot be triggered by a stray request.
+type RevokeAllSessionsRequest struct {
+	Confirm bool `json:"confirm"`
+}
+
 type OAuthExchangeRequest struct {
 	Code string `json:"code" validate:"required"`
 }

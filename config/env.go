@@ -75,3 +75,21 @@ func resolveJWTExpiry(defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
+
+// resolveRefreshTokenExpiry returns REFRESH_TOKEN_EXPIRY (a Go duration string,
+// e.g. "72h"), or falls back to the legacy REFRESH_TOKEN_EXPIRY_DAYS (whole
+// days) for backward compatibility with existing deployments, or defaultValue
+// if neither is set.
+func resolveRefreshTokenExpiry(defaultValue time.Duration) time.Duration {
+	if s, ok := os.LookupEnv("REFRESH_TOKEN_EXPIRY"); ok {
+		if d, err := time.ParseDuration(s); err == nil {
+			return d
+		}
+	}
+	if s, ok := os.LookupEnv("REFRESH_TOKEN_EXPIRY_DAYS"); ok {
+		if days, err := strconv.Atoi(s); err == nil {
+			return time.Duration(days) * 24 * time.Hour
+		}
+	}
+	return defaultValue
+}
