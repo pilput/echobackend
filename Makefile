@@ -19,7 +19,7 @@ help: ## Show this help
 
 ## --- Local services (docker compose) ---------------------------------------
 
-up: ## Start Postgres + Valkey + MinIO (waits for healthchecks)
+up: ## Start Postgres + Redis + RustFS (waits for healthchecks)
 	docker compose up -d --wait
 
 down: ## Stop local services

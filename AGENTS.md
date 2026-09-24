@@ -4,7 +4,7 @@
 
 ```bash
 # First-time setup: start services → apply schema → run
-docker compose up -d --wait  # or: make up. Postgres 18 + Valkey + RustFS; creates `custom` schema via scripts/init-db.sql
+docker compose up -d --wait  # or: make up. Postgres 18 + Redis + RustFS; creates `custom` schema via scripts/init-db.sql
 goose up                     # apply migrations (needs GOOSE_* vars from .env)
 go run cmd/main.go           # run server (or: air for hot reload; make dev / make run)
 
@@ -67,7 +67,7 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 
 ## Testing
 
-- `go test ./...` needs no Postgres/Valkey. No testcontainers, no repo/DB integration tests, no mockgen — hand-written mocks in `internal/service/mocks_test.go`.
+- `go test ./...` needs no Postgres/Redis. No testcontainers, no repo/DB integration tests, no mockgen — hand-written mocks in `internal/service/mocks_test.go`.
 - White-box `*_test.go` in same package. Tests live mostly in `internal/service/`, `internal/handler/`, `internal/middleware/`, `config/`, `pkg/`.
 
 ## CI & deploy

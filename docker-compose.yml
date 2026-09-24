@@ -22,7 +22,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18+ images keep PGDATA at /var/lib/postgresql/18/docker; mount the parent.
+      - postgres-data:/var/lib/postgresql
       # Creates the `custom` schema required by goose (GOOSE_TABLE=custom.goose_migrations).
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
@@ -32,17 +33,17 @@ services:
       retries: 10
     restart: unless-stopped
 
-  valkey:
-    image: valkey/valkey:8-alpine
-    container_name: echobackend-valkey
+  redis:
+    image: redis:8-alpine
+    container_name: echobackend-redis
     # Ephemeral cache: no RDB snapshot, no AOF.
-    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"
     volumes:
-      - valkey-data:/data
+      - redis-data:/data
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -89,5 +90,5 @@ services:
 
 volumes:
   postgres-data:
-  valkey-data:
+  redis-data:
   rustfs-data:
