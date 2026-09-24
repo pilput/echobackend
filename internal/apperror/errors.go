@@ -67,6 +67,15 @@ var (
 	ErrNotGuildMember        = errors.New("not a member of this guild")
 	ErrGuildOwnerCannotLeave = errors.New("guild owner cannot leave; transfer ownership or delete the guild")
 
+	ErrGuildChannelNotFound      = errors.New("guild channel not found")
+	ErrGuildChannelNameExists    = errors.New("a channel with this name already exists in the guild")
+	ErrGuildChannelNameInvalid   = errors.New("channel name must contain at least one letter or digit")
+	ErrGuildMessageNotFound      = errors.New("message not found")
+	ErrGuildMessageNotOwned      = errors.New("not authorized to modify this message")
+	ErrGuildMessageEmpty         = errors.New("message content cannot be empty")
+	ErrGuildMessageReplyNotFound = errors.New("replied-to message not found in this channel")
+	ErrInvalidMessageCursor      = errors.New("invalid message cursor")
+
 	ErrPasswordTooShort          = errors.New("password must be at least 8 characters")
 	ErrPasswordTooLong           = errors.New("password must be at most 128 characters")
 	ErrPasswordNoUpper           = errors.New("password must contain at least one uppercase letter")

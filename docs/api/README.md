@@ -19,7 +19,9 @@ docs/api/
 │   ├── notification.yaml
 │   ├── holding.yaml      # includes holding-types and the corporate-actions calendar
 │   ├── exchange-rate.yaml
-│   └── report.yaml
+│   ├── report.yaml
+│   ├── guild.yaml
+│   └── guild-channel.yaml  # channels, messages, SSE event stream
 └── schemas/              # one file per module — request/response schemas
     ├── envelope.yaml     # SuccessEnvelope, ErrorEnvelope, PaginationMeta, ...
     ├── auth.yaml
@@ -31,7 +33,9 @@ docs/api/
     ├── notification.yaml
     ├── holding.yaml
     ├── exchange-rate.yaml
-    └── report.yaml
+    ├── report.yaml
+    ├── guild.yaml
+    └── guild-channel.yaml
 ```
 
 `openapi.yaml` never inlines an operation — every path entry is a one-line `$ref` into

@@ -29,6 +29,7 @@ type Routes struct {
 	reportHandler           *handler.ReportHandler
 	corporateActionHandler  *handler.CorporateActionHandler
 	guildHandler            *handler.GuildHandler
+	guildChannelHandler     *handler.GuildChannelHandler
 }
 
 func NewRoutes(
@@ -51,6 +52,7 @@ func NewRoutes(
 	reportHandler *handler.ReportHandler,
 	corporateActionHandler *handler.CorporateActionHandler,
 	guildHandler *handler.GuildHandler,
+	guildChannelHandler *handler.GuildChannelHandler,
 ) *Routes {
 	return &Routes{
 		config:                  config,
@@ -72,6 +74,7 @@ func NewRoutes(
 		reportHandler:           reportHandler,
 		corporateActionHandler:  corporateActionHandler,
 		guildHandler:            guildHandler,
+		guildChannelHandler:     guildChannelHandler,
 	}
 }
 

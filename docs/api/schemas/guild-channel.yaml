@@ -1,0 +1,139 @@
+CreateGuildChannelRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: |
+        Normalised like a Discord channel name: lowercase, with runs of anything that is
+        not a letter or digit collapsed into one hyphen (`Diskusi Umum!` → `diskusi-umum`).
+        Must be unique within the guild after normalisation.
+    topic:
+      type: [string, 'null']
+      maxLength: 1024
+    position:
+      type: [integer, 'null']
+      minimum: 0
+      default: 0
+      description: Sidebar order, ascending; ties are broken by creation time.
+UpdateGuildChannelRequest:
+  type: object
+  description: All fields optional; `name` is normalised as on create.
+  properties:
+    name:
+      type: [string, 'null']
+      minLength: 1
+      maxLength: 100
+    topic:
+      type: [string, 'null']
+      maxLength: 1024
+    position:
+      type: [integer, 'null']
+      minimum: 0
+GuildChannelResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    guild_id: {type: string, format: uuid}
+    name: {type: string, example: general}
+    topic: {type: [string, 'null']}
+    position: {type: integer}
+    created_by:
+      type: [string, 'null']
+      format: uuid
+      description: '`null` once the creator''s account is deleted.'
+    created_at: {type: string, format: date-time}
+    updated_at: {type: string, format: date-time}
+CreateGuildMessageRequest:
+  type: object
+  required: [content]
+  properties:
+    content:
+      type: string
+      maxLength: 4000
+      description: Surrounding whitespace is trimmed; a blank message is rejected with `400`.
+    reply_to_id:
+      type: [string, 'null']
+      format: uuid
+      description: Message being replied to. Must be in the same channel.
+UpdateGuildMessageRequest:
+  type: object
+  required: [content]
+  properties:
+    content: {type: string, maxLength: 4000}
+GuildMessageReply:
+  type: object
+  description: The parent message quoted above a reply.
+  properties:
+    id: {type: string, format: uuid}
+    author_id: {type: string, format: uuid}
+    author:
+      oneOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    content:
+      type: string
+      maxLength: 200
+      description: The parent's text, truncated to 200 characters for a one-line preview.
+GuildMessageResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: UUIDv7, so ids sort in send order; also the history cursor.
+    guild_id: {type: string, format: uuid}
+    channel_id: {type: string, format: uuid}
+    author_id: {type: string, format: uuid}
+    author:
+      oneOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    content: {type: string}
+    reply_to_id:
+      type: [string, 'null']
+      format: uuid
+      description: '`null` for a normal message, and also once the parent is deleted.'
+    reply_to:
+      oneOf:
+      - {$ref: '#/GuildMessageReply'}
+      - {type: 'null'}
+    edited_at:
+      type: [string, 'null']
+      format: date-time
+      description: Set when the author edits the message.
+    created_at: {type: string, format: date-time}
+GuildMessageCursorMeta:
+  type: object
+  properties:
+    limit: {type: integer}
+    has_more:
+      type: boolean
+      description: Whether older messages exist beyond this page.
+    next_before:
+      type: string
+      format: uuid
+      description: Pass as `before` to load the next, older page. Omitted on the last page.
+GuildEvent:
+  type: object
+  description: |
+    One event on the guild SSE stream, sent as a single `data:` line. `data` holds a
+    `GuildChannelResponse` for `channel.created`/`channel.updated`, a
+    `GuildMessageResponse` for `message.created`/`message.updated`, and `{id}` or
+    `{id, channel_id}` for `channel.deleted`/`message.deleted`.
+  required: [type, guild_id, data]
+  properties:
+    type:
+      type: string
+      enum:
+      - channel.created
+      - channel.updated
+      - channel.deleted
+      - message.created
+      - message.updated
+      - message.deleted
+    guild_id: {type: string, format: uuid}
+    channel_id: {type: string, format: uuid}
+    data: {}

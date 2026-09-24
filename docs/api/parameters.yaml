@@ -58,3 +58,15 @@ GuildSlugPath:
   required: true
   description: Guild slug (lowercase, hyphenated).
   schema: {type: string}
+GuildChannelIdPath:
+  name: channelId
+  in: path
+  required: true
+  description: Channel ID (UUID). Must belong to the guild in the path.
+  schema: {type: string, format: uuid}
+GuildMessageIdPath:
+  name: messageId
+  in: path
+  required: true
+  description: Message ID (UUID). Must belong to the channel in the path.
+  schema: {type: string, format: uuid}

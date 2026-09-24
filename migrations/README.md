@@ -43,3 +43,4 @@ goose create nama_migration sql
 - Soft deletes (`deleted_at`) apply to `users`, `post_views`, `post_comments`, `user_follows`, `files` and `chat_conversations` only. `posts` and `post_likes` are hard-deleted as of 014, and their children follow through `ON DELETE CASCADE`
 - A query that opts out of GORM's model scope with `.Table(...)` does **not** get the `deleted_at IS NULL` predicate for free — write it by hand
 - UUID primary keys use `uuidv7()` by default (PostgreSQL 18+)
+- `guild_channels` and `guild_channel_messages` (20260924090000) are hard-deleted: deleting a guild cascades to its channels, and deleting a channel to its messages. Every guild has a `general` channel — the migration backfills it, and new guilds get it in the same transaction as the owner membership

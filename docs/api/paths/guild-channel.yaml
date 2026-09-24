@@ -1,0 +1,316 @@
+guildChannels:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  get:
+    tags: [Guild chat]
+    summary: List a guild's channels
+    description: |
+      Ordered by `position`, then creation time. Visible to whoever can see the guild:
+      anyone for a public guild, members only for a private one (everyone else gets
+      `404`). Every guild starts with a `general` channel.
+    operationId: listGuildChannels
+    security:
+    - {}
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Channels.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/guild-channel.yaml#/GuildChannelResponse}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Guild chat]
+    summary: Create a channel
+    description: Owner or admin only. Emits `channel.created` on the guild event stream.
+    operationId: createGuildChannel
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild-channel.yaml#/CreateGuildChannelRequest}
+    responses:
+      '201':
+        description: Channel created.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild-channel.yaml#/GuildChannelResponse}
+      '400':
+        description: The name contains no letters or digits.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409':
+        description: A channel with this (normalised) name already exists in the guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildChannelById:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  - {$ref: ../parameters.yaml#/GuildChannelIdPath}
+  patch:
+    tags: [Guild chat]
+    summary: Update a channel
+    description: Owner or admin only. Emits `channel.updated`.
+    operationId: updateGuildChannel
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild-channel.yaml#/UpdateGuildChannelRequest}
+    responses:
+      '200':
+        description: Updated channel.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild-channel.yaml#/GuildChannelResponse}
+      '400':
+        description: The new name contains no letters or digits.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409':
+        description: Another channel in the guild already has this name.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Guild chat]
+    summary: Delete a channel
+    description: |
+      Owner or admin only. Hard delete: every message in the channel is deleted with it
+      and cannot be recovered. Emits `channel.deleted`.
+    operationId: deleteGuildChannel
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Channel deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildChannelMessages:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  - {$ref: ../parameters.yaml#/GuildChannelIdPath}
+  get:
+    tags: [Guild chat]
+    summary: List channel messages
+    description: |
+      Members only. Newest first, paginated backwards with a cursor instead of an offset
+      so that messages arriving meanwhile do not shift the pages: load the latest page
+      without `before`, then pass `meta.next_before` to scroll back.
+    operationId: listGuildChannelMessages
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: before
+      in: query
+      description: Only return messages older than this message id.
+      schema: {type: string, format: uuid}
+    - name: limit
+      in: query
+      schema: {type: integer, default: 50, minimum: 1, maximum: 100}
+    responses:
+      '200':
+        description: Messages with cursor meta.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [success, message, meta]
+              properties:
+                success: {type: boolean, const: true}
+                message: {type: string}
+                data:
+                  type: array
+                  items: {$ref: ../schemas/guild-channel.yaml#/GuildMessageResponse}
+                meta: {$ref: ../schemas/guild-channel.yaml#/GuildMessageCursorMeta}
+      '400':
+        description: '`before` is not a UUID.'
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403':
+        description: Caller is not a member of this (public) guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  post:
+    tags: [Guild chat]
+    summary: Send a message
+    description: Members only. Emits `message.created`.
+    operationId: sendGuildChannelMessage
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild-channel.yaml#/CreateGuildMessageRequest}
+    responses:
+      '201':
+        description: Message sent.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild-channel.yaml#/GuildMessageResponse}
+      '400':
+        description: The content is blank, or `reply_to_id` is not a message in this channel.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403':
+        description: Caller is not a member of this (public) guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildChannelMessageById:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  - {$ref: ../parameters.yaml#/GuildChannelIdPath}
+  - {$ref: ../parameters.yaml#/GuildMessageIdPath}
+  patch:
+    tags: [Guild chat]
+    summary: Edit a message
+    description: |
+      The author only — not even the guild owner may edit someone else's message. Sets
+      `edited_at` and emits `message.updated`.
+    operationId: editGuildChannelMessage
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/guild-channel.yaml#/UpdateGuildMessageRequest}
+    responses:
+      '200':
+        description: Updated message.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/guild-channel.yaml#/GuildMessageResponse}
+      '400':
+        description: The content is blank.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  delete:
+    tags: [Guild chat]
+    summary: Delete a message
+    description: |
+      The author, or a guild owner/admin (moderation). Hard delete; replies to it keep
+      their text but lose the quote. Emits `message.deleted`.
+    operationId: deleteGuildChannelMessage
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Message deleted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}
+guildEvents:
+  parameters:
+  - {$ref: ../parameters.yaml#/GuildSlugPath}
+  get:
+    tags: [Guild chat]
+    summary: Stream guild events (SSE)
+    description: |
+      Members only. A long-lived Server-Sent Events stream carrying every realtime event
+      of the guild, for all of its channels — one connection per open guild, like a
+      Discord gateway. Each event is one `data:` line holding a `GuildEvent`. The stream
+      opens with a `: connected` comment and sends a `: ping` comment every 25 seconds.
+
+      Authentication uses the usual `Authorization: Bearer` header, so a browser client
+      needs a fetch-based SSE reader rather than the native `EventSource`.
+
+      The stream ends when the caller leaves the guild (noticed within one ping
+      interval), falls too far behind, or the server restarts. Reconnect, then fill the
+      gap by fetching the latest page of each open channel.
+    operationId: streamGuildEvents
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Event stream.
+        content:
+          text/event-stream:
+            schema:
+              type: string
+              description: 'SSE frames; each `data:` payload is a GuildEvent.'
+            example: |
+              : connected
+
+              data: {"type":"message.created","guild_id":"…","channel_id":"…","data":{"id":"…","content":"halo"}}
+
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403':
+        description: Caller is not a member of this (public) guild.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '500': {$ref: ../responses.yaml#/ServerError}

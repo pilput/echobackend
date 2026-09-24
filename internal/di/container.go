@@ -10,6 +10,7 @@ import (
 	"echobackend/internal/platform/email"
 	"echobackend/internal/platform/market"
 	"echobackend/internal/platform/openrouter"
+	"echobackend/internal/platform/realtime"
 	"echobackend/internal/platform/storage"
 	"echobackend/internal/repository"
 	"echobackend/internal/routes"
@@ -24,6 +25,7 @@ type Container struct {
 	Cleanup *CleanupManager
 	Routes  *routes.Routes
 	db      *gorm.DB
+	hub     *realtime.Hub
 }
 
 // NewContainer creates a manually wired application container.
@@ -49,6 +51,12 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		})
 	}
 
+	// Realtime fan-out for guild chat SSE streams; relays through Redis pub/sub
+	// when it is available so events reach streams on every instance.
+	hub := realtime.NewHub(redisCache)
+	hub.Start()
+	cleanup.Register(hub.Close)
+
 	s3Storage := storage.NewS3Storage(cfg)
 	emailService := email.NewService(cfg.Email)
 	cleanup.Register(func() error {
@@ -73,6 +81,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	reportRepo := repository.NewReportRepository(db)
 	corporateActionRepo := repository.NewCorporateActionRepository(db)
 	guildRepo := repository.NewGuildRepository(db)
+	guildChannelRepo := repository.NewGuildChannelRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
 	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
@@ -96,6 +105,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	reportService := service.NewReportService(reportRepo)
 	guildService := service.NewGuildService(guildRepo)
+	guildChannelService := service.NewGuildChannelService(guildChannelRepo, hub)
 
 	// Corporate actions: IDX
 	idxCorporateClient := market.NewRapidAPIIDXClient(cfg.MarketData.RapidAPIKey, nil)
@@ -117,6 +127,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	reportHandler := handler.NewReportHandler(reportService)
 	corporateActionHandler := handler.NewCorporateActionHandler(corporateActionService)
 	guildHandler := handler.NewGuildHandler(guildService)
+	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
@@ -139,6 +150,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		reportHandler,
 		corporateActionHandler,
 		guildHandler,
+		guildChannelHandler,
 	)
 
 	return &Container{
@@ -146,7 +158,18 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Cleanup: cleanup,
 		Routes:  appRoutes,
 		db:      db,
+		hub:     hub,
 	}, nil
+}
+
+// CloseStreams ends every open realtime (SSE) stream. Register it with
+// http.Server.RegisterOnShutdown: Shutdown waits for active handlers, and a
+// stream otherwise never returns on its own.
+func (c *Container) CloseStreams() {
+	if c == nil || c.hub == nil {
+		return
+	}
+	_ = c.hub.Close()
 }
 
 // PingDB checks that the database connection is alive.

@@ -13,7 +13,8 @@ import (
 )
 
 type GuildRepository interface {
-	// CreateGuild inserts the guild and its owner membership in one transaction.
+	// CreateGuild inserts the guild, its owner membership and its #general
+	// channel in one transaction.
 	CreateGuild(ctx context.Context, guild *model.Guild) error
 	FindGuildByID(ctx context.Context, id string) (*model.Guild, error)
 	FindGuildBySlug(ctx context.Context, slug string) (*model.Guild, error)
@@ -48,7 +49,16 @@ func (r *guildRepository) CreateGuild(ctx context.Context, guild *model.Guild) e
 			UserID:  guild.OwnerID,
 			Role:    model.GuildRoleOwner,
 		}
-		return tx.Create(owner).Error
+		if err := tx.Create(owner).Error; err != nil {
+			return err
+		}
+		ownerID := guild.OwnerID
+		general := &model.GuildChannel{
+			GuildID:   guild.ID,
+			Name:      model.GuildDefaultChannelName,
+			CreatedBy: &ownerID,
+		}
+		return tx.Create(general).Error
 	})
 	if err != nil {
 		// gorm.Config.TranslateError turns SQLSTATE 23505 into ErrDuplicatedKey;

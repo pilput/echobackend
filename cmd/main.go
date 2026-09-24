@@ -82,6 +82,9 @@ func main() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+	// Long-lived SSE streams (guild chat) would hold Shutdown until its
+	// timeout; end them as soon as shutdown begins.
+	server.RegisterOnShutdown(container.CloseStreams)
 
 	// A listener failure (e.g. port already in use) must stop the process;
 	// otherwise it would keep waiting for a signal while serving nothing.
