@@ -274,9 +274,14 @@ type mockPostViewRepo struct {
 		Count int64
 	}, error)
 	countViewsByAuthorBeforeFn func(ctx context.Context, userID, beforeDate string) (int64, error)
+	createViewFn               func(ctx context.Context, view *model.PostView) error
+	hasUserViewedPostFn        func(ctx context.Context, postID, userID string) (bool, error)
 }
 
 func (m *mockPostViewRepo) CreateView(ctx context.Context, view *model.PostView) error {
+	if m.createViewFn != nil {
+		return m.createViewFn(ctx, view)
+	}
 	panic("CreateView not stubbed")
 }
 func (m *mockPostViewRepo) GetViewsByPostID(ctx context.Context, postID string, limit, offset int) ([]*model.PostView, int64, error) {
@@ -286,6 +291,9 @@ func (m *mockPostViewRepo) GetViewStats(ctx context.Context, postID string) (*dt
 	panic("GetViewStats not stubbed")
 }
 func (m *mockPostViewRepo) HasUserViewedPost(ctx context.Context, postID, userID string) (bool, error) {
+	if m.hasUserViewedPostFn != nil {
+		return m.hasUserViewedPostFn(ctx, postID, userID)
+	}
 	panic("HasUserViewedPost not stubbed")
 }
 func (m *mockPostViewRepo) GetViewByUserAndPost(ctx context.Context, postID, userID string) (*model.PostView, error) {

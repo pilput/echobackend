@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,5 +139,71 @@ func TestPostViewService_GetMyPostsLikesByMonth(t *testing.T) {
 	}
 	if got.Series[1].Likes != 5 || got.Series[2].Likes != 3 {
 		t.Fatalf("unexpected series: %+v", got.Series)
+	}
+}
+
+type fakePostViewCache struct {
+	store map[string]any
+}
+
+func (f *fakePostViewCache) BuildKey(parts ...string) string {
+	return strings.Join(parts, ":")
+}
+
+func (f *fakePostViewCache) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
+	v, ok := f.store[key]
+	if !ok {
+		return false, nil
+	}
+	*dest.(*bool) = v.(bool)
+	return true, nil
+}
+
+func (f *fakePostViewCache) SetJSONWithTTL(ctx context.Context, key string, value any, ttl time.Duration) error {
+	f.store[key] = value
+	return nil
+}
+
+func TestPostViewService_RecordView_CachesViewedMarker(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	creates := 0
+	viewRepo := &mockPostViewRepo{
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return false, nil },
+		createViewFn: func(ctx context.Context, view *model.PostView) error {
+			creates++
+			return nil
+		},
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+		t.Fatalf("first RecordView: %v", err)
+	}
+	if creates != 1 {
+		t.Fatalf("expected 1 view created, got %d", creates)
+	}
+
+	// Second view must be answered from the cache without touching the DB.
+	viewRepo.hasUserViewedPostFn = nil
+	viewRepo.createViewFn = nil
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+		t.Fatalf("second RecordView: %v", err)
+	}
+}
+
+func TestPostViewService_RecordView_MarksAlreadyViewedFromDB(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	viewRepo := &mockPostViewRepo{
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return true, nil },
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+		t.Fatalf("RecordView: %v", err)
+	}
+	if _, ok := cache.store[cache.BuildKey("post_view", "post-1", "user-1")]; !ok {
+		t.Fatal("expected viewed marker to be cached after DB hit")
 	}
 }

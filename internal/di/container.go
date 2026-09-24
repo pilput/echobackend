@@ -82,7 +82,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	authService := service.NewAuthService(authRepo, userRepo, sessionRepo, passwordResetTokenRepo, authActivityService, cfg, redisCache, emailService)
 	notificationService := service.NewNotificationService(notificationRepo)
 	commentService := service.NewCommentService(commentRepo, postRepo, notificationService)
-	postViewService := service.NewPostViewService(postViewRepo, postRepo, postLikeRepo)
+	postViewService := service.NewPostViewService(postViewRepo, postRepo, postLikeRepo, redisCache)
 	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
 	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterClient, cfg)
