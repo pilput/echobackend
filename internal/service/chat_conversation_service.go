@@ -435,15 +435,15 @@ func normalizeSpace(s string) string {
 }
 
 // truncateRunes memotong string per rune (aman untuk UTF-8).
-func truncateRunes(s string, max int) string {
-	if max <= 0 {
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 {
 		return ""
 	}
 	runes := []rune(s)
-	if len(runes) <= max {
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return string(runes[:max])
+	return string(runes[:maxRunes])
 }
 
 // firstSentence mengambil baris pertama, lalu potong di akhir kalimat
