@@ -28,3 +28,7 @@ bin/
 coverage/
 
 .codex
+
+# AI agent local config
+.claude/
+.kilo/

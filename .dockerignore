@@ -14,4 +14,9 @@ fly.toml
 /tmp
 /test
 /scripts
-migrations
+migrations.github
+.claude
+.kilo
+.env
+docs
+coverage.out
