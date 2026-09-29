@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o bin/main cmd/main.go
 # --- Final Stage ---
 FROM alpine:3.24
 
-# Install CA certificates for TLS connections (S3, Valkey, external APIs)
+# Install CA certificates for TLS connections (S3, Redis, external APIs)
 # and wget for the Docker HEALTHCHECK below.
 RUN apk add --no-cache ca-certificates wget
 
