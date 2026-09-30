@@ -39,7 +39,8 @@ func (s *bookmarkService) ToggleBookmark(ctx context.Context, postID, userID str
 		return nil, err
 	}
 
-	if _, err := s.postRepo.GetPostByID(ctx, postID); err != nil {
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -51,6 +52,12 @@ func (s *bookmarkService) ToggleBookmark(ctx context.Context, postID, userID str
 		return &dto.ToggleBookmarkResponse{Action: "removed"}, nil
 	}
 	if !errors.Is(err, apperrors.ErrBookmarkNotFound) {
+		return nil, err
+	}
+
+	// Removing an existing bookmark above is always allowed; only adding a new
+	// one to a hidden post is refused.
+	if err := ensurePostInteractable(post); err != nil {
 		return nil, err
 	}
 

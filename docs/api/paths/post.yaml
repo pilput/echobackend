@@ -811,3 +811,214 @@ postsByIdLiked:
       '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '500': {$ref: ../responses.yaml#/ServerError}
+postsStats:
+  get:
+    tags: [Posts]
+    summary: Post statistics (admin)
+    operationId: getPostStats
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    - name: limit
+      in: query
+      description: Size of the `topPosts` list.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    - name: tagId
+      in: query
+      description: Restrict the statistics to posts carrying this tag.
+      schema: {type: integer}
+    responses:
+      '200':
+        description: Post statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/PostStatsResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsStatsEngagement:
+  get:
+    tags: [Posts]
+    summary: Engagement metrics (admin)
+    operationId: getPostEngagementStats
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    responses:
+      '200':
+        description: Engagement metrics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/EngagementMetricsResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsReports:
+  get:
+    tags: [Post reports]
+    summary: Reported posts, grouped per post (admin)
+    description: |
+      The moderation queue. Each row is a post with its reports in the requested
+      `status` collapsed into a count, ordered by most reports first.
+    operationId: listReportedPosts
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/ReportStatusQuery}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Reported posts.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/PostReportGroup}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdReports:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  post:
+    tags: [Post reports]
+    summary: Report a post
+    description: |
+      One pending report per user per post: reporting again while your earlier report
+      is still pending is accepted and ignored, and the response is identical either
+      way (once a moderator has closed it you can report the post again). Reporting
+      your own post returns 400; a hidden post is reported as 404. Limited to 10
+      requests per hour per client IP.
+    operationId: reportPost
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/CreatePostReportRequest}
+    responses:
+      '201':
+        description: Report accepted.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400':
+        description: Invalid post ID, or the post belongs to the caller.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  get:
+    tags: [Post reports]
+    summary: Individual reports of a post (admin)
+    operationId: listPostReports
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/ReportStatusQuery}
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Reports of the post.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/PostReportResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsByIdModeration:
+  parameters:
+  - {$ref: ../parameters.yaml#/PostIdPath}
+  post:
+    tags: [Post reports]
+    summary: Apply a moderation decision to a post (admin)
+    description: |
+      Every decision is written to the audit log (see `GET` on this path).
+      - `hide` hides the post from public pages and resolves all its pending reports.
+        Works without any report, so admins can act proactively. 409 if already hidden.
+      - `unhide` makes a hidden post visible again. Earlier reports stay resolved.
+        409 if the post is not hidden.
+      - `dismiss` closes the pending reports without touching the post. 409 when the
+        post has no pending reports.
+    operationId: moderatePost
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/post.yaml#/ModeratePostRequest}
+    responses:
+      '200':
+        description: Decision applied.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '409': {$ref: ../responses.yaml#/Conflict}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
+  get:
+    tags: [Post reports]
+    summary: Moderation history of a post (admin)
+    operationId: listPostModerationActions
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/Limit100}
+    - {$ref: ../parameters.yaml#/Offset}
+    responses:
+      '200':
+        description: Audit log, newest first.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/post.yaml#/ModerationActionResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}

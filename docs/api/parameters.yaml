@@ -70,3 +70,8 @@ GuildMessageIdPath:
   required: true
   description: Message ID (UUID). Must belong to the channel in the path.
   schema: {type: string, format: uuid}
+ReportStatusQuery:
+  name: status
+  in: query
+  description: Report status filter. Defaults to `pending` on the moderation queue.
+  schema: {type: string, enum: [pending, resolved, dismissed]}

@@ -40,9 +40,12 @@ func (s *postLikeService) LikePost(ctx context.Context, postID, userID string) e
 		return err
 	}
 
-	_, err := s.postRepo.GetPostByID(ctx, postID)
+	post, err := s.postRepo.GetPostByID(ctx, postID)
 	if err != nil {
 		return fmt.Errorf("failed to check post existence: %w", err)
+	}
+	if err := ensurePostInteractable(post); err != nil {
+		return err
 	}
 
 	hasLiked, err := s.postLikeRepo.HasUserLikedPost(ctx, postID, userID)

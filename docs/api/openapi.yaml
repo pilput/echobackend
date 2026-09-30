@@ -60,19 +60,19 @@ servers:
 tags:
 - {name: Health, description: Liveness and readiness probes.}
 - {name: Auth, description: 'Registration, login, OAuth, tokens, password management, activity logs.'}
-- {name: Users, description: 'Profiles, admin user management, avatars.'}
+- {name: Users, description: 'Profiles, admin user management, avatars, admin statistics.'}
 - {name: Follow, description: Follow/unfollow and social statistics.}
-- {name: Posts, description: 'Post CRUD, feeds, analytics, image upload, sitemap.'}
+- {name: Posts, description: 'Post CRUD, feeds, analytics, image upload, sitemap, admin statistics.'}
 - {name: Comments, description: Comments on posts.}
 - {name: Post views, description: View recording and statistics.}
 - {name: Post likes, description: Likes and like statistics.}
-- {name: Tags, description: Tag management.}
+- {name: Post reports, description: 'User reports of posts, the admin moderation queue, and the moderation audit log.'}
+- {name: Tags, description: Tag management and admin statistics.}
 - {name: Chat, description: 'Chat conversations, messages and SSE streaming.'}
 - {name: Holdings, description: Investment portfolio records per user per month/year.}
 - {name: Exchange rates, description: Currency exchange rates.}
 - {name: Bookmarks, description: Post bookmarks and folders.}
 - {name: Notifications, description: In-app notifications.}
-- {name: Reports, description: Admin statistics dashboard.}
 - {name: Guilds, description: 'Guild directory, membership and roles.'}
 - {name: Guild chat, description: 'Discord-style text channels inside a guild, their messages and the realtime SSE event stream.'}
 paths:
@@ -135,6 +135,7 @@ paths:
   /api/auth/oauth/github/callback: {$ref: ./paths/auth.yaml#/authOauthGithubCallback}
   /api/auth/oauth/exchange: {$ref: ./paths/auth.yaml#/authOauthExchange}
   /api/users: {$ref: ./paths/user.yaml#/users}
+  /api/users/stats: {$ref: ./paths/user.yaml#/usersStats}
   /api/users/me: {$ref: ./paths/user.yaml#/usersMe}
   /api/users/me/image: {$ref: ./paths/user.yaml#/usersMeImage}
   /api/users/username/{username}: {$ref: ./paths/user.yaml#/usersUsernameByUsername}
@@ -148,6 +149,9 @@ paths:
   /api/users/{id}/following: {$ref: ./paths/user.yaml#/usersByIdFollowing}
   /api/users/{id}/follow-stats: {$ref: ./paths/user.yaml#/usersByIdFollowStats}
   /api/posts: {$ref: ./paths/post.yaml#/posts}
+  /api/posts/stats: {$ref: ./paths/post.yaml#/postsStats}
+  /api/posts/stats/engagement: {$ref: ./paths/post.yaml#/postsStatsEngagement}
+  /api/posts/reports: {$ref: ./paths/post.yaml#/postsReports}
   /api/posts/random: {$ref: ./paths/post.yaml#/postsRandom}
   /api/posts/trending: {$ref: ./paths/post.yaml#/postsTrending}
   /api/posts/me: {$ref: ./paths/post.yaml#/postsMe}
@@ -167,11 +171,14 @@ paths:
   /api/posts/{id}/views: {$ref: ./paths/post.yaml#/postsByIdViews}
   /api/posts/{id}/view-stats: {$ref: ./paths/post.yaml#/postsByIdViewStats}
   /api/posts/{id}/viewed: {$ref: ./paths/post.yaml#/postsByIdViewed}
+  /api/posts/{id}/reports: {$ref: ./paths/post.yaml#/postsByIdReports}
+  /api/posts/{id}/moderation: {$ref: ./paths/post.yaml#/postsByIdModeration}
   /api/posts/{id}/like: {$ref: ./paths/post.yaml#/postsByIdLike}
   /api/posts/{id}/likes: {$ref: ./paths/post.yaml#/postsByIdLikes}
   /api/posts/{id}/like-stats: {$ref: ./paths/post.yaml#/postsByIdLikeStats}
   /api/posts/{id}/liked: {$ref: ./paths/post.yaml#/postsByIdLiked}
   /api/tags: {$ref: ./paths/tag.yaml#/tags}
+  /api/tags/stats: {$ref: ./paths/tag.yaml#/tagsStats}
   /api/tags/trending: {$ref: ./paths/tag.yaml#/tagsTrending}
   /api/tags/sitemap: {$ref: ./paths/tag.yaml#/tagsSitemap}
   /api/tags/{id}: {$ref: ./paths/tag.yaml#/tagsById}
@@ -201,10 +208,6 @@ paths:
   /api/holdings/{id}: {$ref: ./paths/holding.yaml#/holdingsById}
   /api/holding-types: {$ref: ./paths/holding.yaml#/holdingTypes}
   /api/exchange-rates: {$ref: ./paths/exchange-rate.yaml#/exchangeRates}
-  /api/reports/overview: {$ref: ./paths/report.yaml#/reportsOverview}
-  /api/reports/users: {$ref: ./paths/report.yaml#/reportsUsers}
-  /api/reports/posts: {$ref: ./paths/report.yaml#/reportsPosts}
-  /api/reports/engagement: {$ref: ./paths/report.yaml#/reportsEngagement}
   /api/guilds: {$ref: ./paths/guild.yaml#/guilds}
   /api/guilds/me: {$ref: ./paths/guild.yaml#/guildsMe}
   /api/guilds/{slug}: {$ref: ./paths/guild.yaml#/guildsBySlug}

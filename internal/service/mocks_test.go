@@ -16,12 +16,13 @@ import (
 )
 
 var (
-	_ repository.PostLikeRepository = (*mockPostLikeRepo)(nil)
-	_ repository.PostRepository     = (*mockPostRepo)(nil)
-	_ repository.PostViewRepository = (*mockPostViewRepo)(nil)
-	_ repository.UserRepository     = (*mockUserRepo)(nil)
-	_ repository.TagRepository      = (*mockTagRepo)(nil)
-	_ repository.HoldingRepository  = (*mockHoldingRepo)(nil)
+	_ repository.PostLikeRepository   = (*mockPostLikeRepo)(nil)
+	_ repository.PostRepository       = (*mockPostRepo)(nil)
+	_ repository.PostViewRepository   = (*mockPostViewRepo)(nil)
+	_ repository.UserRepository       = (*mockUserRepo)(nil)
+	_ repository.TagRepository        = (*mockTagRepo)(nil)
+	_ repository.HoldingRepository    = (*mockHoldingRepo)(nil)
+	_ repository.PostReportRepository = (*mockPostReportRepo)(nil)
 )
 
 // ---- PostLikeRepository mock --------------------------------------------------
@@ -617,4 +618,49 @@ func (m *mockHoldingRepo) FindStockSymbols(ctx context.Context, userID string) (
 		return m.findStockSymbolsFn(ctx, userID)
 	}
 	return nil, nil
+}
+
+// ---- PostReportRepository mock ------------------------------------------------
+
+type mockPostReportRepo struct {
+	createFn            func(ctx context.Context, report *model.PostReport) error
+	listGroupedByPostFn func(ctx context.Context, status string, limit, offset int) ([]dto.PostReportGroup, int64, error)
+	listByPostFn        func(ctx context.Context, postID, status string, limit, offset int) ([]*model.PostReport, int64, error)
+	moderateFn          func(ctx context.Context, postID, adminID, action string, note *string) error
+	listActionsByPostFn func(ctx context.Context, postID string, limit, offset int) ([]*model.PostModerationAction, int64, error)
+}
+
+func (m *mockPostReportRepo) Create(ctx context.Context, report *model.PostReport) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, report)
+	}
+	panic("Create not stubbed")
+}
+
+func (m *mockPostReportRepo) ListGroupedByPost(ctx context.Context, status string, limit, offset int) ([]dto.PostReportGroup, int64, error) {
+	if m.listGroupedByPostFn != nil {
+		return m.listGroupedByPostFn(ctx, status, limit, offset)
+	}
+	panic("ListGroupedByPost not stubbed")
+}
+
+func (m *mockPostReportRepo) ListByPost(ctx context.Context, postID, status string, limit, offset int) ([]*model.PostReport, int64, error) {
+	if m.listByPostFn != nil {
+		return m.listByPostFn(ctx, postID, status, limit, offset)
+	}
+	panic("ListByPost not stubbed")
+}
+
+func (m *mockPostReportRepo) Moderate(ctx context.Context, postID, adminID, action string, note *string) error {
+	if m.moderateFn != nil {
+		return m.moderateFn(ctx, postID, adminID, action, note)
+	}
+	panic("Moderate not stubbed")
+}
+
+func (m *mockPostReportRepo) ListActionsByPost(ctx context.Context, postID string, limit, offset int) ([]*model.PostModerationAction, int64, error) {
+	if m.listActionsByPostFn != nil {
+		return m.listActionsByPostFn(ctx, postID, limit, offset)
+	}
+	panic("ListActionsByPost not stubbed")
 }

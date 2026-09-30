@@ -13,6 +13,7 @@ func (r *Routes) setupUserRoutes(api *echo.Group) {
 		{
 			authUsers.GET("/me", r.userHandler.GetMe)
 			authUsers.POST("/me/image", r.userHandler.UploadAvatar)
+			authUsers.GET("/stats", r.userStatsHandler.GetStats, r.authMiddleware.AuthAdmin())
 			authUsers.GET("", r.userHandler.GetUsers, r.authMiddleware.AuthAdmin())
 			authUsers.POST("", r.userHandler.CreateUser, r.authMiddleware.AuthAdmin())
 			authUsers.GET("/:id", r.userHandler.GetByID, r.authMiddleware.AuthAdmin())

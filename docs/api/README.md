@@ -19,7 +19,6 @@ docs/api/
 │   ├── notification.yaml
 │   ├── holding.yaml      # includes holding-types and the corporate-actions calendar
 │   ├── exchange-rate.yaml
-│   ├── report.yaml
 │   ├── guild.yaml
 │   └── guild-channel.yaml  # channels, messages, SSE event stream
 └── schemas/              # one file per module — request/response schemas
@@ -33,7 +32,6 @@ docs/api/
     ├── notification.yaml
     ├── holding.yaml
     ├── exchange-rate.yaml
-    ├── report.yaml
     ├── guild.yaml
     └── guild-channel.yaml
 ```

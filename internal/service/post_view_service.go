@@ -72,8 +72,12 @@ func (s *postViewService) RecordView(ctx context.Context, postID, userID string,
 		}
 	}
 
-	if _, err := s.postRepo.GetPostByID(ctx, postID); err != nil {
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
 		return fmt.Errorf("failed to verify post existence: %w", err)
+	}
+	if err := ensurePostInteractable(post); err != nil {
+		return err
 	}
 
 	if userID != "" {

@@ -163,3 +163,36 @@ UserFollowStats:
     user_id: {type: string, format: uuid}
     followers_count: {type: integer, format: int64}
     following_count: {type: integer, format: int64}
+TopContributor:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    username:
+      type: [string, 'null']
+    firstName:
+      type: [string, 'null']
+    lastName:
+      type: [string, 'null']
+    postCount: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+UserGrowthData:
+  type: object
+  properties:
+    date: {type: string, format: date}
+    newUsers: {type: integer, format: int64}
+    cumulativeUsers: {type: integer, format: int64}
+UserStatsResponse:
+  type: object
+  properties:
+    totalUsers: {type: integer, format: int64}
+    newUsersThisPeriod: {type: integer, format: int64}
+    activeUsers: {type: integer, format: int64}
+    newUsersToday: {type: integer, format: int64}
+    activeUsersThisWeek: {type: integer, format: int64}
+    topContributors:
+      type: array
+      items: {$ref: '#/TopContributor'}
+    growthTrend:
+      type: array
+      items: {$ref: '#/UserGrowthData'}

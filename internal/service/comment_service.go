@@ -37,6 +37,9 @@ func (s *commentService) CreateComment(ctx context.Context, postID string, req *
 	if err != nil {
 		return nil, apperrors.ErrPostNotFound
 	}
+	if err := ensurePostInteractable(post); err != nil {
+		return nil, err
+	}
 
 	comment := &model.PostComment{
 		PostID:    postID,
@@ -73,9 +76,12 @@ func (s *commentService) CreateComment(ctx context.Context, postID string, req *
 }
 
 func (s *commentService) GetCommentsByPostID(ctx context.Context, postID string) ([]*dto.CommentResponse, error) {
-	_, err := s.postRepo.GetPostByID(ctx, postID)
+	post, err := s.postRepo.GetPostByID(ctx, postID)
 	if err != nil {
 		return nil, apperrors.ErrPostNotFound
+	}
+	if err := ensurePostInteractable(post); err != nil {
+		return nil, err
 	}
 
 	comments, err := s.commentRepo.GetCommentsByPostID(ctx, postID)

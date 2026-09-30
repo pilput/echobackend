@@ -45,6 +45,10 @@ PostResponse:
     published_at:
       type: [string, 'null']
       format: date-time
+    hidden_at:
+      type: ['string', 'null']
+      format: date-time
+      description: Set only when a moderator hid the post; visible to the author and admins only.
     user:
       anyOf:
       - {$ref: ./user.yaml#/UserBrief}
@@ -200,3 +204,118 @@ PostLikeStats:
   properties:
     post_id: {type: string, format: uuid}
     total_likes: {type: integer, format: int64}
+PostPerformanceData:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    title:
+      type: [string, 'null']
+    slug:
+      type: [string, 'null']
+    views: {type: integer, format: int64}
+    likes: {type: integer, format: int64}
+    comments: {type: integer, format: int64}
+    engagementRate: {type: number}
+    author:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        username:
+          type: [string, 'null']
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+    createdAt:
+      type: [string, 'null']
+      format: date-time
+PostStatsResponse:
+  type: object
+  properties:
+    totalPosts: {type: integer, format: int64}
+    newPostsThisPeriod: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}
+    totalComments: {type: integer, format: int64}
+    newPostsToday: {type: integer, format: int64}
+    avgEngagementRate: {type: number}
+    topPosts:
+      type: array
+      items: {$ref: '#/PostPerformanceData'}
+EngagementMetricsResponse:
+  type: object
+  properties:
+    totalEngagements: {type: integer, format: int64}
+    avgLikesPerPost: {type: number}
+    avgCommentsPerPost: {type: number}
+    avgViewsPerPost: {type: number}
+    periodComparison:
+      type: object
+      properties:
+        current: {type: integer, format: int64}
+        previous: {type: integer, format: int64}
+        changePercent: {type: number}
+CreatePostReportRequest:
+  type: object
+  required: [reason]
+  properties:
+    reason: {type: string, enum: [spam, harassment, hate, nsfw, misinformation, other]}
+    details:
+      type: [string, 'null']
+      maxLength: 1000
+PostReportGroup:
+  type: object
+  properties:
+    post_id: {type: string, format: uuid}
+    post_title:
+      type: [string, 'null']
+    post_slug:
+      type: [string, 'null']
+    author_username:
+      type: [string, 'null']
+    hidden_at:
+      type: [string, 'null']
+      format: date-time
+    report_count: {type: integer, format: int64}
+    top_reason: {type: string, description: Most frequent reason among the reports.}
+    last_reported_at: {type: string, format: date-time}
+ModeratePostRequest:
+  type: object
+  required: [action]
+  properties:
+    action: {type: string, enum: [hide, unhide, dismiss]}
+    note:
+      type: [string, 'null']
+      maxLength: 1000
+ModerationActionResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id:
+      type: [string, 'null']
+      format: uuid
+    action: {type: string, enum: [hide, unhide, dismiss]}
+    note:
+      type: [string, 'null']
+    created_at: {type: string, format: date-time}
+    admin:
+      anyOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+PostReportResponse:
+  type: object
+  properties:
+    id: {type: string, format: uuid}
+    post_id: {type: string, format: uuid}
+    reason: {type: string}
+    details:
+      type: [string, 'null']
+    status: {type: string, enum: [pending, resolved, dismissed]}
+    created_at: {type: string, format: date-time}
+    reporter:
+      anyOf:
+      - {$ref: ./user.yaml#/UserBrief}
+      - {type: 'null'}
+    resolution:
+      description: The admin decision that closed this report; absent while pending.
+      $ref: '#/ModerationActionResponse'

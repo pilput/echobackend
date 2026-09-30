@@ -151,3 +151,31 @@ tagsById:
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
       '500': {$ref: ../responses.yaml#/ServerError}
+tagsStats:
+  get:
+    tags: [Tags]
+    summary: Tag performance statistics (admin)
+    operationId: getTagStats
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: limit
+      in: query
+      description: Number of tags returned, ranked by post count.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    responses:
+      '200':
+        description: Tag performance statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: ../schemas/tag.yaml#/TagPerformance}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}

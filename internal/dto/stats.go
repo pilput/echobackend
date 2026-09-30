@@ -5,17 +5,6 @@ type DateRangeQuery struct {
 	EndDate   string
 }
 
-type OverviewStatsResponse struct {
-	TotalUsers          int64 `json:"totalUsers"`
-	TotalPosts          int64 `json:"totalPosts"`
-	TotalViews          int64 `json:"totalViews"`
-	TotalLikes          int64 `json:"totalLikes"`
-	TotalComments       int64 `json:"totalComments"`
-	NewUsersToday       int64 `json:"newUsersToday"`
-	NewPostsToday       int64 `json:"newPostsToday"`
-	ActiveUsersThisWeek int64 `json:"activeUsersThisWeek"`
-}
-
 type UserGrowthData struct {
 	Date            string `json:"date"`
 	NewUsers        int64  `json:"newUsers"`
@@ -32,12 +21,14 @@ type TopContributor struct {
 	TotalLikes int64   `json:"totalLikes"`
 }
 
-type UserReportResponse struct {
-	TotalUsers         int64            `json:"totalUsers"`
-	NewUsersThisPeriod int64            `json:"newUsersThisPeriod"`
-	ActiveUsers        int64            `json:"activeUsers"`
-	TopContributors    []TopContributor `json:"topContributors"`
-	GrowthTrend        []UserGrowthData `json:"growthTrend"`
+type UserStatsResponse struct {
+	TotalUsers          int64            `json:"totalUsers"`
+	NewUsersThisPeriod  int64            `json:"newUsersThisPeriod"`
+	ActiveUsers         int64            `json:"activeUsers"`
+	NewUsersToday       int64            `json:"newUsersToday"`
+	ActiveUsersThisWeek int64            `json:"activeUsersThisWeek"`
+	TopContributors     []TopContributor `json:"topContributors"`
+	GrowthTrend         []UserGrowthData `json:"growthTrend"`
 }
 
 type PostPerformanceAuthor struct {
@@ -67,15 +58,15 @@ type TagPerformance struct {
 	TotalLikes int64  `json:"totalLikes"`
 }
 
-type PostReportResponse struct {
+type PostStatsResponse struct {
 	TotalPosts         int64                 `json:"totalPosts"`
 	NewPostsThisPeriod int64                 `json:"newPostsThisPeriod"`
 	TotalViews         int64                 `json:"totalViews"`
 	TotalLikes         int64                 `json:"totalLikes"`
 	TotalComments      int64                 `json:"totalComments"`
+	NewPostsToday      int64                 `json:"newPostsToday"`
 	AvgEngagementRate  float64               `json:"avgEngagementRate"`
 	TopPosts           []PostPerformanceData `json:"topPosts"`
-	TagPerformance     []TagPerformance      `json:"tagPerformance"`
 }
 
 type PeriodComparison struct {

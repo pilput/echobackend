@@ -142,7 +142,7 @@ func (r *postRepository) GetPostByUsername(ctx context.Context, username string,
 
 	query := r.db.WithContext(ctx).Model(&model.Post{}).
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ?", username, true)
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ? AND posts.hidden_at IS NULL", username, true)
 
 	err := query.Count(&count).Error
 	if err != nil {
@@ -153,7 +153,7 @@ func (r *postRepository) GetPostByUsername(ctx context.Context, username string,
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ?", username, true).
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ? AND posts.hidden_at IS NULL", username, true).
 		Order("posts.created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -193,7 +193,7 @@ func (r *postRepository) GetPosts(ctx context.Context, limit int, offset int) ([
 	var count int64
 
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Count(&count).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
@@ -202,7 +202,7 @@ func (r *postRepository) GetPosts(ctx context.Context, limit int, offset int) ([
 	err = activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Order("posts.created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -220,7 +220,7 @@ func (r *postRepository) GetPostBySlugAndUsername(ctx context.Context, slug stri
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("posts.slug = ? AND posts.published = ? AND users.username = ? AND users.deleted_at IS NULL", slug, true, username).
+		Where("posts.slug = ? AND posts.published = ? AND posts.hidden_at IS NULL AND users.username = ? AND users.deleted_at IS NULL", slug, true, username).
 		First(&post).Error
 
 	if err != nil {
@@ -254,7 +254,7 @@ func (r *postRepository) GetPostsRandom(ctx context.Context, limit int) ([]*mode
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Order("RANDOM()").
 		Limit(limit).
 		Find(&randomPosts).Error
@@ -271,7 +271,7 @@ func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*mo
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Order("posts.like_count * 2 + posts.bookmark_count * 2 + posts.view_count DESC").
 		Limit(limit).
 		Find(&posts).Error
@@ -330,7 +330,7 @@ func (r *postRepository) GetPostsForYou(ctx context.Context, userID string, offs
 		Where("follower_id = ?", userID)
 
 	base := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Where("posts.created_by = ? OR posts.created_by IN (?)", userID, followingIDs)
 
 	if err := base.Count(&count).Error; err != nil {
@@ -340,7 +340,7 @@ func (r *postRepository) GetPostsForYou(ctx context.Context, userID string, offs
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Where("posts.created_by = ? OR posts.created_by IN (?)", userID, followingIDs).
 		Order("posts.created_at DESC").
 		Offset(offset).
@@ -359,7 +359,7 @@ func (r *postRepository) SearchPosts(ctx context.Context, keyword string, limit 
 	likePattern := "%" + keyword + "%"
 
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
-		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ?", likePattern, likePattern, true).
+		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ? AND posts.hidden_at IS NULL", likePattern, likePattern, true).
 		Count(&count).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count posts for search: %w", err)
@@ -368,7 +368,7 @@ func (r *postRepository) SearchPosts(ctx context.Context, keyword string, limit 
 	err = activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
-		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ?", likePattern, likePattern, true).
+		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ? AND posts.hidden_at IS NULL", likePattern, likePattern, true).
 		Order("posts.created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -387,7 +387,7 @@ func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit in
 		Joins("JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
 		Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
 		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
-		Where("tags.name = ? AND posts.published = ?", tag, true)
+		Where("tags.name = ? AND posts.published = ? AND posts.hidden_at IS NULL", tag, true)
 
 	err := query.Count(&count).Error
 	if err != nil {
@@ -400,7 +400,7 @@ func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit in
 		Joins("JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
 		Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
 		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
-		Where("tags.name = ? AND posts.published = ?", tag, true).
+		Where("tags.name = ? AND posts.published = ? AND posts.hidden_at IS NULL", tag, true).
 		Order("posts.created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -430,7 +430,7 @@ func (r *postRepository) applyPostFilters(db *gorm.DB, filter *dto.PostQueryFilt
 
 	// GetPostsFiltered backs a public endpoint, so drafts are never listed.
 	// Authors see their own drafts through GetPostsByCreatedBy (/posts/me).
-	q = q.Where("posts.published = ?", true)
+	q = q.Where("posts.published = ? AND posts.hidden_at IS NULL", true)
 
 	if filter.StartDate != "" {
 		q = q.Where("posts.created_at >= ?", filter.StartDate)
@@ -489,7 +489,7 @@ func (r *postRepository) GetPostsForSitemap(ctx context.Context, limit int) ([]*
 		Table("posts").
 		Select("users.username, posts.slug, posts.created_at, posts.updated_at").
 		Joins("JOIN users ON users.id = posts.created_by").
-		Where("posts.published = ? AND users.deleted_at IS NULL", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL AND users.deleted_at IS NULL", true).
 		Order("posts.created_at DESC").
 		Limit(limit).
 		Find(&sitemapPosts).Error

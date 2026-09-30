@@ -78,7 +78,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	notificationRepo := repository.NewNotificationRepository(db)
 	authActivityLogRepo := repository.NewAuthActivityLogRepository(db)
 	passwordResetTokenRepo := repository.NewPasswordResetTokenRepository(db)
-	reportRepo := repository.NewReportRepository(db)
+	userStatsRepo := repository.NewUserStatsRepository(db)
+	postStatsRepo := repository.NewPostStatsRepository(db)
+	tagStatsRepo := repository.NewTagStatsRepository(db)
+	postReportRepo := repository.NewPostReportRepository(db)
 	corporateActionRepo := repository.NewCorporateActionRepository(db)
 	guildRepo := repository.NewGuildRepository(db)
 	guildChannelRepo := repository.NewGuildChannelRepository(db)
@@ -103,7 +106,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	holdingService := service.NewHoldingService(holdingRepo, quoteClient, redisCache)
 	exchangeRateService := service.NewExchangeRateService(quoteClient, redisCache)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
-	reportService := service.NewReportService(reportRepo)
+	userStatsService := service.NewUserStatsService(userStatsRepo)
+	postStatsService := service.NewPostStatsService(postStatsRepo)
+	tagStatsService := service.NewTagStatsService(tagStatsRepo)
+	postReportService := service.NewPostReportService(postReportRepo, postRepo)
 	guildService := service.NewGuildService(guildRepo)
 	guildChannelService := service.NewGuildChannelService(guildChannelRepo, hub)
 
@@ -124,7 +130,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	exchangeRateHandler := handler.NewExchangeRateHandler(exchangeRateService)
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
-	reportHandler := handler.NewReportHandler(reportService)
+	userStatsHandler := handler.NewUserStatsHandler(userStatsService)
+	postStatsHandler := handler.NewPostStatsHandler(postStatsService)
+	tagStatsHandler := handler.NewTagStatsHandler(tagStatsService)
+	postReportHandler := handler.NewPostReportHandler(postReportService)
 	corporateActionHandler := handler.NewCorporateActionHandler(corporateActionService)
 	guildHandler := handler.NewGuildHandler(guildService)
 	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
@@ -147,7 +156,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		exchangeRateHandler,
 		bookmarkHandler,
 		notificationHandler,
-		reportHandler,
+		userStatsHandler,
+		postStatsHandler,
+		tagStatsHandler,
+		postReportHandler,
 		corporateActionHandler,
 		guildHandler,
 		guildChannelHandler,

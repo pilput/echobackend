@@ -461,3 +461,31 @@ usersByIdFollowStats:
                 properties:
                   data: {$ref: ../schemas/user.yaml#/UserFollowStats}
       '500': {$ref: ../responses.yaml#/ServerError}
+usersStats:
+  get:
+    tags: [Users]
+    summary: User statistics (admin)
+    operationId: getUserStats
+    security:
+    - bearerAuth: []
+    parameters:
+    - {$ref: ../parameters.yaml#/StartDateQuery}
+    - {$ref: ../parameters.yaml#/EndDateQuery}
+    - name: limit
+      in: query
+      description: Size of the `topContributors` list.
+      schema: {type: integer, default: 10, minimum: 1, maximum: 100}
+    responses:
+      '200':
+        description: User statistics.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/user.yaml#/UserStatsResponse}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}

@@ -1,14 +1,22 @@
 package routes
 
 import (
+	"time"
+
+	appmiddleware "echobackend/internal/middleware"
+
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 )
 
 func (r *Routes) setupPostRoutes(api *echo.Group) {
 	posts := api.Group("/posts")
+	reportRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "posts:report", 10, time.Hour)
 	{
 		posts.POST("", r.postHandler.CreatePost, r.authMiddleware.Auth())
+		posts.GET("/stats", r.postStatsHandler.GetStats, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		posts.GET("/stats/engagement", r.postStatsHandler.GetEngagement, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		posts.GET("/reports", r.postReportHandler.ListReportedPosts, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/random", r.postHandler.GetPostsRandom)
 		posts.GET("/trending", r.postHandler.GetPostsTrending)
 		posts.GET("/me", r.postHandler.GetMyPosts, r.authMiddleware.Auth())
@@ -27,6 +35,12 @@ func (r *Routes) setupPostRoutes(api *echo.Group) {
 		posts.PUT("/:id", r.postHandler.UpdatePost, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.DELETE("/:id", r.postHandler.DeletePost, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/:id", r.postHandler.GetPost, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+
+		// Report and moderation routes
+		posts.POST("/:id/reports", r.postReportHandler.ReportPost, r.authMiddleware.Auth(), reportRateLimit)
+		posts.GET("/:id/reports", r.postReportHandler.ListPostReports, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		posts.POST("/:id/moderation", r.postReportHandler.ModeratePost, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		posts.GET("/:id/moderation", r.postReportHandler.ListModerationActions, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 
 		// Comment routes
 		posts.GET("/:id/comments", r.commentHandler.GetCommentsByPostID)

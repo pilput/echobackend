@@ -29,3 +29,11 @@ SitemapTag:
     created_at:
       type: [string, 'null']
       format: date-time
+TagPerformance:
+  type: object
+  properties:
+    id: {type: integer}
+    name: {type: string}
+    postCount: {type: integer, format: int64}
+    totalViews: {type: integer, format: int64}
+    totalLikes: {type: integer, format: int64}

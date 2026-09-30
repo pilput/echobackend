@@ -100,7 +100,11 @@ func (r *bookmarkRepository) GetBookmarksByUser(ctx context.Context, userID stri
 	var bookmarks []*model.PostBookmark
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&model.PostBookmark{}).Where("user_id = ?", userID)
+	// Bookmarks of posts a moderator has hidden stay in the table (they reappear
+	// if the post is unhidden) but are left out of the list.
+	query := r.db.WithContext(ctx).Model(&model.PostBookmark{}).
+		Where("user_id = ?", userID).
+		Where("post_id NOT IN (SELECT id FROM posts WHERE hidden_at IS NOT NULL)")
 	if folderID != nil {
 		if *folderID == "" {
 			query = query.Where("folder_id IS NULL")

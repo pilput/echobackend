@@ -27,6 +27,12 @@ var (
 	ErrInvalidPostID   = errors.New("invalid post ID format")
 	ErrEmptyPostID     = errors.New("post ID cannot be empty")
 
+	ErrCannotReportOwnPost = errors.New("cannot report your own post")
+	ErrNoPendingReports    = errors.New("post has no pending reports")
+	ErrInvalidReportStatus = errors.New("invalid report status")
+	ErrPostAlreadyHidden   = errors.New("post is already hidden")
+	ErrPostNotHidden       = errors.New("post is not hidden")
+
 	ErrDateRangeTooLarge = errors.New("date range must not exceed 366 days")
 
 	ErrTagNotFound     = errors.New("tag not found")

@@ -130,7 +130,7 @@ func (r *tagRepository) GetTrendingTags(ctx context.Context, limit int) ([]*dto.
 		Joins("INNER JOIN posts_to_tags ON posts_to_tags.tag_id = tags.id").
 		Joins("INNER JOIN posts ON posts.id = posts_to_tags.post_id").
 		Joins("INNER JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Group("tags.id, tags.name").
 		Order("trending_score DESC, COUNT(posts_to_tags.post_id) DESC, tags.name ASC").
 		Limit(limit).
@@ -153,7 +153,7 @@ func (r *tagRepository) GetTagsForSitemap(ctx context.Context, limit int) ([]*dt
 		// Mirrors GetPostsForSitemap: a tag whose only posts belong to deleted
 		// authors must not reach the sitemap either.
 		Joins("INNER JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
-		Where("posts.published = ?", true).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Group("tags.id, tags.name, tags.created_at").
 		Order("tags.name ASC").
 		Limit(limit).

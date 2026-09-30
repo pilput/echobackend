@@ -26,7 +26,10 @@ type Routes struct {
 	exchangeRateHandler     *handler.ExchangeRateHandler
 	bookmarkHandler         *handler.BookmarkHandler
 	notificationHandler     *handler.NotificationHandler
-	reportHandler           *handler.ReportHandler
+	userStatsHandler        *handler.UserStatsHandler
+	postStatsHandler        *handler.PostStatsHandler
+	tagStatsHandler         *handler.TagStatsHandler
+	postReportHandler       *handler.PostReportHandler
 	corporateActionHandler  *handler.CorporateActionHandler
 	guildHandler            *handler.GuildHandler
 	guildChannelHandler     *handler.GuildChannelHandler
@@ -49,7 +52,10 @@ func NewRoutes(
 	exchangeRateHandler *handler.ExchangeRateHandler,
 	bookmarkHandler *handler.BookmarkHandler,
 	notificationHandler *handler.NotificationHandler,
-	reportHandler *handler.ReportHandler,
+	userStatsHandler *handler.UserStatsHandler,
+	postStatsHandler *handler.PostStatsHandler,
+	tagStatsHandler *handler.TagStatsHandler,
+	postReportHandler *handler.PostReportHandler,
 	corporateActionHandler *handler.CorporateActionHandler,
 	guildHandler *handler.GuildHandler,
 	guildChannelHandler *handler.GuildChannelHandler,
@@ -71,7 +77,10 @@ func NewRoutes(
 		exchangeRateHandler:     exchangeRateHandler,
 		bookmarkHandler:         bookmarkHandler,
 		notificationHandler:     notificationHandler,
-		reportHandler:           reportHandler,
+		userStatsHandler:        userStatsHandler,
+		postStatsHandler:        postStatsHandler,
+		tagStatsHandler:         tagStatsHandler,
+		postReportHandler:       postReportHandler,
 		corporateActionHandler:  corporateActionHandler,
 		guildHandler:            guildHandler,
 		guildChannelHandler:     guildChannelHandler,
@@ -94,6 +103,5 @@ func (r *Routes) setupAPIRoutes(api *echo.Group) {
 	r.setupExchangeRateRoutes(api)
 	r.setupBookmarkRoutes(api)
 	r.setupNotificationRoutes(api)
-	r.setupReportRoutes(api)
 	r.setupGuildRoutes(api)
 }
