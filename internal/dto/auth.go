@@ -6,9 +6,11 @@ type LoginRequest struct {
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email,max=255"`
-	Username string `json:"username" validate:"required,min=3,max=30"`
-	Password string `json:"password" validate:"required,min=8,max=128"`
+	Email     string `json:"email" validate:"required,email,max=255"`
+	Username  string `json:"username" validate:"required,min=3,max=30"`
+	Password  string `json:"password" validate:"required,min=8,max=128"`
+	FirstName string `json:"first_name" validate:"required,min=1,max=100"`
+	LastName  string `json:"last_name" validate:"required,min=1,max=100"`
 }
 
 type ForgotPasswordRequest struct {

@@ -174,7 +174,7 @@ func TestAuthService_Register_UsesArgon2id(t *testing.T) {
 
 	svc := NewAuthService(authRepo, userRepo, &mockSessionRepo{}, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
 
-	u, err := svc.Register(context.Background(), "test@example.com", "testuser", "SecurePass123!")
+	u, err := svc.Register(context.Background(), "test@example.com", "testuser", "SecurePass123!", "Test", "User")
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestAuthService_Register_NormalizesEmail(t *testing.T) {
 	}
 
 	svc := NewAuthService(authRepo, &mockUserRepo{}, &mockSessionRepo{}, nil, &mockActivityService{}, testAuthConfig(), nil, nil)
-	if _, err := svc.Register(context.Background(), "  Test@Example.COM ", "testuser", "SecurePass123!"); err != nil {
+	if _, err := svc.Register(context.Background(), "  Test@Example.COM ", "testuser", "SecurePass123!", "Test", "User"); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 

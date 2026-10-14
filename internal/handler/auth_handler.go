@@ -49,7 +49,7 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 		return response.FromValidateError(c, err)
 	}
 
-	user, err := h.authService.Register(c.Request().Context(), req.Email, req.Username, req.Password)
+	user, err := h.authService.Register(c.Request().Context(), req.Email, req.Username, req.Password, req.FirstName, req.LastName)
 	if errors.Is(err, apperrors.ErrUserExists) {
 		return response.Conflict(c, "Registration failed", "Email or username already exists")
 	}
@@ -62,9 +62,11 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 	h.activityService.LogActivity(c.Request().Context(), &user.ID, model.ActivityRegister, model.StatusSuccess, ipAddress, userAgent, nil, nil)
 
 	return response.Created(c, "User registered successfully", map[string]any{
-		"id":       user.ID,
-		"email":    user.Email,
-		"username": user.Username,
+		"id":         user.ID,
+		"email":      user.Email,
+		"username":   user.Username,
+		"first_name": user.FirstName,
+		"last_name":  user.LastName,
 	})
 }
 

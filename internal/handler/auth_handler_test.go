@@ -33,7 +33,7 @@ type mockAuthService struct {
 	revokeAllSessionsFn  func(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 }
 
-func (m *mockAuthService) Register(ctx context.Context, email, username, password string) (*model.User, error) {
+func (m *mockAuthService) Register(ctx context.Context, email, username, password, firstName, lastName string) (*model.User, error) {
 	return nil, nil
 }
 

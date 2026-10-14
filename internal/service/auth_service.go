@@ -28,7 +28,7 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, email, username, password string) (*model.User, error)
+	Register(ctx context.Context, email, username, password, firstName, lastName string) (*model.User, error)
 	Login(ctx context.Context, identifier, password, ipAddress, userAgent string) (string, string, *model.User, error)
 	ForgotPassword(ctx context.Context, email, ipAddress, userAgent string) error
 	ResetPassword(ctx context.Context, token, password, ipAddress, userAgent string) error
@@ -127,7 +127,7 @@ func NewAuthService(
 	}
 }
 
-func (s *authService) Register(ctx context.Context, email, username, password string) (*model.User, error) {
+func (s *authService) Register(ctx context.Context, email, username, password, firstName, lastName string) (*model.User, error) {
 	email = normalizeEmail(email)
 	_, err := s.authRepo.FindUserByEmail(ctx, email)
 	if err == nil {
@@ -148,9 +148,11 @@ func (s *authService) Register(ctx context.Context, email, username, password st
 	}
 
 	newUser := &model.User{
-		Email:    email,
-		Username: &username,
-		Password: &hashedPassword,
+		Email:     email,
+		Username:  &username,
+		Password:  &hashedPassword,
+		FirstName: &firstName,
+		LastName:  &lastName,
 	}
 
 	if err := s.authRepo.CreateUser(ctx, newUser); err != nil {
