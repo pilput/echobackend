@@ -41,7 +41,7 @@ func (m *mockUserService) GetByUsername(ctx context.Context, username string) (*
 	return nil, nil
 }
 
-func (m *mockUserService) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*dto.UserResponse, int64, error) {
+func (m *mockUserService) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*dto.UserResponse, int64, error) {
 	return nil, 0, nil
 }
 

@@ -76,7 +76,10 @@ func (h *UserHandler) GetUsers(c *echo.Context) error {
 
 	limit, offset := ParsePaginationParams(c, 10)
 
-	users, total, err := h.userService.GetUsers(c.Request().Context(), offset, limit, deletedFilter)
+	orderBy := dto.ParseUserListOrder(c.QueryParam("order_by"))
+	orderDesc := dto.ParseUserOrderDesc(c.QueryParam("order_direction"))
+
+	users, total, err := h.userService.GetUsers(c.Request().Context(), offset, limit, deletedFilter, orderBy, orderDesc)
 	if err != nil {
 		return respondError(c, "Failed to retrieve users", err)
 	}

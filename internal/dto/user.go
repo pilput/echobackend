@@ -195,3 +195,26 @@ func ParseUserDeletedFilter(value string) (UserDeletedFilter, error) {
 		return "", errors.New("deleted must be true, false, or all")
 	}
 }
+
+type UserListOrder string
+
+const (
+	UserListOrderCreatedAt   UserListOrder = "created_at"
+	UserListOrderLastLogged  UserListOrder = "last_logged_at"
+	UserListOrderUsername    UserListOrder = "username"
+	UserListOrderEmail       UserListOrder = "email"
+	UserListOrderDefault     UserListOrder = UserListOrderCreatedAt
+)
+
+func ParseUserListOrder(value string) UserListOrder {
+	switch UserListOrder(value) {
+	case UserListOrderLastLogged, UserListOrderUsername, UserListOrderEmail:
+		return UserListOrder(value)
+	default:
+		return UserListOrderDefault
+	}
+}
+
+func ParseUserOrderDesc(value string) bool {
+	return value != "asc"
+}

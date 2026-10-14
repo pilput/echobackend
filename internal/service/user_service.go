@@ -16,7 +16,7 @@ import (
 
 type UserRepository interface {
 	GetByID(ctx context.Context, id string, deletedOnly bool) (*model.User, error)
-	GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*model.User, int64, error)
+	GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*model.User, int64, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	SoftDeleteByID(ctx context.Context, id string) error
@@ -31,7 +31,7 @@ type UserService interface {
 	GetAdminByID(ctx context.Context, id string, deletedOnly bool) (*dto.UserResponse, error)
 	GetMe(ctx context.Context, id string) (*dto.CurrentUserResponse, error)
 	GetByUsername(ctx context.Context, username string) (*dto.UserResponse, error)
-	GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*dto.UserResponse, int64, error)
+	GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*dto.UserResponse, int64, error)
 	Delete(ctx context.Context, id string) error
 	Restore(ctx context.Context, id string) (*dto.UserResponse, error)
 	UploadAvatar(ctx context.Context, userID string, file *multipart.FileHeader) (string, error)
@@ -85,8 +85,8 @@ func (s *userService) GetByUsername(ctx context.Context, username string) (*dto.
 	return dto.UserToResponse(user), nil
 }
 
-func (s *userService) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*dto.UserResponse, int64, error) {
-	users, total, err := s.userRepo.GetUsers(ctx, offset, limit, deletedFilter)
+func (s *userService) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*dto.UserResponse, int64, error) {
+	users, total, err := s.userRepo.GetUsers(ctx, offset, limit, deletedFilter, orderBy, orderDesc)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to retrieve users from repository: %w", err)
 	}

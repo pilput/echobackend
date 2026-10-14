@@ -321,7 +321,7 @@ func (m *mockPostViewRepo) CountViewsByAuthorBefore(ctx context.Context, userID,
 type mockUserRepo struct {
 	getByIDFn             func(ctx context.Context, id string, deletedOnly bool) (*model.User, error)
 	getByUsernameFn       func(ctx context.Context, username string) (*model.User, error)
-	getUsersFn            func(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*model.User, int64, error)
+	getUsersFn            func(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*model.User, int64, error)
 	softDeleteFn          func(ctx context.Context, id string) error
 	restoreByIDFn         func(ctx context.Context, id string) error
 	createFn              func(ctx context.Context, user *model.User) error
@@ -343,9 +343,9 @@ func (m *mockUserRepo) GetByID(ctx context.Context, id string, deletedOnly bool)
 	}
 	return nil, nil
 }
-func (m *mockUserRepo) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter) ([]*model.User, int64, error) {
+func (m *mockUserRepo) GetUsers(ctx context.Context, offset int, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*model.User, int64, error) {
 	if m.getUsersFn != nil {
-		return m.getUsersFn(ctx, offset, limit, deletedFilter)
+		return m.getUsersFn(ctx, offset, limit, deletedFilter, orderBy, orderDesc)
 	}
 	return nil, 0, nil
 }
