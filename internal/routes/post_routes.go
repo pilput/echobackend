@@ -12,8 +12,11 @@ import (
 func (r *Routes) setupPostRoutes(api *echo.Group) {
 	posts := api.Group("/posts")
 	reportRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "posts:report", 10, time.Hour)
+	// Creating posts is capped at the same 10/hour budget as reporting: cheap
+	// enough for legitimate authors, expensive enough to stop spam floods.
+	createPostRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "posts:create", 10, time.Hour)
 	{
-		posts.POST("", r.postHandler.CreatePost, r.authMiddleware.Auth())
+		posts.POST("", r.postHandler.CreatePost, r.authMiddleware.Auth(), createPostRateLimit)
 		posts.GET("/stats", r.postStatsHandler.GetStats, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/stats/engagement", r.postStatsHandler.GetEngagement, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/reports", r.postReportHandler.ListReportedPosts, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
+	"echobackend/pkg/antispam"
 
 	"gorm.io/gorm"
 )
@@ -268,10 +270,24 @@ func (r *postRepository) GetPostsRandom(ctx context.Context, limit int) ([]*mode
 func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*model.Post, error) {
 	var posts []*model.Post
 
+	// Promotional posts stay published and discoverable via search, tags and
+	// profiles — they just never trend. Comparison is case-insensitive so
+	// "Promo" and "PROMO" are treated the same as "promo".
+	lowerPromoTags := make([]string, 0, len(antispam.PromoTagNames))
+	for _, name := range antispam.PromoTagNames {
+		lowerPromoTags = append(lowerPromoTags, strings.ToLower(name))
+	}
+	promoPosts := r.db.Table("posts_to_tags").
+		Select("1").
+		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+		Where("posts_to_tags.post_id = posts.id").
+		Where("LOWER(tags.name) IN ?", lowerPromoTags)
+
 	err := activePostUserJoin(r.db.WithContext(ctx).Model(&model.Post{})).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
 		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Where("NOT EXISTS (?)", promoPosts).
 		Order("posts.like_count * 2 + posts.bookmark_count * 2 + posts.view_count DESC").
 		Limit(limit).
 		Find(&posts).Error

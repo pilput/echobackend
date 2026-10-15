@@ -29,6 +29,8 @@ func (h *PostHandler) respondPostError(c *echo.Context, message string, err erro
 	switch {
 	case errors.Is(err, apperrors.ErrPostNotFound):
 		return response.NotFound(c, message, err)
+	case errors.Is(err, apperrors.ErrPostSpamRejected):
+		return response.ValidationError(c, "Post rejected by anti-spam policy", err)
 	case errors.Is(err, apperrors.ErrNotAuthor), errors.Is(err, apperrors.ErrPostNotOwned):
 		return response.Forbidden(c, message)
 	case errors.Is(err, apperrors.ErrFileNil), errors.Is(err, apperrors.ErrFileTooLarge), errors.Is(err, apperrors.ErrInvalidFileType), errors.Is(err, apperrors.ErrStorageUnavailable):
