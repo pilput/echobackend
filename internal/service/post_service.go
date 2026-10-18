@@ -106,7 +106,7 @@ func (s *postService) CreatePost(ctx context.Context, req *dto.CreatePostRequest
 	// Proactive spam guard: marketing spam is rejected with a 422 that tells
 	// the author the rule, instead of polluting feeds until someone reports it.
 	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
-		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
+		return nil, apperrors.NewSpamRejection(apperrors.ErrPostSpamRejected, reason)
 	}
 
 	var tags []model.Tag
@@ -162,7 +162,7 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 	// Same guard as creation; only the submitted fields are checked (empty
 	// strings pass through without triggering any rule).
 	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
-		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
+		return nil, apperrors.NewSpamRejection(apperrors.ErrPostSpamRejected, reason)
 	}
 
 	updates := make(map[string]any)
@@ -222,7 +222,7 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 // owner-checked at the repository level to avoid TOCTOU ownership races.
 func (s *postService) UpdateMyPost(ctx context.Context, id string, userID string, req *dto.UpdatePostRequest) (*dto.PostResponse, error) {
 	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
-		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
+		return nil, apperrors.NewSpamRejection(apperrors.ErrPostSpamRejected, reason)
 	}
 
 	updates := make(map[string]any)

@@ -187,6 +187,25 @@ func FromValidateError(c *echo.Context, err error) error {
 	return ValidationError(c, "Validation failed", err)
 }
 
+// SpamRejected sends a 422 for content rejected by the anti-spam guard. The
+// reason sits in Errors tagged "spam" so clients can show it next to field;
+// axumbackend's AppError::spam_rejected produces the same envelope.
+func SpamRejected(c *echo.Context, message, field, reason string) error {
+	log.Warn("spam rejected",
+		"message", message,
+		"reason", reason,
+	)
+
+	return c.JSON(http.StatusUnprocessableEntity, APIResponse{
+		Success: false,
+		Message: "Validation failed",
+		Error:   message,
+		Errors: []validator.ValidationError{
+			{Field: field, Message: reason, Tag: "spam"},
+		},
+	})
+}
+
 // Conflict sends a 409 Conflict response (e.g. duplicate resource).
 func Conflict(c *echo.Context, message string, conflictError string) error {
 	log.Warn("conflict",

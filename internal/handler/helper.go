@@ -72,6 +72,16 @@ func isSuperAdmin(ctx context.Context, userService service.UserService, userID s
 	return *user.IsSuperAdmin
 }
 
+// respondSpamRejected answers an anti-spam rejection with the shared 422
+// envelope, attaching the rule's reason to field so the UI can show it.
+func respondSpamRejected(c *echo.Context, message, field string, err error) error {
+	reason := err.Error()
+	if rejection, ok := errors.AsType[*apperrors.SpamRejection](err); ok {
+		reason = rejection.Reason
+	}
+	return response.SpamRejected(c, message, field, reason)
+}
+
 // respondError maps well-known domain errors to their HTTP status and falls
 // back to 500 for anything else.
 func respondError(c *echo.Context, message string, err error) error {
@@ -87,7 +97,7 @@ func respondError(c *echo.Context, message string, err error) error {
 		errors.Is(err, apperrors.ErrPostNotOwned):
 		return response.Forbidden(c, message)
 	case errors.Is(err, apperrors.ErrContentSpamRejected):
-		return response.ValidationError(c, "Content rejected by anti-spam policy", err)
+		return respondSpamRejected(c, "Content rejected by anti-spam policy", "text", err)
 	case errors.Is(err, apperrors.ErrUserExists),
 		errors.Is(err, apperrors.ErrAlreadyFollowing):
 		return response.Conflict(c, message, err.Error())

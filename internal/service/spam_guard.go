@@ -1,8 +1,6 @@
 package service
 
 import (
-	"fmt"
-
 	apperrors "echobackend/internal/apperror"
 	"echobackend/pkg/antispam"
 )
@@ -12,7 +10,7 @@ import (
 // before any database access so rejected content never costs a query.
 func rejectSpamText(texts ...string) error {
 	if reason := antispam.TextRejectReason(texts...); reason != "" {
-		return fmt.Errorf("%w: %s", apperrors.ErrContentSpamRejected, reason)
+		return apperrors.NewSpamRejection(apperrors.ErrContentSpamRejected, reason)
 	}
 	return nil
 }

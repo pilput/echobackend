@@ -223,7 +223,7 @@ func handleGuildError(c *echo.Context, err error) error {
 		errors.Is(err, apperrors.ErrGuildSlugReserved):
 		return response.BadRequest(c, err.Error(), err)
 	case errors.Is(err, apperrors.ErrContentSpamRejected):
-		return response.ValidationError(c, "Content rejected by anti-spam policy", err)
+		return respondSpamRejected(c, "Content rejected by anti-spam policy", "name", err)
 	default:
 		return nil
 	}
