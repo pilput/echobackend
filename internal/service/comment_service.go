@@ -33,6 +33,10 @@ func NewCommentService(commentRepo repository.CommentRepository, postRepo reposi
 }
 
 func (s *commentService) CreateComment(ctx context.Context, postID string, req *dto.CreateCommentRequest, createdBy string) (*dto.CommentResponse, error) {
+	if err := rejectSpamText(req.Text); err != nil {
+		return nil, err
+	}
+
 	post, err := s.postRepo.GetPostByID(ctx, postID)
 	if err != nil {
 		return nil, apperrors.ErrPostNotFound
@@ -106,6 +110,10 @@ func (s *commentService) GetCommentByID(ctx context.Context, id string) (*dto.Co
 }
 
 func (s *commentService) UpdateComment(ctx context.Context, id string, text string, userID string) (*dto.CommentResponse, error) {
+	if err := rejectSpamText(text); err != nil {
+		return nil, err
+	}
+
 	comment, err := s.commentRepo.GetCommentByID(ctx, id)
 	if err != nil {
 		return nil, err

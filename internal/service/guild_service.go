@@ -43,6 +43,10 @@ func NewGuildService(guildRepo repository.GuildRepository) GuildService {
 }
 
 func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *dto.CreateGuildRequest) (*dto.GuildResponse, error) {
+	if err := rejectSpamText(req.Name, optionalText(req.Slug), optionalText(req.Description)); err != nil {
+		return nil, err
+	}
+
 	desired := req.Name
 	if req.Slug != nil && *req.Slug != "" {
 		desired = *req.Slug
@@ -124,6 +128,10 @@ func (s *guildService) ListMyGuilds(ctx context.Context, userID string, limit, o
 }
 
 func (s *guildService) UpdateGuild(ctx context.Context, guildSlug, userID string, req *dto.UpdateGuildRequest) (*dto.GuildResponse, error) {
+	if err := rejectSpamText(optionalText(req.Name), optionalText(req.Description)); err != nil {
+		return nil, err
+	}
+
 	guild, err := s.guildRepo.FindGuildBySlug(ctx, guildSlug)
 	if err != nil {
 		return nil, err

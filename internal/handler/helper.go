@@ -86,6 +86,8 @@ func respondError(c *echo.Context, message string, err error) error {
 		errors.Is(err, apperrors.ErrCommentNotOwned),
 		errors.Is(err, apperrors.ErrPostNotOwned):
 		return response.Forbidden(c, message)
+	case errors.Is(err, apperrors.ErrContentSpamRejected):
+		return response.ValidationError(c, "Content rejected by anti-spam policy", err)
 	case errors.Is(err, apperrors.ErrUserExists),
 		errors.Is(err, apperrors.ErrAlreadyFollowing):
 		return response.Conflict(c, message, err.Error())

@@ -19,14 +19,17 @@ var (
 
 	ErrPostNotFound     = errors.New("post not found")
 	ErrPostSpamRejected = errors.New("post rejected by anti-spam policy")
-	ErrNotAuthor        = errors.New("not author")
-	ErrAlreadyLiked     = errors.New("user has already liked this post")
-	ErrNotLiked         = errors.New("user has not liked this post")
-	ErrCommentNotFound  = errors.New("comment not found")
-	ErrCommentNotOwned  = errors.New("not authorized to modify this comment")
-	ErrPostNotOwned     = errors.New("not authorized to modify this post")
-	ErrInvalidPostID    = errors.New("invalid post ID format")
-	ErrEmptyPostID      = errors.New("post ID cannot be empty")
+	// ErrContentSpamRejected covers comments and guilds; posts keep their own
+	// error so existing clients matching on it are unaffected.
+	ErrContentSpamRejected = errors.New("content rejected by anti-spam policy")
+	ErrNotAuthor           = errors.New("not author")
+	ErrAlreadyLiked        = errors.New("user has already liked this post")
+	ErrNotLiked            = errors.New("user has not liked this post")
+	ErrCommentNotFound     = errors.New("comment not found")
+	ErrCommentNotOwned     = errors.New("not authorized to modify this comment")
+	ErrPostNotOwned        = errors.New("not authorized to modify this post")
+	ErrInvalidPostID       = errors.New("invalid post ID format")
+	ErrEmptyPostID         = errors.New("post ID cannot be empty")
 
 	ErrCannotReportOwnPost = errors.New("cannot report your own post")
 	ErrNoPendingReports    = errors.New("post has no pending reports")

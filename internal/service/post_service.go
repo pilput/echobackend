@@ -105,7 +105,7 @@ func (s *postService) GetPostsByUsername(ctx context.Context, username string, o
 func (s *postService) CreatePost(ctx context.Context, req *dto.CreatePostRequest, creatorID string) (*dto.PostResponse, error) {
 	// Proactive spam guard: marketing spam is rejected with a 422 that tells
 	// the author the rule, instead of polluting feeds until someone reports it.
-	if reason := antispam.RejectReason(req.Title, req.Body); reason != "" {
+	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
 		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
 	}
 
@@ -161,7 +161,7 @@ func (s *postService) DeleteMyPost(ctx context.Context, id string, userID string
 func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.UpdatePostRequest) (*dto.PostResponse, error) {
 	// Same guard as creation; only the submitted fields are checked (empty
 	// strings pass through without triggering any rule).
-	if reason := antispam.RejectReason(req.Title, req.Body); reason != "" {
+	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
 		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
 	}
 
@@ -221,7 +221,7 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 // UpdateMyPost updates a post scoped to its owner; the mutation itself is
 // owner-checked at the repository level to avoid TOCTOU ownership races.
 func (s *postService) UpdateMyPost(ctx context.Context, id string, userID string, req *dto.UpdatePostRequest) (*dto.PostResponse, error) {
-	if reason := antispam.RejectReason(req.Title, req.Body); reason != "" {
+	if reason := antispam.PostRejectReason(req.Title, req.Body, req.Tags); reason != "" {
 		return nil, fmt.Errorf("%w: %s", apperrors.ErrPostSpamRejected, reason)
 	}
 

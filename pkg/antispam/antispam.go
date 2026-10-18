@@ -20,11 +20,12 @@ var PromoTagNames = []string{"promo", "iklan", "ads", "advertisement", "sponsore
 // can put extra links in their profile instead.
 const MaxExternalLinksPerPost = 5
 
-// bannedPostKeywords are phrases that almost never appear in legitimate
-// posts but are pervasive in gambling/fraud spam. Single generic words
-// (e.g. "slot") are deliberately NOT listed to avoid false positives like
-// "time slot".
-var bannedPostKeywords = []string{
+// bannedKeywords are phrases that almost never appear in legitimate content
+// but are pervasive in gambling/fraud spam. Single generic words (e.g.
+// "slot") are deliberately NOT listed to avoid false positives like
+// "time slot". Entries must be lowercase ASCII words separated by single
+// spaces, the form normalize produces.
+var bannedKeywords = []string{
 	"togel",
 	"gacor",
 	"maxwin",
@@ -54,35 +55,45 @@ func IsPromoTag(name string) bool {
 	return false
 }
 
-// CountExternalLinks counts outbound links in a post body. Both raw URLs and
-// HTML/markdown links contain a scheme, so counting schemes covers every
-// markup the editor can produce.
-func CountExternalLinks(body string) int {
-	lower := strings.ToLower(body)
-	return strings.Count(lower, "http://") + strings.Count(lower, "https://")
-}
-
-// BannedKeyword returns the first banned phrase found in the title or body,
-// or "" when the text is clean. Matching is case-insensitive.
-func BannedKeyword(title, body string) string {
-	haystack := strings.ToLower(title + "\n" + body)
-	for _, keyword := range bannedPostKeywords {
-		if strings.Contains(haystack, keyword) {
+// BannedKeyword returns the first banned phrase found in any of texts, or ""
+// when they are clean. Texts are normalized first, so case, homoglyphs,
+// letter-spacing and leetspeak don't hide a keyword. Multi-word phrases also
+// match when written as one word ("judionline").
+func BannedKeyword(texts ...string) string {
+	haystack := normalize(strings.Join(texts, "\n"))
+	for _, keyword := range bannedKeywords {
+		if strings.Contains(haystack, keyword) ||
+			strings.Contains(haystack, strings.ReplaceAll(keyword, " ", "")) {
 			return keyword
 		}
 	}
 	return ""
 }
 
-// RejectReason returns "" when a post looks fine, otherwise a short
-// user-facing reason explaining why it was rejected. Callers surface the
-// reason through the 422 envelope so authors learn the rule instead of just
-// hitting a wall.
-func RejectReason(title, body string) string {
-	if keyword := BannedKeyword(title, body); keyword != "" {
+// TextRejectReason returns "" when user-written text (comments, guild names
+// and descriptions) looks fine, otherwise a short user-facing reason.
+func TextRejectReason(texts ...string) string {
+	if keyword := BannedKeyword(texts...); keyword != "" {
 		return "contains banned keyword " + strconv.Quote(keyword) +
 			". Gambling/fraud spam is not allowed; honest promotions must use the " +
 			strconv.Quote("promo") + " tag and follow the community guidelines"
+	}
+	for _, text := range texts {
+		if reason := BlockedLink(text); reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+// PostRejectReason returns "" when a post looks fine, otherwise a short
+// user-facing reason explaining why it was rejected. Tags go through the
+// same keyword check as the text. Callers surface the reason through the 422
+// envelope so authors learn the rule instead of just hitting a wall.
+func PostRejectReason(title, body string, tags []string) string {
+	texts := append([]string{title, body}, tags...)
+	if reason := TextRejectReason(texts...); reason != "" {
+		return reason
 	}
 
 	if links := CountExternalLinks(body); links > MaxExternalLinksPerPost {
