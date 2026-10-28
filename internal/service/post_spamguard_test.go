@@ -22,9 +22,9 @@ func TestPostService_CreatePost_RejectsSpam(t *testing.T) {
 			Body:  "Daftar sekarang dan klaim bonus maxwin setiap hari.",
 		},
 		{
-			Title: "Promo murah",
-			Slug:  "promo-murah-meriah",
-			Body:  "https://a.example https://b.example https://c.example https://d.example https://e.example https://f.example",
+			Title: "Referensi bagus",
+			Slug:  "referensi-bagus",
+			Body:  "Baca di https://a.example, https://b.example dan https://c.example untuk detailnya.",
 		},
 	}
 	for i, req := range spam {

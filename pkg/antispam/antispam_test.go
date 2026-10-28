@@ -1,9 +1,6 @@
 package antispam
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestIsPromoTag(t *testing.T) {
 	for _, name := range []string{"promo", "Promo", " PROMO ", "iklan", "ads", "advertisement", "sponsored"} {
@@ -19,7 +16,7 @@ func TestIsPromoTag(t *testing.T) {
 }
 
 func TestPostRejectReason_CleanPost(t *testing.T) {
-	body := "A genuine tutorial with a [docs link](https://example.com/docs) and https://example.com/repo."
+	body := "A genuine tutorial. Read user.id, java.io.File and logger.info, then see Node.js, ASP.NET and README.md."
 	if reason := PostRejectReason("How to write Go", body, nil); reason != "" {
 		t.Errorf("PostRejectReason() = %q, want empty", reason)
 	}
@@ -33,21 +30,57 @@ func TestPostRejectReason_TimeSlotIsNotGambling(t *testing.T) {
 	}
 }
 
-func TestPostRejectReason_TooManyLinks(t *testing.T) {
-	var links strings.Builder
-	for i := 0; i < MaxExternalLinksPerPost+1; i++ {
-		links.WriteString("https://example.com/item ")
+func TestPostRejectReason_LinkLimit(t *testing.T) {
+	for _, body := range []string{
+		"See https://go.dev/doc",
+		"See [docs](https://go.dev/doc) and www.example.com",
+		"See https://a.example/x, and github.com",
+	} {
+		if reason := PostRejectReason("Title", body, nil); reason != "" {
+			t.Errorf("body %q: PostRejectReason() = %q, want empty at or under the limit", body, reason)
+		}
 	}
-	if reason := PostRejectReason("Buy now", links.String(), nil); reason == "" {
-		t.Error("PostRejectReason() = empty, want link-stuffing rejection")
+	for _, body := range []string{
+		"https://a.example https://b.example https://c.example",
+		"[a](https://a.example) www.b.example c.example.com",
+		`<a href="https://a.example">a</a> mailto:x@b.example t.me/c`,
+		"https://a.example,https://b.example,https://c.example",
+	} {
+		if reason := PostRejectReason("Title", body, nil); reason == "" {
+			t.Errorf("body %q: PostRejectReason() = empty, want link-limit rejection", body)
+		}
 	}
+}
 
-	var atLimit strings.Builder
-	for i := 0; i < MaxExternalLinksPerPost; i++ {
-		atLimit.WriteString("https://example.com/item ")
+func TestPostRejectReason_LinksCountAcrossFields(t *testing.T) {
+	if reason := PostRejectReason("https://a.example", "https://b.example", []string{"c.example.com"}); reason == "" {
+		t.Error("PostRejectReason() = empty, want rejection for 3 links across title, body and tags")
 	}
-	if reason := PostRejectReason("Buy now", atLimit.String(), nil); reason != "" {
-		t.Errorf("PostRejectReason() = %q, want empty at exactly the limit", reason)
+}
+
+func TestPostRejectReason_ShortenerRejectedEvenWithinLimit(t *testing.T) {
+	if reason := PostRejectReason("Title", "Klik bit.ly/abc123", nil); reason == "" {
+		t.Error("PostRejectReason() = empty, want shortener rejection")
+	}
+}
+
+func TestContainsLink_NoFalsePositives(t *testing.T) {
+	for _, text := range []string{
+		"Plain text without links",
+		"Reading user.id and req.params.id",
+		"import java.io.File; logger.info(\"x\")",
+		"Node.js, Vue.js, ASP.NET and .NET Core",
+		"Edit README.md and main.go",
+		"Version 1.2.3 released.",
+		"Visit example.community or the awww.thing page",
+		"e.g. this, i.e. that. Done.Thanks",
+		"Meet at 10.30 in the time slot",
+		"Orbit.ly/ mission log",
+		"",
+	} {
+		if ContainsLink(text) {
+			t.Errorf("ContainsLink(%q) = true, want false", text)
+		}
 	}
 }
 

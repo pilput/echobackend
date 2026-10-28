@@ -60,11 +60,13 @@ posts:
       Limited to 10 requests per hour per client IP.
 
       An anti-spam guard runs before anything is stored: posts with more than
-      5 external links, banned gambling/fraud keywords (also when obfuscated,
-      e.g. `g4c0r`, `g a c o r`, homoglyphs) in the title, body or tags, or
-      links to link shorteners or gambling sites are rejected with 422. The
-      reason is returned in `errors[]` with `tag: "spam"`. Comments and guild
-      names/descriptions go through the same keyword and link rules. Honest
+      2 links in total (URLs with a scheme, `www.` addresses, `mailto:`, bare
+      domains such as `example.com`, or `t.me/...`) across title, body and
+      tags, banned gambling/fraud keywords (also when obfuscated, e.g.
+      `g4c0r`, `g a c o r`, homoglyphs), or links to link shorteners or
+      gambling sites are rejected with 422. The reason is returned in
+      `errors[]` with `tag: "spam"`. Comments and guild names/descriptions go
+      through the same keyword and shortener/gambling link rules. Honest
       promotions are welcome but must use the `promo` tag instead of stuffing
       links into the body.
     security:

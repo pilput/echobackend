@@ -1,6 +1,9 @@
 package antispam
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // linkShorteners hide a link's destination, which is exactly what gambling
 // and fraud spam relies on. Authors can always paste the full URL instead.
@@ -23,12 +26,99 @@ var linkShorteners = []string{
 // handled separately because legitimate scheduling sites use it too.
 var gamblingHostWords = []string{"casino", "judi", "poker", "sbobet"}
 
-// CountExternalLinks counts outbound links in a post body. Both raw URLs and
-// HTML/markdown links contain a scheme, so counting schemes covers every
-// markup the editor can produce.
-func CountExternalLinks(body string) int {
-	lower := strings.ToLower(body)
-	return strings.Count(lower, "http://") + strings.Count(lower, "https://")
+// linkTLDs are top-level domains that flag a scheme-less "example.com" as a
+// link. Deliberately short: TLDs that double as common code identifiers
+// (".id", ".io", ".info", ".app", ".link", ".store") would reject posts that
+// merely mention user.id or java.io.
+var linkTLDs = map[string]struct{}{
+	"com": {}, "org": {}, "xyz": {}, "biz": {}, "club": {}, "vip": {},
+	"co": {}, "bet": {}, "casino": {},
+}
+
+// bareLinkDomains are messenger/link-in-bio hosts that spam pastes without a
+// scheme and that the TLD list cannot catch ("t.me/promo").
+var bareLinkDomains = []string{"t.me", "wa.me", "linktr.ee"}
+
+// ContainsLink reports whether text contains a link in any form authors
+// paste: a URL with a scheme, "www." hosts, mailto: addresses, a bare
+// "example.com" domain, or a scheme-less messenger link such as "t.me/x".
+// Markdown and HTML links always carry one of these, so they are covered.
+func ContainsLink(text string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "://") || strings.Contains(lower, "mailto:") {
+		return true
+	}
+	if hasWWWHost(lower) || hasBareDomain(lower) {
+		return true
+	}
+	for _, domain := range bareLinkDomains {
+		if containsBareLink(lower, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// CountLinks counts links across texts. Text is split into words at
+// whitespace, brackets and quotes, so markdown, HTML and plain links each
+// count once; a word glued from several URLs counts once per scheme.
+func CountLinks(texts ...string) int {
+	count := 0
+	for _, text := range texts {
+		words := strings.FieldsFunc(text, func(r rune) bool {
+			return unicode.IsSpace(r) || strings.ContainsRune(`()[]<>"'`, r)
+		})
+		for _, word := range words {
+			if ContainsLink(word) {
+				count += max(1, strings.Count(word, "://"))
+			}
+		}
+	}
+	return count
+}
+
+// hasWWWHost matches "www." at the start of a word, not the tail of one
+// ("awww.").
+func hasWWWHost(lower string) bool {
+	for offset := 0; ; {
+		i := strings.Index(lower[offset:], "www.")
+		if i < 0 {
+			return false
+		}
+		start := offset + i
+		if start == 0 || !isASCIIAlnum(rune(lower[start-1])) {
+			return true
+		}
+		offset = start + len("www.")
+	}
+}
+
+// hasBareDomain matches "label.tld" for the TLDs in linkTLDs, requiring the
+// TLD to end the word so "example.community" does not match ".co".
+func hasBareDomain(lower string) bool {
+	for offset := 0; ; {
+		i := strings.IndexByte(lower[offset:], '.')
+		if i < 0 {
+			return false
+		}
+		dot := offset + i
+		offset = dot + 1
+		if dot == 0 || !isASCIIAlnum(rune(lower[dot-1])) {
+			continue
+		}
+		rest := lower[dot+1:]
+		end := 0
+		for end < len(rest) && rest[end] >= 'a' && rest[end] <= 'z' {
+			end++
+		}
+		if _, ok := linkTLDs[rest[:end]]; !ok {
+			continue
+		}
+		if end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+			continue
+		}
+		return true
+	}
 }
 
 // BlockedLink returns a user-facing reason for the first link that points to

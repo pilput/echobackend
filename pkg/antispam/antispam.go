@@ -15,10 +15,10 @@ import (
 // tag on an obvious ad as an aggravating signal, not a loophole.
 var PromoTagNames = []string{"promo", "iklan", "ads", "advertisement", "sponsored"}
 
-// MaxExternalLinksPerPost caps outbound links in a single post body. Link
-// stuffing is the most common shape of marketing spam; legitimate authors
-// can put extra links in their profile instead.
-const MaxExternalLinksPerPost = 5
+// MaxLinksPerPost caps links in a single post (title, body and tags
+// together). Link stuffing is the most common shape of marketing spam;
+// legitimate authors can put extra links in their profile instead.
+const MaxLinksPerPost = 2
 
 // bannedKeywords are phrases that almost never appear in legitimate content
 // but are pervasive in gambling/fraud spam. Single generic words (e.g.
@@ -74,9 +74,7 @@ func BannedKeyword(texts ...string) string {
 // and descriptions) looks fine, otherwise a short user-facing reason.
 func TextRejectReason(texts ...string) string {
 	if keyword := BannedKeyword(texts...); keyword != "" {
-		return "contains banned keyword " + strconv.Quote(keyword) +
-			". Gambling/fraud spam is not allowed; honest promotions must use the " +
-			strconv.Quote("promo") + " tag and follow the community guidelines"
+		return keywordReason(keyword)
 	}
 	for _, text := range texts {
 		if reason := BlockedLink(text); reason != "" {
@@ -86,21 +84,28 @@ func TextRejectReason(texts ...string) string {
 	return ""
 }
 
+func keywordReason(keyword string) string {
+	return "contains banned keyword " + strconv.Quote(keyword) +
+		". Gambling/fraud spam is not allowed; honest promotions must use the " +
+		strconv.Quote("promo") + " tag and follow the community guidelines"
+}
+
 // PostRejectReason returns "" when a post looks fine, otherwise a short
 // user-facing reason explaining why it was rejected. Tags go through the
-// same keyword check as the text. Callers surface the reason through the 422
-// envelope so authors learn the rule instead of just hitting a wall.
+// same keyword and link checks as the title and body. Callers surface the
+// reason through the 422 envelope so authors learn the rule instead of just
+// hitting a wall.
 func PostRejectReason(title, body string, tags []string) string {
 	texts := append([]string{title, body}, tags...)
 	if reason := TextRejectReason(texts...); reason != "" {
 		return reason
 	}
 
-	if links := CountExternalLinks(body); links > MaxExternalLinksPerPost {
+	if links := CountLinks(texts...); links > MaxLinksPerPost {
 		return fmt.Sprintf(
-			"too many external links (%d, max %d). Put extra links in your profile or tag the post \"promo\" instead of stuffing links into the body",
+			"too many links (%d, max %d). Put extra links in your profile instead of stuffing them into the post",
 			links,
-			MaxExternalLinksPerPost,
+			MaxLinksPerPost,
 		)
 	}
 
