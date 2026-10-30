@@ -19,7 +19,7 @@ type CachedQuoteClient struct {
 	ttl   time.Duration
 }
 
-const defaultQuoteCacheTTL = 15 * time.Minute
+const defaultQuoteCacheTTL = 5 * time.Minute
 
 // NewCachedQuoteClient creates a new caching decorator around a QuoteClient.
 // If cache is nil, caching is skipped and calls go directly to inner.
