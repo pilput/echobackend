@@ -46,7 +46,7 @@ func (r *tagRepository) Create(ctx context.Context, tag *model.Tag) error {
 
 func (r *tagRepository) FindAll(ctx context.Context) ([]model.Tag, error) {
 	var tags []model.Tag
-	err := r.db.WithContext(ctx).Find(&tags).Error
+	err := r.db.WithContext(ctx).Order("name ASC").Find(&tags).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find all tags: %w", err)
 	}
@@ -174,7 +174,13 @@ func (r *tagRepository) Update(ctx context.Context, tag *model.Tag) error {
 		return apperrors.ErrInvalidTagID
 	}
 
-	result := r.db.WithContext(ctx).Save(tag)
+	// Update only the name of an existing row. Save would write every column
+	// (nulling created_at) and, on a missing id, fall back to an upsert that
+	// creates a tag with the client-supplied id.
+	result := r.db.WithContext(ctx).
+		Model(&model.Tag{}).
+		Where("id = ?", tag.ID).
+		Update("name", tag.Name)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update tag: %w", result.Error)
 	}

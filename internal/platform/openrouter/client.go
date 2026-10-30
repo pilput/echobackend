@@ -148,7 +148,8 @@ func (c *client) GenerateStream(ctx context.Context, messages []Message, model *
 }
 
 func (c *client) callAPI(ctx context.Context, messages []Message, model *string, stream bool, temperature float64) (*http.Response, error) {
-	if c.cfg.APIKey == "" {
+	apiKey := strings.TrimSpace(c.cfg.APIKey)
+	if apiKey == "" {
 		return nil, errors.New("OPENROUTER_API_KEY is not configured")
 	}
 
@@ -179,7 +180,7 @@ func (c *client) callAPI(ctx context.Context, messages []Message, model *string,
 		return nil, fmt.Errorf("failed to create OpenRouter request: %w", err)
 	}
 	log.Debug("sending chat completion request", "model", finalModel, "stream", stream)
-	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	if c.cfg.HTTPReferer != "" {
 		req.Header.Set("HTTP-Referer", c.cfg.HTTPReferer)

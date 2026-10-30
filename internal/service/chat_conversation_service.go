@@ -101,7 +101,8 @@ func (s *chatConversationService) GetUserConversations(ctx context.Context, user
 		return nil, 0, err
 	}
 
-	var responses []*dto.ChatConversationResponse
+	// Always a JSON array, even when empty: `data: []`, never `data: null`.
+	responses := make([]*dto.ChatConversationResponse, 0, len(conversations))
 	for _, conversation := range conversations {
 		responses = append(responses, dto.ChatConversationToResponse(conversation))
 	}
@@ -120,7 +121,9 @@ func (s *chatConversationService) UpdateConversation(ctx context.Context, id str
 	}
 
 	updates := make(map[string]any)
-	if conversation.Title != "" {
+	// A blank or whitespace-only title means "no change"; real text is
+	// stored as sent (untrimmed).
+	if strings.TrimSpace(conversation.Title) != "" {
 		updates["title"] = conversation.Title
 	}
 	if conversation.IsPinned != nil {
@@ -179,7 +182,7 @@ func (s *chatConversationService) CreateMessage(ctx context.Context, userID, con
 	}
 
 	responses := []*dto.ChatMessageResponse{dto.ChatMessageToResponse(userMessage)}
-	if userMessage.Role != "user" || s.openRouter == nil {
+	if userMessage.Role != "user" || !s.aiAvailable(req.Model) {
 		return responses, nil
 	}
 
@@ -260,7 +263,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 	result := &dto.ChatStreamResult{
 		UserMessage: dto.ChatMessageToResponse(userMessage),
 	}
-	if userMessage.Role != "user" || s.openRouter == nil {
+	if userMessage.Role != "user" || !s.aiAvailable(req.Model) {
 		complete := make(chan dto.ChatMessageResponse)
 		close(complete)
 		errCh := make(chan error)
@@ -317,7 +320,15 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 		}
 		saved, err := s.SaveStreamingMessage(ctx, conversationID, userID, content.String(), req.Model, usage)
 		if err != nil {
-			errCh <- err
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				// The client went away mid-save; nobody is listening.
+				errCh <- ctxErr
+				return
+			}
+			// Never surface the raw DB error to the client: log it and send
+			// the sentinel the handler maps to "Failed to save AI response".
+			chatLog.Error("save streamed AI message failed", "conversation_id", conversationID, "error", err)
+			errCh <- apperrors.ErrChatAIResponseSaveFailed
 			return
 		}
 		complete <- *saved
@@ -365,9 +376,15 @@ func (s *chatConversationService) GetMessages(ctx context.Context, conversationI
 	return responses, nil
 }
 
+// GetMessage returns one of the user's messages. A message whose parent
+// conversation is soft-deleted is treated as gone (404), and one in another
+// user's conversation as 403, matching getOwnedConversation.
 func (s *chatConversationService) GetMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error) {
 	message, err := s.conversationRepo.GetMessageByID(ctx, id, userID)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.getOwnedConversation(ctx, message.ConversationID, userID); err != nil {
 		return nil, err
 	}
 	return dto.ChatMessageToResponse(message), nil
@@ -378,7 +395,14 @@ func (s *chatConversationService) DeleteMessage(ctx context.Context, id, userID 
 	if err != nil {
 		return nil, err
 	}
+	if _, err := s.getOwnedConversation(ctx, message.ConversationID, userID); err != nil {
+		return nil, err
+	}
 	if err := s.conversationRepo.DeleteMessage(ctx, id, userID); err != nil {
+		return nil, err
+	}
+	// Bump the conversation so it moves up the updated_at DESC list.
+	if _, err := s.conversationRepo.UpdateConversation(ctx, message.ConversationID, map[string]any{"updated_at": time.Now()}); err != nil {
 		return nil, err
 	}
 	return dto.ChatMessageToResponse(message), nil
@@ -582,6 +606,18 @@ func toOpenRouterMessages(messages []*model.ChatMessage) []openrouter.Message {
 		})
 	}
 	return result
+}
+
+// aiAvailable reports whether an AI reply can be generated for a request:
+// an OpenRouter client is wired, OPENROUTER_API_KEY is non-blank and a model
+// resolves (the request model or OPENROUTER_DEFAULT_MODEL). When it is false
+// the message endpoints store the user message only — no auto-title and no
+// OpenRouter call — and the stream endpoints answer 201 JSON instead of SSE.
+func (s *chatConversationService) aiAvailable(model *string) bool {
+	if s.openRouter == nil || s.config == nil {
+		return false
+	}
+	return strings.TrimSpace(s.config.OpenRouter.APIKey) != "" && s.effectiveModel(model) != nil
 }
 
 func (s *chatConversationService) effectiveModel(model *string) *string {

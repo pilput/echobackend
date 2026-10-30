@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
@@ -148,5 +149,46 @@ func TestTagService_GetTags(t *testing.T) {
 	}
 	if len(tags) != 2 {
 		t.Fatalf("len = %d, want 2", len(tags))
+	}
+}
+
+func TestTagService_UpdateTag_NotFoundSkipsReload(t *testing.T) {
+	repo := &mockTagRepo{
+		updateFn: func(ctx context.Context, tag *model.Tag) error {
+			return apperrors.ErrTagNotFound
+		},
+		findByIDFn: func(ctx context.Context, id uint) (*model.Tag, error) {
+			t.Fatal("FindByID should not be called when Update fails")
+			return nil, nil
+		},
+	}
+	svc := NewTagService(repo)
+	if _, err := svc.UpdateTag(context.Background(), 99, &dto.UpdateTagRequest{Name: "go"}); !errors.Is(err, apperrors.ErrTagNotFound) {
+		t.Fatalf("expected ErrTagNotFound, got %v", err)
+	}
+}
+
+func TestTagService_UpdateTag_ReturnsPersistedRow(t *testing.T) {
+	created := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
+	var updated *model.Tag
+	repo := &mockTagRepo{
+		updateFn: func(ctx context.Context, tag *model.Tag) error {
+			updated = tag
+			return nil
+		},
+		findByIDFn: func(ctx context.Context, id uint) (*model.Tag, error) {
+			return &model.Tag{ID: id, Name: "rust", CreatedAt: &created}, nil
+		},
+	}
+	svc := NewTagService(repo)
+	tag, err := svc.UpdateTag(context.Background(), 5, &dto.UpdateTagRequest{Name: "rust"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated == nil || updated.ID != 5 || updated.Name != "rust" {
+		t.Fatalf("unexpected update stub %+v", updated)
+	}
+	if tag.CreatedAt == nil || !tag.CreatedAt.Equal(created) {
+		t.Fatalf("expected persisted created_at, got %+v", tag.CreatedAt)
 	}
 }

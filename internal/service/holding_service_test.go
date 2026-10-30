@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -665,5 +666,189 @@ func TestHoldingService_CompareMonths_DeterministicSorting(t *testing.T) {
 	if resp.PlatformComparison[0].Name != "Bibit" ||
 		resp.PlatformComparison[1].Name != "Stockbit" {
 		t.Fatalf("unexpected PlatformComparison sort order: %+v", resp.PlatformComparison)
+	}
+}
+
+// Decimal validation -------------------------------------------------------
+
+func TestHoldingService_CreateHolding_InvalidDecimal(t *testing.T) {
+	cases := []struct {
+		name  string
+		req   dto.CreateHoldingRequest
+		field string
+	}{
+		{"invested", dto.CreateHoldingRequest{InvestedAmount: "abc", CurrentValue: "x"}, "invested_amount"},
+		{"current", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "1e5"}, "current_value"},
+		{"units", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", Units: new("NaN")}, "units"},
+		{"avg", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", AvgBuyPrice: new("")}, "avg_buy_price"},
+		{"price", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", CurrentPrice: new("Infinity")}, "current_price"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mockHoldingRepo{
+				findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
+					return &model.HoldingType{ID: id}, nil
+				},
+				createFn: func(ctx context.Context, h *model.Holding) error {
+					t.Fatal("Create must not be called for an invalid decimal")
+					return nil
+				},
+			}
+			svc := NewHoldingService(repo, &stubQuoteClient{})
+			req := tc.req
+			req.HoldingTypeID = 1
+			_, err := svc.CreateHolding(context.Background(), "u1", &req)
+			if !errors.Is(err, apperrors.ErrHoldingInvalidDecimal) {
+				t.Fatalf("expected ErrHoldingInvalidDecimal, got %v", err)
+			}
+			if want := "Invalid decimal value for " + tc.field; err.Error() != want {
+				t.Fatalf("error = %q, want %q", err.Error(), want)
+			}
+		})
+	}
+}
+
+func TestHoldingService_CreateHolding_TypeCheckedBeforeDecimals(t *testing.T) {
+	repo := &mockHoldingRepo{
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
+			return nil, apperrors.ErrHoldingTypeNotFound
+		},
+	}
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	_, err := svc.CreateHolding(context.Background(), "u1", &dto.CreateHoldingRequest{
+		HoldingTypeID: 9, InvestedAmount: "abc", CurrentValue: "abc",
+	})
+	if !errors.Is(err, apperrors.ErrHoldingTypeNotFound) {
+		t.Fatalf("expected ErrHoldingTypeNotFound, got %v", err)
+	}
+}
+
+func TestHoldingService_CreateHolding_TrimsDecimals(t *testing.T) {
+	var stored *model.Holding
+	repo := &mockHoldingRepo{
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
+			return &model.HoldingType{ID: id}, nil
+		},
+		createFn: func(ctx context.Context, h *model.Holding) error {
+			stored = h
+			return nil
+		},
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+			return &model.Holding{ID: id}, nil
+		},
+	}
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	_, err := svc.CreateHolding(context.Background(), "u1", &dto.CreateHoldingRequest{
+		HoldingTypeID: 1, InvestedAmount: " 1000.50 ", CurrentValue: "-.5",
+		Units: new("+3."), AvgBuyPrice: new(" 12 "),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stored.InvestedAmount != "1000.50" || stored.CurrentValue != "-.5" {
+		t.Fatalf("unexpected amounts: %q / %q", stored.InvestedAmount, stored.CurrentValue)
+	}
+	if *stored.Units != "+3." || *stored.AvgBuyPrice != "12" || stored.CurrentPrice != nil {
+		t.Fatalf("unexpected optional amounts: %v %v %v", *stored.Units, *stored.AvgBuyPrice, stored.CurrentPrice)
+	}
+}
+
+func TestHoldingService_UpdateHolding_InvalidDecimal(t *testing.T) {
+	repo := &mockHoldingRepo{
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+			return &model.Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
+		},
+		updateFn: func(ctx context.Context, h *model.Holding) error {
+			t.Fatal("Update must not be called for an invalid decimal")
+			return nil
+		},
+	}
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	_, err := svc.UpdateHolding(context.Background(), 1, "u1", &dto.UpdateHoldingRequest{
+		CurrentValue: new("12"),
+		CurrentPrice: new("1,000"),
+	})
+	if !errors.Is(err, apperrors.ErrHoldingInvalidDecimal) || err.Error() != "Invalid decimal value for current_price" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHoldingService_UpdateHolding_OnlyPresentDecimalsChecked(t *testing.T) {
+	var stored *model.Holding
+	repo := &mockHoldingRepo{
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+			return &model.Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
+		},
+		updateFn: func(ctx context.Context, h *model.Holding) error {
+			stored = h
+			return nil
+		},
+	}
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	if _, err := svc.UpdateHolding(context.Background(), 1, "u1", &dto.UpdateHoldingRequest{
+		InvestedAmount: new(" 250 "),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stored.InvestedAmount != "250" || stored.CurrentValue != "1" {
+		t.Fatalf("unexpected amounts: %q / %q", stored.InvestedAmount, stored.CurrentValue)
+	}
+}
+
+// Empty analytics arrays ---------------------------------------------------
+
+func TestHoldingService_EmptyAnalyticsSerializeAsArrays(t *testing.T) {
+	repo := &mockHoldingRepo{} // every query returns no rows
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+	ctx := context.Background()
+
+	trends, err := svc.GetTrends(ctx, "u1", &dto.HoldingTrendsQuery{})
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+	summary, err := svc.GetSummary(ctx, "u1", &dto.HoldingSummaryQuery{})
+	if err != nil {
+		t.Fatalf("GetSummary: %v", err)
+	}
+	m, y := 1, 2026
+	compare, err := svc.CompareMonths(ctx, "u1", &dto.HoldingCompareQuery{FromMonth: &m, FromYear: &y, ToMonth: 2, ToYear: 2026})
+	if err != nil {
+		t.Fatalf("CompareMonths: %v", err)
+	}
+
+	for name, v := range map[string]any{
+		"trends":             trends,
+		"typeBreakdown":      summary.TypeBreakdown,
+		"platformBreakdown":  summary.PlatformBreakdown,
+		"typeComparison":     compare.TypeComparison,
+		"platformComparison": compare.PlatformComparison,
+	} {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("%s: marshal: %v", name, err)
+		}
+		if string(raw) != "[]" {
+			t.Errorf("%s serialized as %s, want []", name, raw)
+		}
+	}
+}
+
+// Monthly span cap ---------------------------------------------------------
+
+func TestHoldingService_GetMonthlyData_SpanCap(t *testing.T) {
+	repo := &mockHoldingRepo{}
+	svc := NewHoldingService(repo, &stubQuoteClient{})
+
+	// Exactly 240 months is allowed.
+	if _, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+		StartMonth: 1, StartYear: 2026, EndMonth: 1, EndYear: 2006,
+	}); err != nil {
+		t.Fatalf("240-month span: unexpected error %v", err)
+	}
+	_, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+		StartMonth: 2, StartYear: 2026, EndMonth: 1, EndYear: 2006,
+	})
+	if !errors.Is(err, apperrors.ErrHoldingRangeTooLarge) {
+		t.Fatalf("expected ErrHoldingRangeTooLarge, got %v", err)
 	}
 }

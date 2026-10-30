@@ -54,7 +54,14 @@ holdings:
         content:
           application/json:
             schema: {$ref: ../schemas/holding.yaml#/HoldingListEnvelope}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: |
+          Unknown `holding_type_id`, or an amount field (`invested_amount`, `current_value`,
+          `units`, `avg_buy_price`, `current_price`) that is not a plain decimal — `error` is
+          `Invalid decimal value for <field>` (first failing field in that order).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '422': {$ref: ../responses.yaml#/ValidationFailed}
       '500': {$ref: ../responses.yaml#/ServerError}
@@ -97,7 +104,7 @@ holdingsTrends:
       example: 2024,2025
     responses:
       '200':
-        description: Trend points.
+        description: Trend points; `data` is `[]` when there are no holdings for those years.
         content:
           application/json:
             schema:
@@ -329,7 +336,14 @@ holdingsById:
         content:
           application/json:
             schema: {$ref: ../schemas/holding.yaml#/HoldingListEnvelope}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: |
+          Unknown `holding_type_id`, or an amount field (`invested_amount`, `current_value`,
+          `units`, `avg_buy_price`, `current_price`) that is not a plain decimal — `error` is
+          `Invalid decimal value for <field>` (first failing field in that order).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}

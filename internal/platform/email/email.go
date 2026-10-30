@@ -319,7 +319,8 @@ func passwordResetTemplate(resetLink, expiresIn string) (string, string) {
     .header { padding: 28px 32px 18px; border-bottom: 1px solid #eeeeee; }
     .brand { margin: 0 0 12px; color: #555555; font-size: 13px; font-weight: 600; }
     h1 { margin: 0; color: #111111; font-size: 23px; line-height: 1.3; font-weight: 600; }
-    .content { padding: 26px 32px 32px; }\n    p { margin: 0 0 16px; color: #333333; font-size: 16px; line-height: 1.6; }
+    .content { padding: 26px 32px 32px; }
+    p { margin: 0 0 16px; color: #333333; font-size: 16px; line-height: 1.6; }
     .button-wrap { margin: 24px 0; }
     .button { display: inline-block; background: #111111; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-size: 15px; font-weight: 600; }
     .meta { margin: 22px 0; padding: 14px 0; border-top: 1px solid #eeeeee; border-bottom: 1px solid #eeeeee; color: #555555; font-size: 14px; line-height: 1.5; }

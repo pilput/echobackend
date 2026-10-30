@@ -28,6 +28,19 @@ func TestPostQueryFilterSortDefaultsAndValidValues(t *testing.T) {
 	if got := filter.GetSortOrder(); got != "asc" {
 		t.Fatalf("expected asc sort order, got %q", got)
 	}
+
+	filter.SortBy = "bookmark_count"
+	if got := filter.GetSortField(); got != "posts.bookmark_count" {
+		t.Fatalf("expected bookmark_count sort field, got %q", got)
+	}
+	filter.SortBy = "posts.id; DROP TABLE posts"
+	filter.SortOrder = "sideways"
+	if got := filter.GetSortField(); got != "posts.created_at" {
+		t.Fatalf("expected unknown sort field to fall back, got %q", got)
+	}
+	if got := filter.GetSortOrder(); got != "desc" {
+		t.Fatalf("expected unknown sort order to fall back, got %q", got)
+	}
 }
 
 func TestUserConverters(t *testing.T) {
@@ -190,5 +203,51 @@ func TestSimpleModelConverters(t *testing.T) {
 	tag := TagToResponse(&model.Tag{ID: 1, Name: "golang"})
 	if tag.ID != 1 || tag.Name != "golang" {
 		t.Fatalf("unexpected tag response: %+v", tag)
+	}
+}
+
+// TestFullName mirrors axum's test_full_name: a lone first or last name is
+// used as is, and an empty-string pointer still counts as set.
+func TestFullName(t *testing.T) {
+	cases := []struct {
+		first, last *string
+		want        string
+	}{
+		{new("John"), new("Doe"), "John Doe"},
+		{new("John"), nil, "John"},
+		{nil, new("Doe"), "Doe"},
+		{nil, nil, ""},
+		{new(""), new("Doe"), " Doe"},
+	}
+	for _, tc := range cases {
+		user := &model.User{ID: "u1", FirstName: tc.first, LastName: tc.last}
+		if got := fullName(tc.first, tc.last); got != tc.want {
+			t.Errorf("fullName(%v, %v) = %q, want %q", tc.first, tc.last, got, tc.want)
+		}
+		if got := UserToResponse(user).Name; got != tc.want {
+			t.Errorf("UserToResponse name = %q, want %q", got, tc.want)
+		}
+		if got := UserToPublicResponse(user).Name; got != tc.want {
+			t.Errorf("UserToPublicResponse name = %q, want %q", got, tc.want)
+		}
+		if got := UserToCurrentUserResponse(user).Name; got != tc.want {
+			t.Errorf("UserToCurrentUserResponse name = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestBookmarkFolderToResponse_BookmarkCount(t *testing.T) {
+	preloaded := &model.BookmarkFolder{ID: "f1", PostBookmarks: []model.PostBookmark{{ID: "b1"}, {ID: "b2"}}}
+	if got := BookmarkFolderToResponse(preloaded).BookmarkCount; got != 2 {
+		t.Fatalf("preloaded count = %d, want 2", got)
+	}
+
+	// A folder nested in a bookmark has no PostBookmarks preloaded; the
+	// repository supplies the COUNT instead.
+	n := int64(7)
+	counted := &model.BookmarkFolder{ID: "f2", BookmarkCount: &n}
+	resp := BookmarkToResponse(&model.PostBookmark{ID: "b3", Folder: counted})
+	if resp.Folder == nil || resp.Folder.BookmarkCount != 7 {
+		t.Fatalf("nested folder = %+v, want bookmark_count 7", resp.Folder)
 	}
 }

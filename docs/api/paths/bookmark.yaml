@@ -139,7 +139,7 @@ bookmarksById:
       description: Post UUID.
       schema: {type: string, format: uuid}
     requestBody:
-      description: Optional metadata applied when the bookmark is created.
+      description: Optional metadata applied when the bookmark is created. The body may be omitted (an empty body is treated as `{}`).
       content:
         application/json:
           schema: {$ref: ../schemas/bookmark.yaml#/ToggleBookmarkRequest}

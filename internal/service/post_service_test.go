@@ -393,3 +393,22 @@ func TestUploadImagePosts(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeTagNames(t *testing.T) {
+	if got := normalizeTagNames(nil); got != nil {
+		t.Fatalf("nil input: got %#v, want nil", got)
+	}
+	if got := normalizeTagNames([]string{"  ", ""}); got == nil || len(got) != 0 {
+		t.Fatalf("blank-only input: got %#v, want non-nil empty slice", got)
+	}
+	got := normalizeTagNames([]string{" rust ", "go", "rust", "", "  ", "Go", "go "})
+	want := []string{"rust", "go", "Go"}
+	if len(got) != len(want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %#v, want %#v", got, want)
+		}
+	}
+}

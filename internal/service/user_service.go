@@ -91,7 +91,8 @@ func (s *userService) GetUsers(ctx context.Context, offset int, limit int, delet
 		return nil, 0, fmt.Errorf("failed to retrieve users from repository: %w", err)
 	}
 
-	var userResponses []*dto.UserResponse
+	// Non-nil so an empty page serializes as "data": [] rather than null.
+	userResponses := make([]*dto.UserResponse, 0, len(users))
 	for _, user := range users {
 		if user == nil {
 			continue
@@ -241,12 +242,14 @@ func (s *userService) UpdateUser(ctx context.Context, id string, req *dto.Update
 	user.Email = req.Email
 	username := req.Username
 	user.Username = &username
-	firstName := req.FirstName
-	user.FirstName = &firstName
-	lastName := req.LastName
-	user.LastName = &lastName
-	isSuperAdmin := req.IsSuperAdmin
-	user.IsSuperAdmin = &isSuperAdmin
+	// Omitted/null names store NULL; omitted/null is_super_admin keeps the
+	// stored value so a partial update can never demote an admin by accident.
+	user.FirstName = req.FirstName
+	user.LastName = req.LastName
+	if req.IsSuperAdmin != nil {
+		isSuperAdmin := *req.IsSuperAdmin
+		user.IsSuperAdmin = &isSuperAdmin
+	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err

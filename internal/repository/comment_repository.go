@@ -14,6 +14,7 @@ type CommentRepository interface {
 	CreateComment(ctx context.Context, comment *model.PostComment) error
 	GetCommentsByPostID(ctx context.Context, postID string) ([]*model.PostComment, error)
 	GetCommentByID(ctx context.Context, id string) (*model.PostComment, error)
+	GetCommentByPostAndID(ctx context.Context, postID string, id string) (*model.PostComment, error)
 	UpdateComment(ctx context.Context, comment *model.PostComment) error
 	DeleteComment(ctx context.Context, id string) error
 }
@@ -52,6 +53,22 @@ func (r *commentRepository) GetCommentByID(ctx context.Context, id string) (*mod
 	if err := r.db.WithContext(ctx).
 		Preload("User", preloadUserBrief).
 		Where("id = ?", id).
+		First(&comment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrCommentNotFound
+		}
+		return nil, err
+	}
+	return &comment, nil
+}
+
+// GetCommentByPostAndID loads a comment only when it belongs to postID, so a
+// comment cannot be reached through another post's URL.
+func (r *commentRepository) GetCommentByPostAndID(ctx context.Context, postID string, id string) (*model.PostComment, error) {
+	var comment model.PostComment
+	if err := r.db.WithContext(ctx).
+		Preload("User", preloadUserBrief).
+		Where("id = ? AND post_id = ?", id, postID).
 		First(&comment).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrCommentNotFound

@@ -238,3 +238,99 @@ func CalculatePaginationMeta(totalItems int64, offset, limit int) PaginationMeta
 		TotalPages: totalPages,
 	}
 }
+
+// Framework-level messages. These responses come from the router and global
+// middleware rather than from a handler, and must stay byte-identical across
+// echobackend, fiberbackend and axumbackend.
+const (
+	// MsgRouteNotFound is the message for a request that matched no route (404).
+	MsgRouteNotFound = "Route not found"
+	// MsgMethodNotAllowed is the message for a known path hit with an unsupported method (405).
+	MsgMethodNotAllowed = "Method not allowed"
+	// MsgPayloadTooLarge is the message for a body over the global (10 MB) or a per-route limit (413).
+	MsgPayloadTooLarge = "Request Entity Too Large"
+	// MsgTooManyAttempts is the message for every 429 (global and per-route limiters).
+	MsgTooManyAttempts = "Too many attempts. Please try again later."
+	// MsgInternalServerError is the message for unhandled errors and recovered panics (500).
+	MsgInternalServerError = "Internal server error"
+)
+
+// RouteNotFound sends the 404 envelope for a request that matched no route.
+func RouteNotFound(c *echo.Context) error {
+	return c.JSON(http.StatusNotFound, APIResponse{
+		Success: false,
+		Message: MsgRouteNotFound,
+		Error:   "Resource not found",
+	})
+}
+
+// MethodNotAllowed sends the 405 envelope for a path that exists under other methods.
+func MethodNotAllowed(c *echo.Context) error {
+	return c.JSON(http.StatusMethodNotAllowed, APIResponse{
+		Success: false,
+		Message: MsgMethodNotAllowed,
+		Error:   "Method not allowed",
+	})
+}
+
+// PayloadTooLarge sends the 413 envelope for a request body over the size limit.
+func PayloadTooLarge(c *echo.Context) error {
+	return c.JSON(http.StatusRequestEntityTooLarge, APIResponse{
+		Success: false,
+		Message: MsgPayloadTooLarge,
+		Error:   "Request body too large",
+	})
+}
+
+// PayloadTooLargeWithMessage sends a 413 for an upload over a route-specific
+// cap (e.g. "Avatar is too large (max 5 MB)"); message is also the error.
+func PayloadTooLargeWithMessage(c *echo.Context, message string) error {
+	log.Warn("payload too large",
+		"message", message,
+	)
+
+	return c.JSON(http.StatusRequestEntityTooLarge, APIResponse{
+		Success: false,
+		Message: message,
+		Error:   message,
+	})
+}
+
+// HTTPStatus sends the envelope for an error that reached the global error
+// handler with a status code but no handler-written body (router, framework or
+// middleware errors). 404/405/413/429 use their dedicated envelopes; 5xx (and
+// errors without a usable code, reported as 500) carry only a generic message
+// so internal details never leak; other 4xx codes keep message (or the status
+// text when empty) with the status text as error.
+func HTTPStatus(c *echo.Context, code int, message string) error {
+	switch {
+	case code == http.StatusNotFound:
+		return RouteNotFound(c)
+	case code == http.StatusMethodNotAllowed:
+		return MethodNotAllowed(c)
+	case code == http.StatusRequestEntityTooLarge:
+		return PayloadTooLarge(c)
+	case code == http.StatusTooManyRequests:
+		return TooManyRequests(c, MsgTooManyAttempts)
+	case code < http.StatusBadRequest || code == http.StatusInternalServerError:
+		return c.JSON(http.StatusInternalServerError, APIResponse{
+			Success: false,
+			Message: MsgInternalServerError,
+		})
+	case code > http.StatusInternalServerError:
+		return c.JSON(code, APIResponse{
+			Success: false,
+			Message: http.StatusText(code),
+		})
+	}
+
+	statusText := http.StatusText(code)
+	if message == "" {
+		message = statusText
+	}
+	return c.JSON(code, APIResponse{
+		Success: false,
+		Message: message,
+		Error:   statusText,
+	})
+}

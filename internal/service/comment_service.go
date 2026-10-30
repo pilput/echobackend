@@ -13,8 +13,8 @@ type CommentService interface {
 	CreateComment(ctx context.Context, postID string, req *dto.CreateCommentRequest, createdBy string) (*dto.CommentResponse, error)
 	GetCommentsByPostID(ctx context.Context, postID string) ([]*dto.CommentResponse, error)
 	GetCommentByID(ctx context.Context, id string) (*dto.CommentResponse, error)
-	UpdateComment(ctx context.Context, id string, content string, userID string) (*dto.CommentResponse, error)
-	DeleteComment(ctx context.Context, id string, userID string, isAdmin bool) error
+	UpdateComment(ctx context.Context, postID string, id string, content string, userID string) (*dto.CommentResponse, error)
+	DeleteComment(ctx context.Context, postID string, id string, userID string, isAdmin bool) error
 	IsCommentAuthor(ctx context.Context, commentID string, userID string) error
 }
 
@@ -109,12 +109,15 @@ func (s *commentService) GetCommentByID(ctx context.Context, id string) (*dto.Co
 	return dto.CommentToResponse(comment), nil
 }
 
-func (s *commentService) UpdateComment(ctx context.Context, id string, text string, userID string) (*dto.CommentResponse, error) {
+// UpdateComment edits a comment of postID. The lookup is scoped to the post in
+// the path: a comment of another post is reported as ErrCommentNotFound (404)
+// before ownership is checked.
+func (s *commentService) UpdateComment(ctx context.Context, postID string, id string, text string, userID string) (*dto.CommentResponse, error) {
 	if err := rejectSpamText(text); err != nil {
 		return nil, err
 	}
 
-	comment, err := s.commentRepo.GetCommentByID(ctx, id)
+	comment, err := s.commentRepo.GetCommentByPostAndID(ctx, postID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -136,10 +139,11 @@ func (s *commentService) UpdateComment(ctx context.Context, id string, text stri
 	return dto.CommentToResponse(updated), nil
 }
 
-// DeleteComment deletes a comment. Ownership is enforced unless isAdmin is
-// true, in which case a super admin may delete any comment (moderation).
-func (s *commentService) DeleteComment(ctx context.Context, id string, userID string, isAdmin bool) error {
-	comment, err := s.commentRepo.GetCommentByID(ctx, id)
+// DeleteComment deletes a comment of postID (a comment of another post is
+// ErrCommentNotFound). Ownership is enforced unless isAdmin is true, in which
+// case a super admin may delete any comment (moderation).
+func (s *commentService) DeleteComment(ctx context.Context, postID string, id string, userID string, isAdmin bool) error {
+	comment, err := s.commentRepo.GetCommentByPostAndID(ctx, postID, id)
 	if err != nil {
 		return err
 	}

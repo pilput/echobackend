@@ -99,6 +99,7 @@ func (r *postReportRepository) ListByPost(ctx context.Context, postID, status st
 	if err := build().
 		Preload("Reporter", preloadUserBrief).
 		Preload("Action").
+		Preload("Action.Admin", preloadUserBrief).
 		Order("post_reports.created_at DESC").
 		Limit(limit).
 		Offset(offset).

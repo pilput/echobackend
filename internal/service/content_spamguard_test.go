@@ -20,7 +20,7 @@ func TestCommentService_RejectsSpam(t *testing.T) {
 	if _, err := svc.CreateComment(context.Background(), validPostID, req, validUserID); !errors.Is(err, apperrors.ErrContentSpamRejected) {
 		t.Fatalf("CreateComment err = %v, want ErrContentSpamRejected", err)
 	}
-	if _, err := svc.UpdateComment(context.Background(), "comment-id", req.Text, validUserID); !errors.Is(err, apperrors.ErrContentSpamRejected) {
+	if _, err := svc.UpdateComment(context.Background(), validPostID, "comment-id", req.Text, validUserID); !errors.Is(err, apperrors.ErrContentSpamRejected) {
 		t.Fatalf("UpdateComment err = %v, want ErrContentSpamRejected", err)
 	}
 }

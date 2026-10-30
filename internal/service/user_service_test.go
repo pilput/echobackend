@@ -250,3 +250,73 @@ func TestUserService_Restore_Conflict(t *testing.T) {
 		t.Fatalf("expected ErrUserExists, got %v", err)
 	}
 }
+
+func TestUserService_GetUsers_EmptyPageIsNonNil(t *testing.T) {
+	repo := &mockUserRepo{
+		getUsersFn: func(ctx context.Context, offset, limit int, deletedFilter dto.UserDeletedFilter, orderBy dto.UserListOrder, orderDesc bool) ([]*model.User, int64, error) {
+			return nil, 0, nil
+		},
+	}
+	resp, _, err := NewUserService(repo, nil).GetUsers(context.Background(), 0, 10, dto.UserDeletedFilterActive, dto.UserListOrderDefault, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// A nil slice would serialize as "data": null; the contract is "data": [].
+	if resp == nil || len(resp) != 0 {
+		t.Fatalf("expected empty non-nil slice, got %#v", resp)
+	}
+}
+
+func TestUserService_UpdateUser_OmittedFields(t *testing.T) {
+	username := "alice"
+	first, last := "Alice", "Smith"
+	stored := func() *model.User {
+		return &model.User{ID: "u1", Email: "alice@example.com", Username: &username, FirstName: &first, LastName: &last, IsSuperAdmin: new(true)}
+	}
+
+	t.Run("omitted is_super_admin keeps value, omitted names become NULL", func(t *testing.T) {
+		var saved *model.User
+		repo := &mockUserRepo{
+			getByIDFn: func(ctx context.Context, id string, deletedOnly bool) (*model.User, error) { return stored(), nil },
+			updateFn: func(ctx context.Context, user *model.User) error {
+				saved = user
+				return nil
+			},
+		}
+		req := &dto.UpdateUserRequest{Username: "alice", Email: "alice@example.com"}
+		resp, err := NewUserService(repo, nil).UpdateUser(context.Background(), "u1", req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if saved.IsSuperAdmin == nil || !*saved.IsSuperAdmin {
+			t.Fatalf("is_super_admin was changed: %v", saved.IsSuperAdmin)
+		}
+		if saved.FirstName != nil || saved.LastName != nil {
+			t.Fatalf("expected NULL names, got %v / %v", saved.FirstName, saved.LastName)
+		}
+		if resp.Name != "" {
+			t.Fatalf("Name = %q, want empty", resp.Name)
+		}
+	})
+
+	t.Run("explicit values are stored", func(t *testing.T) {
+		var saved *model.User
+		repo := &mockUserRepo{
+			getByIDFn: func(ctx context.Context, id string, deletedOnly bool) (*model.User, error) { return stored(), nil },
+			updateFn: func(ctx context.Context, user *model.User) error {
+				saved = user
+				return nil
+			},
+		}
+		req := &dto.UpdateUserRequest{Username: "alice", Email: "alice@example.com", FirstName: new(""), LastName: new("Doe"), IsSuperAdmin: new(false)}
+		if _, err := NewUserService(repo, nil).UpdateUser(context.Background(), "u1", req); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if saved.IsSuperAdmin == nil || *saved.IsSuperAdmin {
+			t.Fatalf("is_super_admin = %v, want false", saved.IsSuperAdmin)
+		}
+		if saved.FirstName == nil || *saved.FirstName != "" || saved.LastName == nil || *saved.LastName != "Doe" {
+			t.Fatalf("unexpected names %v / %v", saved.FirstName, saved.LastName)
+		}
+	})
+}

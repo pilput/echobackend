@@ -231,7 +231,7 @@ func (h *AuthHandler) Logout(c *echo.Context) error {
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	err := h.authService.Logout(c.Request().Context(), req.RefreshToken)
+	err := h.authService.Logout(c.Request().Context(), userID, req.RefreshToken)
 	if err != nil {
 		return response.Success(c, "Logout successful", nil)
 	}
@@ -307,6 +307,9 @@ func (h *AuthHandler) GetProfile(c *echo.Context) error {
 
 	user, err := h.authService.GetProfile(c.Request().Context(), userID)
 	if err != nil {
+		if errors.Is(err, apperrors.ErrUserNotFound) {
+			return response.NotFound(c, "User not found", err)
+		}
 		return response.InternalServerError(c, "Failed to get profile", err)
 	}
 

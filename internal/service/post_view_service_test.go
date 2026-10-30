@@ -207,3 +207,51 @@ func TestPostViewService_RecordView_MarksAlreadyViewedFromDB(t *testing.T) {
 		t.Fatal("expected viewed marker to be cached after DB hit")
 	}
 }
+
+func TestPostViewService_GetViewStats_MissingOrHiddenPost(t *testing.T) {
+	ctx := context.Background()
+	hiddenAt := time.Now()
+	cases := map[string]func(ctx context.Context, id string) (*model.Post, error){
+		"missing": func(ctx context.Context, id string) (*model.Post, error) { return nil, apperrors.ErrPostNotFound },
+		"hidden": func(ctx context.Context, id string) (*model.Post, error) {
+			return &model.Post{ID: id, HiddenAt: &hiddenAt}, nil
+		},
+	}
+	for name, getPost := range cases {
+		t.Run(name, func(t *testing.T) {
+			// The view repo is left unstubbed: reaching it would panic.
+			svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{getPostByIDFn: getPost}, &mockPostLikeRepo{})
+			if _, err := svc.GetViewStats(ctx, validPostID); !errors.Is(err, apperrors.ErrPostNotFound) {
+				t.Fatalf("GetViewStats err = %v, want ErrPostNotFound", err)
+			}
+			if _, err := svc.HasUserViewedPost(ctx, validPostID, "user-1"); !errors.Is(err, apperrors.ErrPostNotFound) {
+				t.Fatalf("HasUserViewedPost err = %v, want ErrPostNotFound", err)
+			}
+			if _, err := svc.HasUserViewedPost(ctx, validPostID, ""); !errors.Is(err, apperrors.ErrPostNotFound) {
+				t.Fatalf("HasUserViewedPost (anonymous) err = %v, want ErrPostNotFound", err)
+			}
+		})
+	}
+}
+
+func TestPostViewService_GetViewStats_VisiblePost(t *testing.T) {
+	ctx := context.Background()
+	postRepo := &mockPostRepo{getPostByIDFn: func(ctx context.Context, id string) (*model.Post, error) {
+		return &model.Post{ID: id}, nil
+	}}
+	viewRepo := &mockPostViewRepo{
+		getViewStatsFn: func(ctx context.Context, postID string) (*dto.PostViewStats, error) {
+			return &dto.PostViewStats{PostID: postID, TotalViews: 3}, nil
+		},
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return true, nil },
+	}
+	svc := NewPostViewService(viewRepo, postRepo, &mockPostLikeRepo{})
+	stats, err := svc.GetViewStats(ctx, validPostID)
+	if err != nil || stats.TotalViews != 3 {
+		t.Fatalf("GetViewStats = %+v, %v", stats, err)
+	}
+	viewed, err := svc.HasUserViewedPost(ctx, validPostID, "user-1")
+	if err != nil || !viewed {
+		t.Fatalf("HasUserViewedPost = %v, %v", viewed, err)
+	}
+}

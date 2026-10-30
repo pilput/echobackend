@@ -20,7 +20,8 @@ users:
     responses:
       '200':
         description: |
-          Users with pagination meta. `profile` is not loaded on this list route.
+          Users with pagination meta. `profile` is not loaded on this list route. An empty
+          page returns `data: []`.
         content:
           application/json:
             schema:
@@ -129,12 +130,24 @@ usersMeImage:
               message: Profile picture updated successfully
               data: {image: users/avatars/0195f3c0.jpg}
       '400':
-        description: Missing file, file over 5 MB, unsupported type, or storage unavailable.
+        description: Missing file, unsupported type, or storage unavailable.
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '404': {$ref: ../responses.yaml#/NotFound}
+      '413':
+        description: |
+          File over 5 MB, or a request body over 5 MB + 64 KB of multipart framing
+          (rejected before the body is parsed). `message` and `error` are both
+          `Avatar is too large (max 5 MB)`.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+            example:
+              success: false
+              message: Avatar is too large (max 5 MB)
+              error: Avatar is too large (max 5 MB)
       '500': {$ref: ../responses.yaml#/ServerError}
 usersUsernameByUsername:
   get:
@@ -192,6 +205,7 @@ usersById:
               - type: object
                 properties:
                   data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -200,8 +214,10 @@ usersById:
     tags: [Users]
     summary: Update any user (admin)
     description: |
-      Full replacement, not a patch — every field is sent on every request. An omitted or
-      empty `username`/`email` fails validation.
+      `username` and `email` are required on every request (omitted or empty fails
+      validation). Omitted or `null` `first_name`/`last_name` store NULL. Omitted or
+      `null` `is_super_admin` keeps the stored value, so it never demotes an admin by
+      accident.
     operationId: updateUser
     security:
     - bearerAuth: []
@@ -241,6 +257,7 @@ usersById:
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -266,6 +283,7 @@ usersByIdRestore:
               - type: object
                 properties:
                   data: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404':
@@ -302,16 +320,25 @@ usersFollow:
               - type: object
                 properties:
                   data: {$ref: ../schemas/user.yaml#/FollowResponse}
-      '400': {$ref: ../responses.yaml#/BadRequest}
-      '401': {$ref: ../responses.yaml#/Unauthorized}
-      '422': {$ref: ../responses.yaml#/ValidationFailed}
-      '500':
+      '400':
         description: |
-          Server error. Some follow domain errors (user not found, already following)
-          currently surface here instead of as a specific 4xx.
+          Malformed body, or `cannot follow yourself` (message `Failed to follow user`).
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404':
+        description: Follower or target user not found (`error` is `user not found`).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '409':
+        description: Already following this user (`error` is `already following this user`).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdFollow:
   delete:
     tags: [Follow]
@@ -332,14 +359,15 @@ usersByIdFollow:
               - type: object
                 properties:
                   data: {$ref: ../schemas/user.yaml#/FollowResponse}
-      '401': {$ref: ../responses.yaml#/Unauthorized}
-      '500':
+      '400':
         description: |
-          Server error. Some follow domain errors currently surface here instead of as a
-          specific 4xx.
+          Malformed user ID, or `not following this user` (message `Failed to unfollow
+          user`).
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdFollowStatus:
   get:
     tags: [Follow]
@@ -367,6 +395,7 @@ usersByIdFollowStatus:
               success: true
               message: Successfully checked follow status
               data: {is_following: false}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdMutualFollows:
@@ -380,7 +409,10 @@ usersByIdMutualFollows:
     - {$ref: ../parameters.yaml#/UserIdPath}
     responses:
       '200':
-        description: Mutual follows.
+        description: |
+          Users both the caller and the user in the path follow (live follow rows only,
+          soft-deleted users excluded), ordered by `username`, not paginated. Each item
+          embeds `profile`; `is_following` is never set.
         content:
           application/json:
             schema:
@@ -391,6 +423,7 @@ usersByIdMutualFollows:
                   data:
                     type: array
                     items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdFollowers:
@@ -405,7 +438,10 @@ usersByIdFollowers:
     - {$ref: ../parameters.yaml#/Offset}
     responses:
       '200':
-        description: Followers with pagination meta.
+        description: |
+          Followers with pagination meta, newest follow first. Only live follow rows count
+          (an unfollowed user drops out) and soft-deleted users are excluded from both
+          the rows and `total`. Each item embeds `profile`; `is_following` is never set.
         content:
           application/json:
             schema:
@@ -416,6 +452,7 @@ usersByIdFollowers:
                   data:
                     type: array
                     items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdFollowing:
   get:
@@ -429,7 +466,10 @@ usersByIdFollowing:
     - {$ref: ../parameters.yaml#/Offset}
     responses:
       '200':
-        description: Followed users with pagination meta.
+        description: |
+          Followed users with pagination meta, newest follow first. Only live follow rows count
+          (an unfollowed user drops out) and soft-deleted users are excluded from both
+          the rows and `total`. Each item embeds `profile`; `is_following` is never set.
         content:
           application/json:
             schema:
@@ -440,6 +480,7 @@ usersByIdFollowing:
                   data:
                     type: array
                     items: {$ref: ../schemas/user.yaml#/UserResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '500': {$ref: ../responses.yaml#/ServerError}
 usersByIdFollowStats:
   get:
@@ -460,6 +501,12 @@ usersByIdFollowStats:
               - type: object
                 properties:
                   data: {$ref: ../schemas/user.yaml#/UserFollowStats}
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '404':
+        description: No active (non-deleted) user with this ID (`error` is `user not found`).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '500': {$ref: ../responses.yaml#/ServerError}
 usersStats:
   get:

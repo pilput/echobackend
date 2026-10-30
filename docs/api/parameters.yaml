@@ -12,7 +12,9 @@ UserIdPath:
   name: id
   in: path
   required: true
-  description: User UUID.
+  description: |
+    User UUID (canonical lowercase 8-4-4-4-12 form). Anything else returns 400
+    `Invalid user ID` before the database is queried.
   schema: {type: string, format: uuid}
 PostIdPath:
   name: id
@@ -24,7 +26,7 @@ ConversationIdPath:
   name: conversationId
   in: path
   required: true
-  description: Conversation UUID.
+  description: Conversation UUID. A malformed value is rejected with 400 "Invalid conversation ID".
   schema: {type: string, format: uuid}
 BookmarkIdPath:
   name: bookmark_id

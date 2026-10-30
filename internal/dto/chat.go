@@ -62,15 +62,18 @@ func ChatMessageToResponse(m *model.ChatMessage) *ChatMessageResponse {
 }
 
 type ChatConversationResponse struct {
-	ID           string                 `json:"id"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
-	Title        string                 `json:"title"`
-	IsPinned     bool                   `json:"is_pinned"`
-	PinnedAt     *time.Time             `json:"pinned_at,omitempty"`
-	UserID       string                 `json:"user_id"`
-	MessageCount int                    `json:"message_count"`
-	ChatMessages []*ChatMessageResponse `json:"chat_messages,omitempty"`
+	ID           string     `json:"id"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	Title        string     `json:"title"`
+	IsPinned     bool       `json:"is_pinned"`
+	PinnedAt     *time.Time `json:"pinned_at,omitempty"`
+	UserID       string     `json:"user_id"`
+	MessageCount int        `json:"message_count"`
+	// ChatMessages is set only on the detail route, where it is always an
+	// array (`[]` for an empty conversation); list/create/update leave it nil
+	// so the key is omitted rather than sent as null.
+	ChatMessages *[]*ChatMessageResponse `json:"chat_messages,omitempty"`
 }
 
 func ChatConversationToResponse(c *model.ChatConversation) *ChatConversationResponse {
@@ -94,7 +97,8 @@ func ChatConversationToDetailResponse(c *model.ChatConversation) *ChatConversati
 	if resp == nil {
 		return nil
 	}
-	resp.ChatMessages = chatMessagesToResponses(c.Messages)
+	msgs := chatMessagesToResponses(c.Messages)
+	resp.ChatMessages = &msgs
 	return resp
 }
 

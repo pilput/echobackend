@@ -38,6 +38,19 @@ func (m *mockCommentRepo) GetCommentByID(ctx context.Context, id string) (*model
 	}
 	return nil, nil
 }
+
+// GetCommentByPostAndID reuses getCommentByIDFn and emulates the post scope:
+// a stubbed comment whose PostID differs from postID is not found.
+func (m *mockCommentRepo) GetCommentByPostAndID(ctx context.Context, postID string, id string) (*model.PostComment, error) {
+	comment, err := m.GetCommentByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if comment == nil || (comment.PostID != "" && comment.PostID != postID) {
+		return nil, apperrors.ErrCommentNotFound
+	}
+	return comment, nil
+}
 func (m *mockCommentRepo) UpdateComment(ctx context.Context, comment *model.PostComment) error {
 	if m.updateCommentFn != nil {
 		return m.updateCommentFn(ctx, comment)
@@ -240,7 +253,7 @@ func TestUpdateComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		_, err := svc.UpdateComment(ctx, commentID, "New content", ownerID)
+		_, err := svc.UpdateComment(ctx, validPostID, commentID, "New content", ownerID)
 		if !errors.Is(err, apperrors.ErrCommentNotOwned) {
 			t.Fatalf("expected ErrCommentNotOwned, got %v", err)
 		}
@@ -262,7 +275,7 @@ func TestUpdateComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		resp, err := svc.UpdateComment(ctx, commentID, "New text", ownerID)
+		resp, err := svc.UpdateComment(ctx, validPostID, commentID, "New text", ownerID)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
@@ -284,7 +297,7 @@ func TestDeleteComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		err := svc.DeleteComment(ctx, commentID, ownerID, false)
+		err := svc.DeleteComment(ctx, validPostID, commentID, ownerID, false)
 		if !errors.Is(err, apperrors.ErrCommentNotOwned) {
 			t.Fatalf("expected ErrCommentNotOwned, got %v", err)
 		}
@@ -302,7 +315,7 @@ func TestDeleteComment(t *testing.T) {
 			},
 		}
 		svc := NewCommentService(mockComment, nil, nil)
-		err := svc.DeleteComment(ctx, commentID, ownerID, false)
+		err := svc.DeleteComment(ctx, validPostID, commentID, ownerID, false)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
@@ -324,7 +337,7 @@ func TestDeleteComment(t *testing.T) {
 		}
 		svc := NewCommentService(mockComment, nil, nil)
 		adminID := "admin-uuid"
-		err := svc.DeleteComment(ctx, commentID, adminID, true)
+		err := svc.DeleteComment(ctx, validPostID, commentID, adminID, true)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
@@ -332,4 +345,33 @@ func TestDeleteComment(t *testing.T) {
 			t.Fatalf("expected deleteCommentFn to be called for admin moderation delete")
 		}
 	})
+}
+
+func TestUpdateDeleteComment_ScopedToPost(t *testing.T) {
+	ctx := context.Background()
+	ownerID := "owner-uuid"
+	mockComment := &mockCommentRepo{
+		getCommentByIDFn: func(ctx context.Context, id string) (*model.PostComment, error) {
+			return &model.PostComment{ID: id, PostID: "another-post", CreatedBy: ownerID}, nil
+		},
+		updateCommentFn: func(ctx context.Context, comment *model.PostComment) error {
+			t.Fatal("UpdateComment must not run for a comment of another post")
+			return nil
+		},
+		deleteCommentFn: func(ctx context.Context, id string) error {
+			t.Fatal("DeleteComment must not run for a comment of another post")
+			return nil
+		},
+	}
+	svc := NewCommentService(mockComment, nil, nil)
+	if _, err := svc.UpdateComment(ctx, validPostID, "comment-uuid", "New text", ownerID); !errors.Is(err, apperrors.ErrCommentNotFound) {
+		t.Fatalf("UpdateComment err = %v, want ErrCommentNotFound", err)
+	}
+	if err := svc.DeleteComment(ctx, validPostID, "comment-uuid", ownerID, false); !errors.Is(err, apperrors.ErrCommentNotFound) {
+		t.Fatalf("DeleteComment err = %v, want ErrCommentNotFound", err)
+	}
+	// The admin bypass only skips the owner check, never the post scope.
+	if err := svc.DeleteComment(ctx, validPostID, "comment-uuid", "admin-uuid", true); !errors.Is(err, apperrors.ErrCommentNotFound) {
+		t.Fatalf("admin DeleteComment err = %v, want ErrCommentNotFound", err)
+	}
 }

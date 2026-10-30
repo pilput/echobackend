@@ -178,6 +178,9 @@ func (s *postViewService) GetViewStats(ctx context.Context, postID string) (*dto
 	if postID == "" {
 		return nil, apperrors.ErrEmptyPostID
 	}
+	if err := s.ensurePostViewable(ctx, postID); err != nil {
+		return nil, err
+	}
 
 	stats, err := s.postViewRepo.GetViewStats(ctx, postID)
 	if err != nil {
@@ -191,6 +194,9 @@ func (s *postViewService) HasUserViewedPost(ctx context.Context, postID, userID 
 	if postID == "" {
 		return false, apperrors.ErrEmptyPostID
 	}
+	if err := s.ensurePostViewable(ctx, postID); err != nil {
+		return false, err
+	}
 	if userID == "" {
 		return false, nil
 	}
@@ -201,6 +207,16 @@ func (s *postViewService) HasUserViewedPost(ctx context.Context, postID, userID 
 	}
 
 	return hasViewed, nil
+}
+
+// ensurePostViewable answers view-stats/viewed lookups for a post that does
+// not exist or is hidden with ErrPostNotFound (404) instead of zero stats.
+func (s *postViewService) ensurePostViewable(ctx context.Context, postID string) error {
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
+		return fmt.Errorf("failed to verify post existence: %w", err)
+	}
+	return ensurePostInteractable(post)
 }
 
 func (s *postViewService) GetMyPostsAnalytics(ctx context.Context, userID string, q *dto.MyPostsAnalyticsQuery) (*dto.MyPostsAnalyticsResponse, error) {

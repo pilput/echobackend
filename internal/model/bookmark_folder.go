@@ -13,6 +13,10 @@ type BookmarkFolder struct {
 
 	User          *User          `gorm:"foreignKey:UserID"`
 	PostBookmarks []PostBookmark `gorm:"foreignKey:FolderID"`
+
+	// BookmarkCount, when set, is the folder's total bookmark count loaded by
+	// a COUNT query (used where PostBookmarks is not preloaded). Not a column.
+	BookmarkCount *int64 `json:"-" gorm:"-"`
 }
 
 func (BookmarkFolder) TableName() string {

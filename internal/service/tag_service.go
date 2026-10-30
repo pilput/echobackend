@@ -69,11 +69,11 @@ func (s *tagService) UpdateTag(ctx context.Context, id uint, req *dto.UpdateTagR
 	if req.Name == "" {
 		return nil, apperrors.ErrTagNameRequired
 	}
-	tag := &model.Tag{ID: id, Name: req.Name}
-	if err := s.tagRepo.Update(ctx, tag); err != nil {
+	if err := s.tagRepo.Update(ctx, &model.Tag{ID: id, Name: req.Name}); err != nil {
 		return nil, err
 	}
-	return tag, nil
+	// Return the persisted row rather than the update stub.
+	return s.tagRepo.FindByID(ctx, id)
 }
 
 func (s *tagService) GetTagByName(ctx context.Context, name string) (*model.Tag, error) {

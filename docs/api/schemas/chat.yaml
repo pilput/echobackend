@@ -23,7 +23,10 @@ CreateChatConversationStreamRequest:
 UpdateChatConversationRequest:
   type: object
   properties:
-    title: {type: string, maxLength: 255}
+    title:
+      type: string
+      maxLength: 255
+      description: Empty or whitespace-only means "leave the title unchanged"; otherwise stored as sent.
     is_pinned:
       type: [boolean, 'null']
 CreateChatMessageRequest:
@@ -53,7 +56,9 @@ ChatConversationResponse:
     message_count: {type: integer}
     chat_messages:
       type: array
-      description: Included only on the conversation detail route, oldest first.
+      description: |
+        Included only on the conversation detail route, oldest first — always an array there
+        (`[]` for a conversation with no messages). The key is omitted on list/create/update.
       items: {$ref: '#/ChatMessageResponse'}
     created_at: {type: string, format: date-time}
     updated_at: {type: string, format: date-time}

@@ -86,7 +86,10 @@ BookmarkFolderResponse:
     name: {type: string}
     description:
       type: [string, 'null']
-    bookmark_count: {type: integer, format: int64}
+    bookmark_count:
+      type: integer
+      format: int64
+      description: Total bookmarks in the folder, also when the folder is nested in a bookmark response.
     created_at:
       type: [string, 'null']
       format: date-time

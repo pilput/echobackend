@@ -33,7 +33,7 @@ type PostRepository interface {
 	UpdatePostWithTagsByOwner(ctx context.Context, id string, userID string, updates map[string]any, tags []model.Tag) (*model.Post, error)
 	GetPostsForSitemap(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 	SearchPosts(ctx context.Context, keyword string, limit int, offset int) ([]*model.Post, int64, error)
-	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error)
+	GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*model.Post, int64, error)
 	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*model.Post, int64, error)
 	ExistsByID(ctx context.Context, id string) (bool, error)
 	GetAuthorPostStats(ctx context.Context, userID string) (*dto.MyPostsAnalyticsSummary, error)
@@ -288,7 +288,10 @@ func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*mo
 		Preload("Tags").
 		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
 		Where("NOT EXISTS (?)", promoPosts).
-		Order("posts.like_count * 2 + posts.bookmark_count * 2 + posts.view_count DESC").
+		// The counters are nullable; without COALESCE a single NULL makes the
+		// whole score NULL, and Postgres sorts NULLs first under DESC.
+		Order("COALESCE(posts.like_count, 0) * 2 + COALESCE(posts.bookmark_count, 0) * 2 + COALESCE(posts.view_count, 0) DESC").
+		Order("posts.created_at DESC").
 		Limit(limit).
 		Find(&posts).Error
 	if err != nil {
@@ -395,7 +398,7 @@ func (r *postRepository) SearchPosts(ctx context.Context, keyword string, limit 
 	return posts, count, nil
 }
 
-func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error) {
+func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
 
@@ -410,6 +413,10 @@ func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit in
 		return nil, 0, fmt.Errorf("failed to count posts by tag: %w", err)
 	}
 
+	// Whitelisted sort column/direction; unknown values fall back to
+	// posts.created_at DESC (same lenient rules as GET /api/posts).
+	sortFilter := dto.PostQueryFilter{SortBy: sortBy, SortOrder: sortOrder}
+
 	err = r.db.WithContext(ctx).Model(&model.Post{}).
 		Preload("User", preloadUserBrief).
 		Preload("Tags").
@@ -417,7 +424,7 @@ func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit in
 		Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
 		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
 		Where("tags.name = ? AND posts.published = ? AND posts.hidden_at IS NULL", tag, true).
-		Order("posts.created_at DESC").
+		Order(fmt.Sprintf("%s %s", sortFilter.GetSortField(), sortFilter.GetSortOrder())).
 		Limit(limit).
 		Offset(offset).
 		Find(&posts).Error

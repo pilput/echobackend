@@ -61,10 +61,10 @@ authForgotPassword:
     description: |
       The response is identical whether or not the email is registered (anti-enumeration).
 
-      When `SMTP_HOST` is set and the Asynq queue is reachable through `QUEUE_REDIS_URL`
-      or `REDIS_URL`/`VALKEY_URL`, the reset email is enqueued and sent by a worker. The
-      link is built from `FRONTEND_RESET_PASSWORD_URL` with a `token` query parameter.
-      Without SMTP/queue the token is still created and recorded in activity metadata.
+      When `SMTP_HOST` is set, the reset email is queued in memory and sent through SMTP
+      by a background worker (no Redis needed). The link is built from
+      `FRONTEND_RESET_PASSWORD_URL` with a `token` query parameter. Without SMTP the
+      token is still created and the link is recorded in activity metadata (dev mode).
 
       Rate limit — 3 requests per 5 minutes per IP.
     operationId: forgotPassword
@@ -193,7 +193,8 @@ authLogout:
     description: |
       Revokes the whole rotation chain the token belongs to, not just the value
       that was sent. Unknown or already-revoked tokens still return 200 —
-      logging out is idempotent.
+      logging out is idempotent. The lookup is scoped to the caller: a refresh
+      token belonging to another user is treated as unknown and revokes nothing.
 
       The access token is **not** revoked and stays valid until it expires.
     operationId: logout
@@ -235,6 +236,12 @@ authProfile:
                 properties:
                   data: {$ref: ../schemas/auth.yaml#/AuthProfile}
       '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404':
+        description: The token's user no longer exists (deleted or soft-deleted).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+            example: {success: false, message: User not found, error: user not found}
       '500': {$ref: ../responses.yaml#/ServerError}
   put:
     tags: [Auth]

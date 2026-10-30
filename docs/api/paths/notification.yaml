@@ -90,6 +90,10 @@ notificationsByIdRead:
   patch:
     tags: [Notifications]
     summary: Mark one notification as read
+    description: |
+      A non-UUID `id` returns 400 `Invalid notification ID` before any lookup.
+      A well-formed id that does not exist or belongs to another user returns
+      404 (`Failed to mark notification as read`).
     operationId: markNotificationRead
     security:
     - bearerAuth: []

@@ -35,6 +35,8 @@ func (h *HoldingHandler) respondHoldingError(c *echo.Context, message string, er
 		return response.BadRequest(c, message, err)
 	case errors.Is(err, apperrors.ErrHoldingRangeTooLarge):
 		return response.BadRequest(c, message, err)
+	case errors.Is(err, apperrors.ErrHoldingInvalidDecimal):
+		return response.BadRequest(c, message, err)
 	default:
 		return response.InternalServerError(c, message, err)
 	}

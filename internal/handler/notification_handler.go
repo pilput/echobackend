@@ -4,6 +4,7 @@ import (
 	"echobackend/internal/dto"
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 
 	"github.com/labstack/echo/v5"
 )
@@ -57,6 +58,11 @@ func (h *NotificationHandler) MarkAsRead(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" {
 		return response.BadRequest(c, "Notification ID is required", nil)
+	}
+	// Notification ids are UUIDs; reject a malformed one up front instead of
+	// letting Postgres fail the uuid cast (22P02) and surface it as a 500.
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidNotificationID, nil)
 	}
 	notification, err := h.notificationService.MarkAsRead(c.Request().Context(), id, userID)
 	if err != nil {

@@ -31,7 +31,7 @@ UserResponse:
   properties:
     id: {type: string, format: uuid}
     email: {type: string, format: email, description: Present on admin routes only; omitted elsewhere.}
-    name: {type: string, description: First and last name joined; empty when either is missing.}
+    name: {type: string, description: '`first last` when both are set, otherwise whichever one is set; empty when neither is.'}
     username:
       type: [string, 'null']
     image:
@@ -144,9 +144,17 @@ UpdateUserRequest:
   properties:
     username: {type: string, minLength: 3, maxLength: 30}
     email: {type: string, format: email, maxLength: 255}
-    first_name: {type: string, maxLength: 100}
-    last_name: {type: string, maxLength: 100}
-    is_super_admin: {type: boolean, default: false}
+    first_name:
+      type: [string, 'null']
+      maxLength: 100
+      description: Omitted or `null` stores NULL; a string (even `""`) is stored as is.
+    last_name:
+      type: [string, 'null']
+      maxLength: 100
+      description: Omitted or `null` stores NULL; a string (even `""`) is stored as is.
+    is_super_admin:
+      type: [boolean, 'null']
+      description: Omitted or `null` keeps the stored value; `true`/`false` sets it.
 FollowRequest:
   type: object
   required: [user_id]
@@ -159,6 +167,9 @@ FollowResponse:
     message: {type: string}
 UserFollowStats:
   type: object
+  description: |
+    Counted live from `user_follows` rows that are not soft-deleted, not read from the
+    `users` count columns.
   properties:
     user_id: {type: string, format: uuid}
     followers_count: {type: integer, format: int64}

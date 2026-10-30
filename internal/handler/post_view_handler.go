@@ -3,6 +3,7 @@ package handler
 import (
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 
 	"github.com/labstack/echo/v5"
 )
@@ -64,8 +65,8 @@ func (h *PostViewHandler) GetPostViews(c *echo.Context) error {
 
 func (h *PostViewHandler) GetPostViewStats(c *echo.Context) error {
 	postID := c.Param("id")
-	if postID == "" {
-		return response.BadRequest(c, "Post ID is required", nil)
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
 	}
 
 	stats, err := h.postViewService.GetViewStats(c.Request().Context(), postID)
@@ -78,8 +79,8 @@ func (h *PostViewHandler) GetPostViewStats(c *echo.Context) error {
 
 func (h *PostViewHandler) CheckUserViewed(c *echo.Context) error {
 	postID := c.Param("id")
-	if postID == "" {
-		return response.BadRequest(c, "Post ID is required", nil)
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)

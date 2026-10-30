@@ -719,7 +719,7 @@ func TestAuthService_Logout_RevokesWholeFamily(t *testing.T) {
 	}
 
 	svc := refreshTestService(sessionRepo)
-	if err := svc.Logout(context.Background(), "pl_token"); err != nil {
+	if err := svc.Logout(context.Background(), "u-1", "pl_token"); err != nil {
 		t.Fatalf("Logout failed: %v", err)
 	}
 	if revokedFamily != "fam-1" {
@@ -739,8 +739,27 @@ func TestAuthService_Logout_UnknownTokenIsNoOp(t *testing.T) {
 	}
 
 	svc := refreshTestService(sessionRepo)
-	if err := svc.Logout(context.Background(), "pl_unknown"); err != nil {
+	if err := svc.Logout(context.Background(), "u-1", "pl_unknown"); err != nil {
 		t.Fatalf("expected logout to be idempotent, got: %v", err)
+	}
+}
+
+func TestAuthService_Logout_OtherUsersTokenIsNoOp(t *testing.T) {
+	// Holding someone else's refresh token must not let the caller end that
+	// user's sessions: the token is treated as unknown.
+	sessionRepo := &mockSessionRepo{
+		getSessionByRefreshTokenFn: func(ctx context.Context, tokenHash string) (*model.Session, error) {
+			return liveSession("u-victim"), nil
+		},
+		deleteByFamilyIDFn: func(ctx context.Context, familyID string) error {
+			t.Error("another user's token must not revoke anything")
+			return nil
+		},
+	}
+
+	svc := refreshTestService(sessionRepo)
+	if err := svc.Logout(context.Background(), "u-attacker", "pl_token"); err != nil {
+		t.Fatalf("expected logout to be a no-op, got: %v", err)
 	}
 }
 

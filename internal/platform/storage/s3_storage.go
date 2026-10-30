@@ -36,14 +36,7 @@ func NewS3Storage(cfg *config.Config) *S3Storage {
 		return nil
 	}
 
-	endpoint := cfg.S3.Endpoint
-	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		scheme := "https"
-		if !cfg.S3.UseSSL {
-			scheme = "http"
-		}
-		endpoint = fmt.Sprintf("%s://%s", scheme, endpoint)
-	}
+	endpoint := normalizeEndpoint(cfg.S3.Endpoint, cfg.S3.UseSSL)
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
@@ -68,6 +61,20 @@ func NewS3Storage(cfg *config.Config) *S3Storage {
 		client: client,
 		bucket: cfg.S3.Bucket,
 	}
+}
+
+// normalizeEndpoint returns the S3 base endpoint as a URL. An endpoint that
+// already carries an http:// or https:// scheme is used as given; otherwise
+// https:// is prepended, or http:// when useSSL is false.
+func normalizeEndpoint(endpoint string, useSSL bool) string {
+	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+		return endpoint
+	}
+	scheme := "https"
+	if !useSSL {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s", scheme, endpoint)
 }
 
 func (s *S3Storage) Save(ctx context.Context, path string, file io.Reader, contentType string) error {

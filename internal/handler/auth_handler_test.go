@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,6 +31,8 @@ type mockAuthService struct {
 	loginFn              func(ctx context.Context, identifier, password, ipAddress, userAgent string) (string, string, *model.User, error)
 	getGithubOAuthURLFn  func(state string) string
 	revokeUserSessionsFn func(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error)
+	logoutFn             func(ctx context.Context, userID, refreshToken string) error
+	getProfileFn         func(ctx context.Context, userID string) (*model.User, error)
 	revokeAllSessionsFn  func(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 }
 
@@ -60,7 +63,10 @@ func (m *mockAuthService) ChangePassword(ctx context.Context, userID, currentPas
 	return nil
 }
 
-func (m *mockAuthService) Logout(ctx context.Context, refreshToken string) error {
+func (m *mockAuthService) Logout(ctx context.Context, userID, refreshToken string) error {
+	if m.logoutFn != nil {
+		return m.logoutFn(ctx, userID, refreshToken)
+	}
 	return nil
 }
 
@@ -79,6 +85,9 @@ func (m *mockAuthService) RevokeAllSessions(ctx context.Context, actorID, ipAddr
 }
 
 func (m *mockAuthService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
+	if m.getProfileFn != nil {
+		return m.getProfileFn(ctx, userID)
+	}
 	return nil, nil
 }
 
@@ -406,6 +415,69 @@ func TestAuthHandlerRevokeAllSessionsRequiresUser(t *testing.T) {
 	rec := serveAuthRoute(t, registerRevokeAll, h, http.MethodPost, "/api/auth/sessions/revoke-all", `{"confirm":true}`, "")
 
 	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func registerLogout(e *echo.Echo, h *AuthHandler) {
+	e.POST("/api/auth/logout", h.Logout)
+}
+
+func registerProfile(e *echo.Echo, h *AuthHandler) {
+	e.GET("/api/auth/profile", h.GetProfile)
+}
+
+func TestAuthHandlerLogoutPassesCallerToService(t *testing.T) {
+	var gotUser, gotToken string
+	h := NewAuthHandler(&mockAuthService{
+		logoutFn: func(ctx context.Context, userID, refreshToken string) error {
+			gotUser, gotToken = userID, refreshToken
+			return nil
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerLogout, h, http.MethodPost, "/api/auth/logout", `{"refresh_token":"pl_token"}`, "user-1")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotUser != "user-1" || gotToken != "pl_token" {
+		t.Errorf("expected the caller and token to reach the service, got user=%q token=%q", gotUser, gotToken)
+	}
+	out := decodeAuthResponse(t, rec)
+	if !out.Success || out.Message != "Logout successful" || out.Data != nil {
+		t.Fatalf("unexpected response: %+v", out)
+	}
+}
+
+func TestAuthHandlerGetProfileUserNotFound(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{
+		getProfileFn: func(ctx context.Context, userID string) (*model.User, error) {
+			return nil, apperrors.ErrUserNotFound
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerProfile, h, http.MethodGet, "/api/auth/profile", "", "user-1")
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	out := decodeAuthResponse(t, rec)
+	if out.Success || out.Message != "User not found" {
+		t.Fatalf("unexpected response: %+v", out)
+	}
+}
+
+func TestAuthHandlerGetProfileOtherErrorIsInternal(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{
+		getProfileFn: func(ctx context.Context, userID string) (*model.User, error) {
+			return nil, errors.New("db down")
+		},
+	}, &mockAuthActivityService{}, config.FrontendConfig{})
+
+	rec := serveAuthRoute(t, registerProfile, h, http.MethodGet, "/api/auth/profile", "", "user-1")
+
+	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

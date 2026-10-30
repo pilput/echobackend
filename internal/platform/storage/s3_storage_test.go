@@ -94,3 +94,43 @@ func TestReadCloserWithCancel(t *testing.T) {
 		t.Error("expected cancel function to be called on Close")
 	}
 }
+
+func TestNormalizeEndpoint(t *testing.T) {
+	tests := []struct {
+		endpoint string
+		useSSL   bool
+		want     string
+	}{
+		{"localhost:9000", false, "http://localhost:9000"},
+		{"s3.example.com", true, "https://s3.example.com"},
+		{"https://s3.example.com", false, "https://s3.example.com"},
+		{"http://minio:9000", true, "http://minio:9000"},
+	}
+	for _, tt := range tests {
+		if got := normalizeEndpoint(tt.endpoint, tt.useSSL); got != tt.want {
+			t.Errorf("normalizeEndpoint(%q, %v) = %q, want %q", tt.endpoint, tt.useSSL, got, tt.want)
+		}
+	}
+}
+
+func TestNewS3Storage_AcceptsEndpointWithScheme(t *testing.T) {
+	cfg := &config.Config{
+		S3: config.S3Config{
+			Endpoint:  "https://s3.example.com",
+			AccessKey: "testkey",
+			SecretKey: "testsecret",
+			Bucket:    "testbucket",
+			UseSSL:    true,
+		},
+	}
+	s := NewS3Storage(cfg)
+	if s == nil || s.client == nil {
+		t.Fatal("expected storage to be configured for an endpoint that includes a scheme")
+	}
+	if !s.client.Options().UsePathStyle {
+		t.Error("expected path-style addressing")
+	}
+	if got := s.client.Options().Region; got != "us-east-1" {
+		t.Errorf("expected region us-east-1, got %q", got)
+	}
+}

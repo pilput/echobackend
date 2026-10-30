@@ -115,7 +115,7 @@ type mockPostRepo struct {
 	updatePostWithTagsFn        func(ctx context.Context, id string, updates map[string]any, tags []model.Tag) (*model.Post, error)
 	getPostsForSitemapFn        func(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
 	searchPostsFn               func(ctx context.Context, keyword string, limit int, offset int) ([]*model.Post, int64, error)
-	getPostsByTagFn             func(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error)
+	getPostsByTagFn             func(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*model.Post, int64, error)
 	getPostsForYouFn            func(ctx context.Context, userID string, offset int, limit int) ([]*model.Post, int64, error)
 }
 
@@ -236,9 +236,9 @@ func (m *mockPostRepo) SearchPosts(ctx context.Context, keyword string, limit in
 	}
 	panic("SearchPosts not stubbed")
 }
-func (m *mockPostRepo) GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*model.Post, int64, error) {
+func (m *mockPostRepo) GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*model.Post, int64, error) {
 	if m.getPostsByTagFn != nil {
-		return m.getPostsByTagFn(ctx, tag, limit, offset)
+		return m.getPostsByTagFn(ctx, tag, limit, offset, sortBy, sortOrder)
 	}
 	panic("GetPostsByTag not stubbed")
 }
@@ -277,6 +277,7 @@ type mockPostViewRepo struct {
 	countViewsByAuthorBeforeFn func(ctx context.Context, userID, beforeDate string) (int64, error)
 	createViewFn               func(ctx context.Context, view *model.PostView) error
 	hasUserViewedPostFn        func(ctx context.Context, postID, userID string) (bool, error)
+	getViewStatsFn             func(ctx context.Context, postID string) (*dto.PostViewStats, error)
 }
 
 func (m *mockPostViewRepo) CreateView(ctx context.Context, view *model.PostView) error {
@@ -289,6 +290,9 @@ func (m *mockPostViewRepo) GetViewsByPostID(ctx context.Context, postID string, 
 	panic("GetViewsByPostID not stubbed")
 }
 func (m *mockPostViewRepo) GetViewStats(ctx context.Context, postID string) (*dto.PostViewStats, error) {
+	if m.getViewStatsFn != nil {
+		return m.getViewStatsFn(ctx, postID)
+	}
 	panic("GetViewStats not stubbed")
 }
 func (m *mockPostViewRepo) HasUserViewedPost(ctx context.Context, postID, userID string) (bool, error) {

@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/service"
 	"echobackend/pkg/applog"
 	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 
 	"github.com/labstack/echo/v5"
 )
@@ -82,6 +84,9 @@ func (h *ChatConversationHandler) CreateConversationStream(c *echo.Context) erro
 
 func (h *ChatConversationHandler) GetConversation(c *echo.Context) error {
 	id := c.Param("id")
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
+	}
 
 	userID, ok := GetUserIDFromClaims(c)
 	if !ok {
@@ -115,6 +120,9 @@ func (h *ChatConversationHandler) GetConversations(c *echo.Context) error {
 
 func (h *ChatConversationHandler) UpdateConversation(c *echo.Context) error {
 	id := c.Param("id")
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
+	}
 	var updateDTO dto.UpdateChatConversationRequest
 	if err := c.Bind(&updateDTO); err != nil {
 		return response.BadRequest(c, "Failed to update conversation", err)
@@ -139,6 +147,9 @@ func (h *ChatConversationHandler) UpdateConversation(c *echo.Context) error {
 
 func (h *ChatConversationHandler) DeleteConversation(c *echo.Context) error {
 	id := c.Param("id")
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
+	}
 
 	userID, ok := GetUserIDFromClaims(c)
 	if !ok {
@@ -155,8 +166,8 @@ func (h *ChatConversationHandler) DeleteConversation(c *echo.Context) error {
 
 func (h *ChatConversationHandler) CreateMessage(c *echo.Context) error {
 	conversationID := c.Param("conversationId")
-	if conversationID == "" {
-		return response.BadRequest(c, "Conversation ID is required", nil)
+	if !validator.IsValidUUID(conversationID) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -181,8 +192,8 @@ func (h *ChatConversationHandler) CreateMessage(c *echo.Context) error {
 
 func (h *ChatConversationHandler) CreateMessageStream(c *echo.Context) error {
 	conversationID := c.Param("conversationId")
-	if conversationID == "" {
-		return response.BadRequest(c, "Conversation ID is required", nil)
+	if !validator.IsValidUUID(conversationID) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -213,8 +224,8 @@ func (h *ChatConversationHandler) CreateMessageStream(c *echo.Context) error {
 
 func (h *ChatConversationHandler) GetMessages(c *echo.Context) error {
 	conversationID := c.Param("conversationId")
-	if conversationID == "" {
-		return response.BadRequest(c, "Conversation ID is required", nil)
+	if !validator.IsValidUUID(conversationID) {
+		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -231,8 +242,8 @@ func (h *ChatConversationHandler) GetMessages(c *echo.Context) error {
 
 func (h *ChatConversationHandler) GetMessage(c *echo.Context) error {
 	id := c.Param("messageId")
-	if id == "" {
-		return response.BadRequest(c, "Message ID is required", nil)
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidMessageID, nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -249,8 +260,8 @@ func (h *ChatConversationHandler) GetMessage(c *echo.Context) error {
 
 func (h *ChatConversationHandler) DeleteMessage(c *echo.Context) error {
 	id := c.Param("messageId")
-	if id == "" {
-		return response.BadRequest(c, "Message ID is required", nil)
+	if !validator.IsValidUUID(id) {
+		return response.BadRequest(c, MsgInvalidMessageID, nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -276,72 +287,89 @@ func (h *ChatConversationHandler) respondChatError(c *echo.Context, message stri
 	}
 }
 
+// chatStreamWriteTimeout bounds each SSE frame write of an AI chat stream.
+// The server's 60s WriteTimeout is absolute for the whole response, so it
+// would cut a long generation (the OpenRouter client allows 90s); every frame
+// instead pushes the write deadline this far ahead.
+const chatStreamWriteTimeout = 10 * time.Second
+
+// streamChatEvents writes the AI chat SSE stream: the initial event, every
+// `ai_chunk`, then exactly one of `ai_complete` or `error`, and always a final
+// `data: [DONE]`. A failed write means the client is gone; the handler then
+// returns, which cancels the request context and stops the producer.
 func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan string, complete <-chan dto.ChatMessageResponse, errCh <-chan error) error {
 	res := c.Response()
+	rc := http.NewResponseController(res)
+	// The request body is already bound. Lift the server's ReadTimeout so it
+	// cannot fire mid-stream and cancel the request context, which would abort
+	// the upstream call and skip saving the assistant reply.
+	_ = rc.SetReadDeadline(time.Time{})
+
 	res.Header().Set(echo.HeaderContentType, "text/event-stream")
 	res.Header().Set(echo.HeaderCacheControl, "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 	res.WriteHeader(http.StatusOK)
 
-	flusher, ok := res.(http.Flusher)
-	if !ok {
-		return response.InternalServerError(c, "Streaming is not supported", nil)
+	write := func(frame []byte) error {
+		if err := rc.SetWriteDeadline(time.Now().Add(chatStreamWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		if _, err := res.Write(frame); err != nil {
+			return err
+		}
+		return rc.Flush()
 	}
 
 	if initialEvent != nil {
-		if err := writeSSE(res, initialEvent); err != nil {
-			return err
+		if err := writeSSE(write, initialEvent); err != nil {
+			return nil
 		}
-		flusher.Flush()
 	}
 
 	for chunk := range chunks {
-		if err := writeSSE(res, map[string]any{
+		if err := writeSSE(write, map[string]any{
 			"type": "ai_chunk",
 			"data": chunk,
 		}); err != nil {
-			return err
+			return nil
 		}
-		flusher.Flush()
 	}
 
 	if err, ok := <-errCh; ok && err != nil {
 		chatLog.Error("chat stream failed", "error", err)
-		_ = writeSSE(res, map[string]any{
+		if err := writeSSE(write, map[string]any{
 			"type": "error",
 			"data": streamErrorMessage(err),
-		})
-		flusher.Flush()
-		return nil
-	}
-
-	if msg, ok := <-complete; ok {
-		if err := writeSSE(res, map[string]any{
+		}); err != nil {
+			return nil
+		}
+	} else if msg, ok := <-complete; ok {
+		if err := writeSSE(write, map[string]any{
 			"type": "ai_complete",
 			"data": msg,
 		}); err != nil {
-			return err
+			return nil
 		}
-		flusher.Flush()
 	}
 
-	_, _ = res.Write([]byte("data: [DONE]\n\n"))
-	flusher.Flush()
+	_ = write([]byte("data: [DONE]\n\n"))
 	return nil
 }
 
-func writeSSE(w http.ResponseWriter, payload any) error {
+func writeSSE(write func([]byte) error, payload any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	_, err = w.Write([]byte("data: " + string(data) + "\n\n"))
-	return err
+	return write([]byte("data: " + string(data) + "\n\n"))
 }
 
 func streamErrorMessage(err error) string {
 	if err == nil {
 		return "Failed to generate AI response"
+	}
+	if errors.Is(err, apperrors.ErrChatAIResponseSaveFailed) {
+		return "Failed to save AI response"
 	}
 	msg := err.Error()
 	if idx := strings.Index(msg, `{"error"`); idx >= 0 {

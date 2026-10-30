@@ -2,6 +2,7 @@ tags:
   get:
     tags: [Tags]
     summary: List tags
+    description: Every tag, sorted by name ascending. Not paginated.
     operationId: listTags
     security: []
     responses:
@@ -114,6 +115,9 @@ tagsById:
   put:
     tags: [Tags]
     summary: Rename a tag (admin)
+    description: |
+      Updates only `name` of an existing tag (`created_at` is kept). An id that
+      does not exist (including `0`) returns 404 and writes nothing.
     operationId: updateTag
     security:
     - bearerAuth: []
@@ -137,6 +141,7 @@ tagsById:
   delete:
     tags: [Tags]
     summary: Delete a tag (admin)
+    description: An id that does not exist (including `0`) returns 404.
     operationId: deleteTag
     security:
     - bearerAuth: []

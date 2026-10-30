@@ -9,7 +9,9 @@ CreatePostRequest:
     published: {type: boolean, default: false}
     tags:
       type: array
-      description: Tag names.
+      description: |
+        Tag names. Each name is trimmed; blank names are dropped and duplicates
+        removed (first occurrence wins, case-sensitive). Unknown names are created.
       items: {type: string}
 UpdatePostRequest:
   type: object
@@ -23,6 +25,10 @@ UpdatePostRequest:
       type: [boolean, 'null']
     tags:
       type: array
+      description: |
+        Omit to keep the current tags. When present the list replaces the post's
+        tags (`[]` clears them); names are trimmed, blanks dropped and duplicates
+        removed (first occurrence wins, case-sensitive).
       items: {type: string}
 PostResponse:
   type: object

@@ -265,7 +265,7 @@ func (r *holdingRepository) GetTypeBreakdown(ctx context.Context, userID string,
 		Invested     float64
 		CurrentValue float64
 	}
-	if err := q.Group("ht.name").Scan(&results).Error; err != nil {
+	if err := q.Group("ht.name").Order("ht.name ASC").Scan(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to get type breakdown: %w", err)
 	}
 	return results, nil
@@ -291,7 +291,7 @@ func (r *holdingRepository) GetPlatformBreakdown(ctx context.Context, userID str
 		Invested     float64
 		CurrentValue float64
 	}
-	if err := q.Group("h.platform").Scan(&results).Error; err != nil {
+	if err := q.Group("h.platform").Order("h.platform ASC").Scan(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to get platform breakdown: %w", err)
 	}
 	return results, nil

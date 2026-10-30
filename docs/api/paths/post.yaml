@@ -22,7 +22,7 @@ posts:
       in: query
       schema:
         type: string
-        enum: [id, title, created_at, updated_at, view_count, like_count]
+        enum: [id, title, created_at, updated_at, view_count, like_count, bookmark_count]
         default: created_at
     - name: sort_order
       in: query
@@ -129,7 +129,8 @@ postsTrending:
     summary: Trending posts
     operationId: getTrendingPosts
     description: |
-      Ranked by likes, bookmarks and views. Posts tagged `promo`, `iklan`,
+      Ranked by `like_count * 2 + bookmark_count * 2 + view_count` (a missing
+      counter counts as 0), newest first on ties. Posts tagged `promo`, `iklan`,
       `ads`, `advertisement` or `sponsored` never trend; they stay published
       and reachable via search, tags and profiles.
     security: []
@@ -439,6 +440,9 @@ postsTagByTag:
     tags: [Posts]
     summary: Published posts carrying a tag
     operationId: getPostsByTag
+    description: |
+      Sorting is lenient: an unknown `sort_by` falls back to `created_at` and
+      an unknown `sort_order` to `desc`; neither is an error.
     security: []
     parameters:
     - name: tag
@@ -448,6 +452,20 @@ postsTagByTag:
       schema: {type: string}
     - {$ref: ../parameters.yaml#/Limit100}
     - {$ref: ../parameters.yaml#/Offset}
+    - name: sort_by
+      in: query
+      description: Sort column. `orderBy` is accepted as an alias.
+      schema:
+        type: string
+        enum: [id, title, created_at, updated_at, view_count, like_count, bookmark_count]
+        default: created_at
+    - name: sort_order
+      in: query
+      description: Sort direction. `orderDirection` is accepted as an alias.
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
     responses:
       '200':
         description: Posts with pagination meta.
@@ -568,7 +586,10 @@ postsByIdCommentsByCommentId:
   put:
     tags: [Comments]
     summary: Edit a comment (owner only)
-    description: There is no admin override for editing.
+    description: |
+      There is no admin override for editing. Both path IDs must be UUIDs
+      (400). The comment must belong to post `{id}`; otherwise 404 `Comment
+      not found`, checked before ownership.
     operationId: updateComment
     security:
     - bearerAuth: []
@@ -592,7 +613,10 @@ postsByIdCommentsByCommentId:
   delete:
     tags: [Comments]
     summary: Delete a comment (owner or super admin)
-    description: A super admin may delete any user's comment, for moderation.
+    description: |
+      A super admin may delete any user's comment, for moderation. Both path
+      IDs must be UUIDs (400). The comment must belong to post `{id}`;
+      otherwise 404 `Comment not found`, checked before ownership.
     operationId: deleteComment
     security:
     - bearerAuth: []
@@ -674,7 +698,16 @@ postsByIdViewStats:
               - type: object
                 properties:
                   data: {$ref: ../schemas/post.yaml#/PostViewStats}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: Invalid post ID (not a UUID).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '404':
+        description: Post not found or hidden by a moderator.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '500': {$ref: ../responses.yaml#/ServerError}
 postsByIdViewed:
   get:
@@ -703,8 +736,17 @@ postsByIdViewed:
               success: true
               message: Successfully checked view status
               data: {has_viewed: true}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: Invalid post ID (not a UUID).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404':
+        description: Post not found or hidden by a moderator.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '500': {$ref: ../responses.yaml#/ServerError}
 postsByIdLike:
   parameters:

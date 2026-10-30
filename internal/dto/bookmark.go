@@ -63,12 +63,17 @@ func BookmarkFolderToResponse(folder *model.BookmarkFolder) *BookmarkFolderRespo
 		return nil
 	}
 
+	count := int64(len(folder.PostBookmarks))
+	if folder.BookmarkCount != nil {
+		count = *folder.BookmarkCount
+	}
+
 	return &BookmarkFolderResponse{
 		ID:            folder.ID,
 		UserID:        folder.UserID,
 		Name:          folder.Name,
 		Description:   folder.Description,
-		BookmarkCount: int64(len(folder.PostBookmarks)),
+		BookmarkCount: count,
 		CreatedAt:     folder.CreatedAt,
 		UpdatedAt:     folder.UpdatedAt,
 	}

@@ -117,7 +117,12 @@ func (s *userFollowService) GetFollowing(ctx context.Context, userID string, lim
 	return userResponses, total, nil
 }
 
+// GetFollowStats counts live (non-soft-deleted) follow rows for an existing,
+// non-deleted user; an unknown or soft-deleted user yields ErrUserNotFound.
 func (s *userFollowService) GetFollowStats(ctx context.Context, userID string) (*dto.UserFollowStats, error) {
+	if _, err := s.userRepo.GetByID(ctx, userID, false); err != nil {
+		return nil, err
+	}
 	return s.userFollowRepo.GetFollowStats(ctx, userID)
 }
 

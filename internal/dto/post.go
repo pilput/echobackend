@@ -37,12 +37,13 @@ type PostQueryFilter struct {
 
 func (f *PostQueryFilter) ValidSortFields() map[string]string {
 	return map[string]string{
-		"id":         "posts.id",
-		"title":      "posts.title",
-		"created_at": "posts.created_at",
-		"updated_at": "posts.updated_at",
-		"view_count": "posts.view_count",
-		"like_count": "posts.like_count",
+		"id":             "posts.id",
+		"title":          "posts.title",
+		"created_at":     "posts.created_at",
+		"updated_at":     "posts.updated_at",
+		"view_count":     "posts.view_count",
+		"like_count":     "posts.like_count",
+		"bookmark_count": "posts.bookmark_count",
 	}
 }
 

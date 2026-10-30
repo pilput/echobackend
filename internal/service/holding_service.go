@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +20,26 @@ import (
 // maxMonthlyRangeMonths bounds how many months GetMonthlyData will iterate,
 // so a huge (but validly ordered) start/end range can't build an unbounded result slice.
 const maxMonthlyRangeMonths = 240 // 20 years
+
+// decimalPattern accepts the plain decimal literals axum's rust_decimal parser
+// does: an optional sign, then digits with an optional fractional part.
+// Exponents, NaN and Infinity are rejected even though Postgres numeric would
+// take them, so all backends agree on which amounts are valid.
+var decimalPattern = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)$`)
+
+// normalizeDecimal trims *raw in place and checks it is a plain decimal
+// number; field is the JSON (snake_case) name reported back to the client.
+func normalizeDecimal(raw *string, field string) error {
+	if raw == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*raw)
+	if !decimalPattern.MatchString(v) {
+		return &apperrors.HoldingInvalidDecimalError{Field: field}
+	}
+	*raw = v
+	return nil
+}
 
 type holdingCache interface {
 	BuildKey(parts ...string) string
@@ -83,6 +104,21 @@ func (s *holdingService) CreateHolding(ctx context.Context, userID string, req *
 		return nil, err
 	}
 
+	for _, f := range []struct {
+		raw   *string
+		field string
+	}{
+		{&req.InvestedAmount, "invested_amount"},
+		{&req.CurrentValue, "current_value"},
+		{req.Units, "units"},
+		{req.AvgBuyPrice, "avg_buy_price"},
+		{req.CurrentPrice, "current_price"},
+	} {
+		if err := normalizeDecimal(f.raw, f.field); err != nil {
+			return nil, err
+		}
+	}
+
 	holding := &model.Holding{
 		UserID:         userID,
 		Name:           req.Name,
@@ -139,18 +175,33 @@ func (s *holdingService) UpdateHolding(ctx context.Context, id int64, userID str
 		existing.Currency = *req.Currency
 	}
 	if req.InvestedAmount != nil {
+		if err := normalizeDecimal(req.InvestedAmount, "invested_amount"); err != nil {
+			return nil, err
+		}
 		existing.InvestedAmount = *req.InvestedAmount
 	}
 	if req.CurrentValue != nil {
+		if err := normalizeDecimal(req.CurrentValue, "current_value"); err != nil {
+			return nil, err
+		}
 		existing.CurrentValue = *req.CurrentValue
 	}
 	if req.Units != nil {
+		if err := normalizeDecimal(req.Units, "units"); err != nil {
+			return nil, err
+		}
 		existing.Units = req.Units
 	}
 	if req.AvgBuyPrice != nil {
+		if err := normalizeDecimal(req.AvgBuyPrice, "avg_buy_price"); err != nil {
+			return nil, err
+		}
 		existing.AvgBuyPrice = req.AvgBuyPrice
 	}
 	if req.CurrentPrice != nil {
+		if err := normalizeDecimal(req.CurrentPrice, "current_price"); err != nil {
+			return nil, err
+		}
 		existing.CurrentPrice = req.CurrentPrice
 	}
 	if req.Notes != nil {
@@ -245,7 +296,7 @@ func (s *holdingService) GetTrends(ctx context.Context, userID string, q *dto.Ho
 		return nil, err
 	}
 
-	var result []dto.HoldingTrendResponse
+	result := make([]dto.HoldingTrendResponse, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
 		result = append(result, dto.HoldingTrendResponse{
@@ -504,7 +555,7 @@ func (s *holdingService) buildTypeBreakdown(ctx context.Context, userID string, 
 	if err != nil {
 		return nil, err
 	}
-	var result []dto.HoldingTypeBreakdown
+	result := make([]dto.HoldingTypeBreakdown, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
 		result = append(result, dto.HoldingTypeBreakdown{
@@ -523,7 +574,7 @@ func (s *holdingService) buildPlatformBreakdown(ctx context.Context, userID stri
 	if err != nil {
 		return nil, err
 	}
-	var result []dto.HoldingPlatformBreakdown
+	result := make([]dto.HoldingPlatformBreakdown, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
 		result = append(result, dto.HoldingPlatformBreakdown{
@@ -556,7 +607,7 @@ func buildCompareBreakdownResult(allNames map[string]bool, fromMap, toMap map[st
 	}
 	sort.Strings(names)
 
-	var result []dto.HoldingCompareBreakdown
+	result := make([]dto.HoldingCompareBreakdown, 0, len(names))
 	for _, name := range names {
 		from := fromMap[name]
 		to := toMap[name]

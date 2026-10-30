@@ -43,7 +43,7 @@ func (m *mockPostService) GetPostBySlugAndUsername(ctx context.Context, slug str
 func (m *mockPostService) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*dto.PostResponse, int64, error) {
 	return nil, 0, nil
 }
-func (m *mockPostService) GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error) {
+func (m *mockPostService) GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*dto.PostResponse, int64, error) {
 	return nil, 0, nil
 }
 func (m *mockPostService) GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*dto.PostResponse, int64, error) {

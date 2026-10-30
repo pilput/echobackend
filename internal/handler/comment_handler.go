@@ -4,6 +4,7 @@ import (
 	"echobackend/internal/dto"
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 
 	"github.com/labstack/echo/v5"
 )
@@ -63,9 +64,13 @@ func (h *CommentHandler) GetCommentsByPostID(c *echo.Context) error {
 }
 
 func (h *CommentHandler) UpdateComment(c *echo.Context) error {
+	postID := c.Param("id")
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
+	}
 	commentID := c.Param("comment_id")
-	if commentID == "" {
-		return response.BadRequest(c, "Comment ID is required", nil)
+	if !validator.IsValidUUID(commentID) {
+		return response.BadRequest(c, "Invalid comment ID", nil)
 	}
 
 	var commentDTO dto.CreateCommentRequest
@@ -82,7 +87,7 @@ func (h *CommentHandler) UpdateComment(c *echo.Context) error {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	comment, err := h.commentService.UpdateComment(c.Request().Context(), commentID, commentDTO.Text, userID)
+	comment, err := h.commentService.UpdateComment(c.Request().Context(), postID, commentID, commentDTO.Text, userID)
 	if err != nil {
 		return respondError(c, "Failed to update comment", err)
 	}
@@ -91,9 +96,13 @@ func (h *CommentHandler) UpdateComment(c *echo.Context) error {
 }
 
 func (h *CommentHandler) DeleteComment(c *echo.Context) error {
+	postID := c.Param("id")
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
+	}
 	commentID := c.Param("comment_id")
-	if commentID == "" {
-		return response.BadRequest(c, "Comment ID is required", nil)
+	if !validator.IsValidUUID(commentID) {
+		return response.BadRequest(c, "Invalid comment ID", nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)
@@ -104,7 +113,7 @@ func (h *CommentHandler) DeleteComment(c *echo.Context) error {
 	// Super admins may delete any comment for moderation purposes.
 	isAdmin := isSuperAdmin(c.Request().Context(), h.userService, userID)
 
-	if err := h.commentService.DeleteComment(c.Request().Context(), commentID, userID, isAdmin); err != nil {
+	if err := h.commentService.DeleteComment(c.Request().Context(), postID, commentID, userID, isAdmin); err != nil {
 		return respondError(c, "Failed to delete comment", err)
 	}
 

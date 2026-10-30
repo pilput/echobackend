@@ -47,6 +47,9 @@ func (r *bookmarkRepository) FindBookmarkByUserAndPost(ctx context.Context, user
 		}
 		return nil, fmt.Errorf("failed to find bookmark by user and post: %w", err)
 	}
+	if err := r.loadFolderCounts(ctx, []*model.PostBookmark{&bookmark}); err != nil {
+		return nil, err
+	}
 	return &bookmark, nil
 }
 
@@ -63,6 +66,9 @@ func (r *bookmarkRepository) FindBookmarkByID(ctx context.Context, id, userID st
 			return nil, apperrors.ErrBookmarkNotFound
 		}
 		return nil, fmt.Errorf("failed to find bookmark: %w", err)
+	}
+	if err := r.loadFolderCounts(ctx, []*model.PostBookmark{&bookmark}); err != nil {
+		return nil, err
 	}
 	return &bookmark, nil
 }
@@ -128,8 +134,57 @@ func (r *bookmarkRepository) GetBookmarksByUser(ctx context.Context, userID stri
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to fetch bookmarks: %w", err)
 	}
+	if err := r.loadFolderCounts(ctx, bookmarks); err != nil {
+		return nil, 0, err
+	}
 
 	return bookmarks, total, nil
+}
+
+// loadFolderCounts fills Folder.BookmarkCount on each bookmark's preloaded
+// folder with the folder's real bookmark total (one grouped COUNT query), so
+// the nested folder in a bookmark response does not report 0.
+func (r *bookmarkRepository) loadFolderCounts(ctx context.Context, bookmarks []*model.PostBookmark) error {
+	ids := make([]string, 0, len(bookmarks))
+	seen := make(map[string]struct{}, len(bookmarks))
+	for _, b := range bookmarks {
+		if b == nil || b.Folder == nil || b.Folder.ID == "" {
+			continue
+		}
+		if _, ok := seen[b.Folder.ID]; ok {
+			continue
+		}
+		seen[b.Folder.ID] = struct{}{}
+		ids = append(ids, b.Folder.ID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	var rows []struct {
+		FolderID string
+		Count    int64
+	}
+	if err := r.db.WithContext(ctx).Model(&model.PostBookmark{}).
+		Select("folder_id, COUNT(*) AS count").
+		Where("folder_id IN ?", ids).
+		Group("folder_id").
+		Scan(&rows).Error; err != nil {
+		return fmt.Errorf("failed to count folder bookmarks: %w", err)
+	}
+
+	counts := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		counts[row.FolderID] = row.Count
+	}
+	for _, b := range bookmarks {
+		if b == nil || b.Folder == nil || b.Folder.ID == "" {
+			continue
+		}
+		n := counts[b.Folder.ID]
+		b.Folder.BookmarkCount = &n
+	}
+	return nil
 }
 
 func (r *bookmarkRepository) FindFolderByID(ctx context.Context, id, userID string) (*model.BookmarkFolder, error) {

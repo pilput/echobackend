@@ -24,6 +24,18 @@ info:
     The two exceptions are `GET /health` (plain `{"status": ...}` object) and the chat
     streaming endpoints, which answer with `text/event-stream`.
 
+    Framework-level errors use the same envelope: an unknown route returns 404
+    `{"success":false,"message":"Route not found","error":"Resource not found"}`, a known
+    path with an unsupported method returns 405
+    `{"success":false,"message":"Method not allowed","error":"Method not allowed"}`, and an
+    unhandled error or panic returns 500 `{"success":false,"message":"Internal server error"}`.
+
+    Every response carries `X-XSS-Protection: 1; mode=block`, `X-Content-Type-Options: nosniff`,
+    `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy: default-src 'self'` and
+    `Referrer-Policy: strict-origin-when-cross-origin`; over HTTPS (TLS, or a forwarded
+    https scheme from a loopback/private proxy) also
+    `Strict-Transport-Security: max-age=3600; includeSubdomains`.
+
     ## Pagination
 
     Paginated lists add a `meta` object (`total_items`, `offset`, `limit`, `total_pages`).
@@ -32,9 +44,20 @@ info:
 
     ## Global limits
 
-    - Request body size: 10 MB (larger requests return 413).
-    - CORS origins: `HTTP_ALLOW_ORIGINS` (default `*`).
-    - Global rate limit: active when `HTTP_RATE_LIMIT_RPS` > 0.
+    - Request body size: 10 MB. Larger requests return 413
+      `{"success":false,"message":"Request Entity Too Large","error":"Request body too large"}`.
+    - CORS origins: `HTTP_ALLOW_ORIGINS` (default `*`). CORS headers are also set on
+      404/405/413/429 responses.
+    - Global rate limit: active when `HTTP_RATE_LIMIT_RPS` (alias `RATE_LIMITER_MAX`) > 0.
+      It is a per-client-IP token bucket: `HTTP_RATE_LIMIT_RPS` tokens per second, burst
+      2× that. `HTTP_RATE_LIMIT_WINDOW_SEC` (alias `RATE_LIMITER_TTL`) only sets how long
+      an idle client is remembered (default 3 minutes); it is not a counting window. A
+      denied request gets 429 with a `Retry-After` header (seconds) and
+      `{"success":false,"message":"Too many attempts. Please try again later.","error":"Rate limit exceeded"}`.
+    - Client IP: with `HTTP_TRUST_PROXY=true` (alias `TRUST_PROXY`), `X-Forwarded-For` is
+      walked right to left and the first hop outside loopback, private, link-local and
+      CGNAT (`100.64.0.0/10`) ranges is the client IP; otherwise the peer address is used.
+      It keys every per-IP limit and is stored in sessions, activity logs and post views.
     - Auth endpoints use a per-IP fixed window. With `REDIS_URL`/`VALKEY_URL` set, counters
       live in Valkey/Redis and apply across instances; otherwise they fall back to
       in-memory counters per instance.

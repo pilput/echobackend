@@ -1,10 +1,14 @@
 DecimalString:
   type: string
-  description: A decimal number serialised as a string, for example `"1500000.00"`.
+  description: |
+    A decimal number serialised as a string, for example `"1500000.00"`. On input the
+    value is trimmed and must be a plain decimal (optional sign, digits, optional
+    fractional part); exponents, `NaN` and `Infinity` are rejected with a 400.
   examples: ['1500000.00']
 NullableDecimalString:
   type: [string, 'null']
-  description: A decimal number serialised as a string, or `null`.
+  description: |
+    A decimal number serialised as a string, or `null`. Input rules match `DecimalString`.
 HoldingType:
   type: object
   properties:
@@ -161,9 +165,11 @@ HoldingSummaryResponse:
     holdingsCount: {type: integer, format: int64}
     typeBreakdown:
       type: array
+      description: Sorted by holding type name ascending; `[]` when the month is empty.
       items: {$ref: '#/HoldingBreakdown'}
     platformBreakdown:
       type: array
+      description: Sorted by platform ascending; `[]` when the month is empty.
       items: {$ref: '#/HoldingBreakdown'}
 HoldingTrendResponse:
   type: object
@@ -207,9 +213,11 @@ HoldingSummaryValues:
     holdingsCount: {type: integer, format: int64}
     typeBreakdown:
       type: array
+      description: Sorted by holding type name ascending; `[]` when the month is empty.
       items: {$ref: '#/HoldingNamedBreakdown'}
     platformBreakdown:
       type: array
+      description: Sorted by platform ascending; `[]` when the month is empty.
       items: {$ref: '#/HoldingNamedBreakdown'}
 HoldingBreakdownValues:
   type: object
@@ -248,9 +256,11 @@ HoldingMonthComparisonResponse:
         holdingsCountDiffPercentage: {type: number}
     typeComparison:
       type: array
+      description: Sorted by name ascending; `[]` when both months are empty.
       items: {$ref: '#/HoldingCompareBreakdown'}
     platformComparison:
       type: array
+      description: Sorted by name ascending; `[]` when both months are empty.
       items: {$ref: '#/HoldingCompareBreakdown'}
 CorporateActionResponse:
   type: object

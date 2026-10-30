@@ -40,6 +40,7 @@ goose create nama_migration sql
 - All `CREATE TABLE` and `ADD COLUMN` statements use `IF NOT EXISTS` / `IF NOT EXISTS` for idempotency
 - Foreign key constraints with `ON DELETE CASCADE` ensure data integrity
 - Database triggers automatically maintain count fields (view_count, like_count, bookmark_count, followers_count, following_count)
+- `followers_count`/`following_count` (20261029120000): `update_user_follow_counts()` also runs `AFTER UPDATE OF deleted_at`, so a soft unfollow decrements and a restore increments; INSERT/DELETE only count live rows. The migration recomputes both columns from live `user_follows` rows (like 011)
 - Soft deletes (`deleted_at`) apply to `users`, `post_views`, `post_comments`, `user_follows`, `files` and `chat_conversations` only. `posts` and `post_likes` are hard-deleted as of 014, and their children follow through `ON DELETE CASCADE`
 - A query that opts out of GORM's model scope with `.Table(...)` does **not** get the `deleted_at IS NULL` predicate for free — write it by hand
 - UUID primary keys use `uuidv7()` by default (PostgreSQL 18+)

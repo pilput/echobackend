@@ -4,6 +4,7 @@ import (
 	"echobackend/internal/dto"
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 
 	"github.com/labstack/echo/v5"
 )
@@ -46,8 +47,8 @@ func (h *UserFollowHandler) UnfollowUser(c *echo.Context) error {
 	}
 
 	userIDToUnfollow := c.Param("id")
-	if userIDToUnfollow == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(userIDToUnfollow) {
+		return respondInvalidUserID(c)
 	}
 
 	followResponse, err := h.userFollowService.UnfollowUser(c.Request().Context(), userID, userIDToUnfollow)
@@ -60,8 +61,8 @@ func (h *UserFollowHandler) UnfollowUser(c *echo.Context) error {
 
 func (h *UserFollowHandler) GetFollowers(c *echo.Context) error {
 	userID := c.Param("id")
-	if userID == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(userID) {
+		return respondInvalidUserID(c)
 	}
 
 	limit, offset := ParsePaginationParams(c, 10)
@@ -78,8 +79,8 @@ func (h *UserFollowHandler) GetFollowers(c *echo.Context) error {
 
 func (h *UserFollowHandler) GetFollowing(c *echo.Context) error {
 	userID := c.Param("id")
-	if userID == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(userID) {
+		return respondInvalidUserID(c)
 	}
 
 	limit, offset := ParsePaginationParams(c, 10)
@@ -96,8 +97,8 @@ func (h *UserFollowHandler) GetFollowing(c *echo.Context) error {
 
 func (h *UserFollowHandler) GetFollowStats(c *echo.Context) error {
 	userID := c.Param("id")
-	if userID == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(userID) {
+		return respondInvalidUserID(c)
 	}
 
 	stats, err := h.userFollowService.GetFollowStats(c.Request().Context(), userID)
@@ -115,8 +116,8 @@ func (h *UserFollowHandler) CheckFollowStatus(c *echo.Context) error {
 	}
 
 	targetUserID := c.Param("id")
-	if targetUserID == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(targetUserID) {
+		return respondInvalidUserID(c)
 	}
 
 	isFollowing, err := h.userFollowService.IsFollowing(c.Request().Context(), userID, targetUserID)
@@ -136,8 +137,8 @@ func (h *UserFollowHandler) GetMutualFollows(c *echo.Context) error {
 	}
 
 	otherUserID := c.Param("id")
-	if otherUserID == "" {
-		return response.BadRequest(c, "User ID is required", nil)
+	if !validator.IsValidUUID(otherUserID) {
+		return respondInvalidUserID(c)
 	}
 
 	mutualFollows, err := h.userFollowService.GetMutualFollows(c.Request().Context(), userID, otherUserID)

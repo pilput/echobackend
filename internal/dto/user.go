@@ -74,17 +74,29 @@ type PublicUserResponse struct {
 	UpdatedAt      *time.Time     `json:"updated_at"`
 }
 
+// fullName builds the display name from the optional first/last name: both
+// set -> "first last", only one set -> that one, neither -> "". An empty-string
+// pointer still counts as set.
+func fullName(first, last *string) string {
+	switch {
+	case first != nil && last != nil:
+		return *first + " " + *last
+	case first != nil:
+		return *first
+	case last != nil:
+		return *last
+	default:
+		return ""
+	}
+}
+
 func UserToResponse(u *model.User) *UserResponse {
 	if u == nil {
 		return nil
 	}
-	name := ""
-	if u.FirstName != nil && u.LastName != nil {
-		name = *u.FirstName + " " + *u.LastName
-	}
 	return &UserResponse{
 		ID:             u.ID,
-		Name:           name,
+		Name:           fullName(u.FirstName, u.LastName),
 		Username:       u.Username,
 		Image:          u.Image,
 		FirstName:      u.FirstName,
@@ -115,13 +127,9 @@ func UserToPublicResponse(u *model.User) *PublicUserResponse {
 	if u == nil {
 		return nil
 	}
-	name := ""
-	if u.FirstName != nil && u.LastName != nil {
-		name = *u.FirstName + " " + *u.LastName
-	}
 	return &PublicUserResponse{
 		ID:             u.ID,
-		Name:           name,
+		Name:           fullName(u.FirstName, u.LastName),
 		Username:       u.Username,
 		Image:          u.Image,
 		FirstName:      u.FirstName,
@@ -138,14 +146,10 @@ func UserToCurrentUserResponse(u *model.User) *CurrentUserResponse {
 	if u == nil {
 		return nil
 	}
-	name := ""
-	if u.FirstName != nil && u.LastName != nil {
-		name = *u.FirstName + " " + *u.LastName
-	}
 	return &CurrentUserResponse{
 		ID:             u.ID,
 		Email:          u.Email,
-		Name:           name,
+		Name:           fullName(u.FirstName, u.LastName),
 		Username:       u.Username,
 		Image:          u.Image,
 		FirstName:      u.FirstName,
@@ -167,12 +171,15 @@ type CreateUserRequest struct {
 	LastName  string `json:"last_name" validate:"omitempty,max=100"`
 }
 
+// UpdateUserRequest is the admin update body. first_name/last_name are
+// nullable: omitted or null stores NULL, a string (even "") stores it.
+// is_super_admin is optional: omitted or null keeps the stored value.
 type UpdateUserRequest struct {
-	FirstName    string `json:"first_name" validate:"omitempty,max=100"`
-	LastName     string `json:"last_name" validate:"omitempty,max=100"`
-	Username     string `json:"username" validate:"required,min=3,max=30"`
-	Email        string `json:"email" validate:"required,email,max=255"`
-	IsSuperAdmin bool   `json:"is_super_admin"`
+	FirstName    *string `json:"first_name" validate:"omitempty,max=100"`
+	LastName     *string `json:"last_name" validate:"omitempty,max=100"`
+	Username     string  `json:"username" validate:"required,min=3,max=30"`
+	Email        string  `json:"email" validate:"required,email,max=255"`
+	IsSuperAdmin *bool   `json:"is_super_admin"`
 }
 
 type UserDeletedFilter string
@@ -199,11 +206,11 @@ func ParseUserDeletedFilter(value string) (UserDeletedFilter, error) {
 type UserListOrder string
 
 const (
-	UserListOrderCreatedAt   UserListOrder = "created_at"
-	UserListOrderLastLogged  UserListOrder = "last_logged_at"
-	UserListOrderUsername    UserListOrder = "username"
-	UserListOrderEmail       UserListOrder = "email"
-	UserListOrderDefault     UserListOrder = UserListOrderCreatedAt
+	UserListOrderCreatedAt  UserListOrder = "created_at"
+	UserListOrderLastLogged UserListOrder = "last_logged_at"
+	UserListOrderUsername   UserListOrder = "username"
+	UserListOrderEmail      UserListOrder = "email"
+	UserListOrderDefault    UserListOrder = UserListOrderCreatedAt
 )
 
 func ParseUserListOrder(value string) UserListOrder {

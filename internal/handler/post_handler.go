@@ -383,8 +383,16 @@ func (h *PostHandler) GetPostsByUsername(c *echo.Context) error {
 func (h *PostHandler) GetPostsByTag(c *echo.Context) error {
 	tag := c.Param("tag")
 	limit, offset := ParsePaginationParams(c, 10)
+	sortBy := c.QueryParam("sort_by")
+	if sortBy == "" {
+		sortBy = c.QueryParam("orderBy")
+	}
+	sortOrder := c.QueryParam("sort_order")
+	if sortOrder == "" {
+		sortOrder = c.QueryParam("orderDirection")
+	}
 
-	posts, total, err := h.postService.GetPostsByTag(c.Request().Context(), tag, limit, offset)
+	posts, total, err := h.postService.GetPostsByTag(c.Request().Context(), tag, limit, offset, sortBy, sortOrder)
 	if err != nil {
 		return response.InternalServerError(c, "Failed to get posts by tag", err)
 	}

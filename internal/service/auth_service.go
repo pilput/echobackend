@@ -34,7 +34,7 @@ type AuthService interface {
 	ResetPassword(ctx context.Context, token, password, ipAddress, userAgent string) error
 	RefreshToken(ctx context.Context, refreshToken, ipAddress, userAgent string) (string, string, *model.User, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ipAddress, userAgent string) error
-	Logout(ctx context.Context, refreshToken string) error
+	Logout(ctx context.Context, userID, refreshToken string) error
 	RevokeUserSessions(ctx context.Context, targetUserID, actorID, ipAddress, userAgent string) (int64, error)
 	RevokeAllSessions(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 	GetProfile(ctx context.Context, userID string) (*model.User, error)
@@ -464,9 +464,13 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 // Logout ends the whole rotation chain the token belongs to, not just the token
 // itself, so that any sibling minted during a grace window dies with it
 // (ASVS 7.4.1). Unknown tokens are a no-op: logging out is idempotent.
-func (s *authService) Logout(ctx context.Context, refreshToken string) error {
+//
+// The lookup is scoped to the caller: a refresh token belonging to another
+// user is treated as unknown, so holding someone else's token is not enough to
+// end their sessions.
+func (s *authService) Logout(ctx context.Context, userID, refreshToken string) error {
 	session, err := s.sessionRepo.GetSessionByRefreshToken(ctx, tokenHash(refreshToken))
-	if err != nil || session == nil {
+	if err != nil || session == nil || session.UserID != userID {
 		return nil //nolint:nilerr // logging out an unknown token is not an error
 	}
 	return s.sessionRepo.DeleteByFamilyID(ctx, session.FamilyID)

@@ -10,7 +10,9 @@ chatConversations:
     - {$ref: ../parameters.yaml#/Offset}
     responses:
       '200':
-        description: Conversations with pagination meta. `chat_messages` is not included.
+        description: |
+          Conversations with pagination meta, newest `updated_at` first. `data` is always an
+          array (`[]` when there are none). `chat_messages` is not included.
         content:
           application/json:
             schema:
@@ -62,12 +64,18 @@ chatConversationsStream:
       | `conversation_created` | `{ conversation_id, user_message }` |
       | `ai_chunk` | text chunk |
       | `ai_complete` | the AI `ChatMessageResponse` |
-      | `error` | generic error message |
+      | `error` | error message |
 
-      The stream terminates with `data: [DONE]`.
+      After the first event come zero or more `ai_chunk` events, then exactly one of
+      `ai_complete` or `error`. The stream always terminates with `data: [DONE]`, including
+      after an `error` event. `error` data is the upstream provider's message, "OpenRouter
+      returned an empty response", or "Failed to save AI response" when the reply could not
+      be stored (internal error details are never sent).
 
-      When streaming is unavailable the endpoint answers 201 with the normal envelope and
-      `data` set to an array holding the user message.
+      Streaming is unavailable when `OPENROUTER_API_KEY` is empty or no model resolves
+      (neither `model` nor `OPENROUTER_DEFAULT_MODEL`). The endpoint then answers 201 with the
+      normal envelope and `data` set to an array holding the user message; the created
+      conversation is kept, and it is not auto-titled.
     operationId: createConversationStream
     security:
     - bearerAuth: []
@@ -103,6 +111,7 @@ chatConversationsById:
   - name: id
     in: path
     required: true
+    description: Conversation UUID. A malformed value is rejected with 400 "Invalid conversation ID".
     schema: {type: string, format: uuid}
   get:
     tags: [Chat]
@@ -114,7 +123,8 @@ chatConversationsById:
     responses:
       '200':
         description: |
-          Conversation including `chat_messages`, ordered by ascending `created_at`.
+          Conversation including `chat_messages`, ordered by ascending `created_at` (`[]` when
+          the conversation has no messages).
         content:
           application/json:
             schema:
@@ -123,6 +133,7 @@ chatConversationsById:
               - type: object
                 properties:
                   data: {$ref: ../schemas/chat.yaml#/ChatConversationResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -130,6 +141,7 @@ chatConversationsById:
   put:
     tags: [Chat]
     summary: Update a conversation's title or pin state
+    description: A blank or whitespace-only `title` leaves the title unchanged.
     operationId: updateConversation
     security:
     - bearerAuth: []
@@ -167,6 +179,7 @@ chatConversationsById:
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -193,6 +206,7 @@ chatConversationsByConversationidMessages:
                   data:
                     type: array
                     items: {$ref: ../schemas/chat.yaml#/ChatMessageResponse}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -200,6 +214,12 @@ chatConversationsByConversationidMessages:
   post:
     tags: [Chat]
     summary: Send a message
+    description: |
+      Stores the message and bumps the conversation's `updated_at`. When `role` is `user`
+      and AI is available (`OPENROUTER_API_KEY` set and a model resolves), the AI reply is
+      generated and stored too, and a "New conversation" is auto-titled from its first
+      message; otherwise only the user message is returned. A malformed `conversationId`
+      is rejected with 400 "Invalid conversation ID".
     operationId: createMessage
     security:
     - bearerAuth: []
@@ -241,9 +261,21 @@ chatConversationsByConversationidMessagesStream:
       | `user_message` | the stored `ChatMessageResponse` |
       | `ai_chunk` | text chunk |
       | `ai_complete` | the AI `ChatMessageResponse` |
-      | `error` | generic error message |
+      | `error` | error message |
 
-      The stream terminates with `data: [DONE]`.
+      After the first event come zero or more `ai_chunk` events, then exactly one of
+      `ai_complete` or `error`. The stream always terminates with `data: [DONE]`, including
+      after an `error` event. `error` data is the upstream provider's message, "OpenRouter
+      returned an empty response", or "Failed to save AI response" when the reply could not
+      be stored (internal error details are never sent).
+
+      Streaming is unavailable when `OPENROUTER_API_KEY` is empty or no model resolves
+      (neither `model` nor `OPENROUTER_DEFAULT_MODEL`), or when `role` is not
+      `user`. The endpoint then answers 201 with the normal envelope and `data` set to an
+      array holding the user message (no auto-title, no AI call).
+
+      A malformed `conversationId` is rejected with 400 "Invalid conversation ID" before the
+      body is validated.
     operationId: createMessageStream
     security:
     - bearerAuth: []
@@ -283,10 +315,14 @@ chatMessagesByMessageid:
   - name: messageId
     in: path
     required: true
+    description: Message UUID. A malformed value is rejected with 400 "Invalid message ID".
     schema: {type: string, format: uuid}
   get:
     tags: [Chat]
     summary: One message
+    description: |
+      404 when the message is not the token user's, or when its conversation has been
+      deleted; 403 when the conversation belongs to another user.
     operationId: getMessage
     security:
     - bearerAuth: []
@@ -296,6 +332,7 @@ chatMessagesByMessageid:
         content:
           application/json:
             schema: {$ref: ../schemas/chat.yaml#/ChatMessageEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -303,6 +340,9 @@ chatMessagesByMessageid:
   delete:
     tags: [Chat]
     summary: Delete a message
+    description: |
+      Same lookup rules as GET. Hard-deletes the message and bumps the conversation's
+      `updated_at`.
     operationId: deleteMessage
     security:
     - bearerAuth: []
@@ -312,6 +352,7 @@ chatMessagesByMessageid:
         content:
           application/json:
             schema: {$ref: ../schemas/chat.yaml#/ChatMessageEnvelope}
+      '400': {$ref: ../responses.yaml#/BadRequest}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}

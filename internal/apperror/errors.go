@@ -47,6 +47,9 @@ var (
 	ErrChatConversationNotFound = errors.New("chat conversation not found")
 	ErrChatMessageNotFound      = errors.New("chat message not found")
 	ErrConversationNotOwned     = errors.New("access denied: conversation does not belong to user")
+	// ErrChatAIResponseSaveFailed: persisting a streamed AI reply failed; the
+	// SSE `error` event shows a generic message, never the underlying DB error.
+	ErrChatAIResponseSaveFailed = errors.New("failed to save AI response")
 
 	ErrInvalidPaginationLimit   = errors.New("limit must be greater than 0")
 	ErrPaginationLimitExceeded  = errors.New("limit must not exceed 100")
@@ -64,6 +67,7 @@ var (
 	ErrHoldingDuplicateSame   = errors.New("source and target month/year are the same")
 	ErrHoldingInvalidRange    = errors.New("end month/year must be on or before start month/year")
 	ErrHoldingRangeTooLarge   = errors.New("requested month/year range is too large")
+	ErrHoldingInvalidDecimal  = errors.New("invalid decimal value")
 	ErrBookmarkNotFound       = errors.New("bookmark not found")
 	ErrBookmarkFolderNotFound = errors.New("bookmark folder not found")
 	ErrNotificationNotFound   = errors.New("notification not found")
@@ -96,3 +100,19 @@ var (
 	ErrPasswordResetTokenExpired = errors.New("password reset token has expired")
 	ErrOAuthNotConfigured        = errors.New("GitHub OAuth is not configured")
 )
+
+// HoldingInvalidDecimalError reports a holding amount field (invested_amount,
+// current_value, units, avg_buy_price, current_price) that is not a plain
+// decimal number. Field is the JSON name; errors.Is matches
+// ErrHoldingInvalidDecimal.
+type HoldingInvalidDecimalError struct {
+	Field string
+}
+
+func (e *HoldingInvalidDecimalError) Error() string {
+	return "Invalid decimal value for " + e.Field
+}
+
+func (e *HoldingInvalidDecimalError) Is(target error) bool {
+	return target == ErrHoldingInvalidDecimal
+}

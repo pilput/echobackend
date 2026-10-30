@@ -108,7 +108,7 @@ func (h *TagHandler) UpdateTag(c *echo.Context) error {
 		if errors.Is(err, apperrors.ErrTagNameRequired) {
 			return response.BadRequest(c, err.Error(), nil)
 		}
-		if errors.Is(err, apperrors.ErrTagNotFound) {
+		if errors.Is(err, apperrors.ErrTagNotFound) || errors.Is(err, apperrors.ErrInvalidTagID) {
 			return response.NotFound(c, "Tag not found", err)
 		}
 		return response.InternalServerError(c, "Failed to update tag", err)
@@ -124,7 +124,7 @@ func (h *TagHandler) DeleteTag(c *echo.Context) error {
 	}
 
 	if err := h.service.DeleteTag(c.Request().Context(), uint(id)); err != nil {
-		if errors.Is(err, apperrors.ErrTagNotFound) {
+		if errors.Is(err, apperrors.ErrTagNotFound) || errors.Is(err, apperrors.ErrInvalidTagID) {
 			return response.NotFound(c, "Tag not found", err)
 		}
 		return response.InternalServerError(c, "Failed to delete tag", err)

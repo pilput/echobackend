@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
@@ -37,7 +38,7 @@ type PostService interface {
 	GetPostByID(ctx context.Context, id string) (*dto.PostResponse, error)
 	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*dto.PostResponse, error)
 	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*dto.PostResponse, int64, error)
-	GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error)
+	GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*dto.PostResponse, int64, error)
 	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*dto.PostResponse, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
 	DeleteMyPost(ctx context.Context, id string, userID string) error
@@ -111,11 +112,7 @@ func (s *postService) CreatePost(ctx context.Context, req *dto.CreatePostRequest
 
 	var tags []model.Tag
 	if len(req.Tags) > 0 {
-		for _, tagName := range req.Tags {
-			if tagName == "" {
-				continue
-			}
-
+		for _, tagName := range normalizeTagNames(req.Tags) {
 			tag, err := s.findOrCreateTagByName(ctx, tagName)
 			if err != nil {
 				return nil, err
@@ -185,10 +182,7 @@ func (s *postService) UpdatePost(ctx context.Context, id string, req *dto.Update
 	var tags []model.Tag
 	if req.Tags != nil {
 		tags = make([]model.Tag, 0, len(req.Tags))
-		for _, tagName := range req.Tags {
-			if tagName == "" {
-				continue
-			}
+		for _, tagName := range normalizeTagNames(req.Tags) {
 			tag, err := s.findOrCreateTagByName(ctx, tagName)
 			if err != nil {
 				return nil, err
@@ -245,10 +239,7 @@ func (s *postService) UpdateMyPost(ctx context.Context, id string, userID string
 	var tags []model.Tag
 	if req.Tags != nil {
 		tags = make([]model.Tag, 0, len(req.Tags))
-		for _, tagName := range req.Tags {
-			if tagName == "" {
-				continue
-			}
+		for _, tagName := range normalizeTagNames(req.Tags) {
 			tag, err := s.findOrCreateTagByName(ctx, tagName)
 			if err != nil {
 				return nil, err
@@ -413,7 +404,7 @@ func (s *postService) GetPostsByCreatedBy(ctx context.Context, createdBy string,
 	return postsResponse, total, nil
 }
 
-func (s *postService) GetPostsByTag(ctx context.Context, tag string, limit int, offset int) ([]*dto.PostResponse, int64, error) {
+func (s *postService) GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*dto.PostResponse, int64, error) {
 	if limit < 0 {
 		limit = 0
 	}
@@ -424,7 +415,7 @@ func (s *postService) GetPostsByTag(ctx context.Context, tag string, limit int, 
 		return []*dto.PostResponse{}, 0, nil
 	}
 
-	posts, total, err := s.postRepo.GetPostsByTag(ctx, tag, limit, offset)
+	posts, total, err := s.postRepo.GetPostsByTag(ctx, tag, limit, offset, sortBy, sortOrder)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -569,4 +560,28 @@ func (s *postService) GetPostsForSitemap(ctx context.Context, limit int) ([]*dto
 		limit = 0
 	}
 	return s.postRepo.GetPostsForSitemap(ctx, limit)
+}
+
+// normalizeTagNames trims each tag name, drops names that are empty after
+// trimming and removes exact (case-sensitive) duplicates, keeping the order in
+// which names first appear. Case is preserved. A non-nil input always yields a
+// non-nil slice so an explicit empty tag list still clears a post's tags.
+func normalizeTagNames(names []string) []string {
+	if names == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(names))
+	normalized := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		normalized = append(normalized, name)
+	}
+	return normalized
 }
