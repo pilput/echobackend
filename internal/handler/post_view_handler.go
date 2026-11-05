@@ -19,8 +19,8 @@ func NewPostViewHandler(postViewService service.PostViewService, userService ser
 
 func (h *PostViewHandler) RecordView(c *echo.Context) error {
 	postID := c.Param("id")
-	if postID == "" {
-		return response.BadRequest(c, "Post ID is required", nil)
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
 	}
 
 	var userID string
@@ -41,8 +41,8 @@ func (h *PostViewHandler) RecordView(c *echo.Context) error {
 
 func (h *PostViewHandler) GetPostViews(c *echo.Context) error {
 	postID := c.Param("id")
-	if postID == "" {
-		return response.BadRequest(c, "Post ID is required", nil)
+	if !validator.IsValidUUID(postID) {
+		return response.BadRequest(c, "Invalid post ID", nil)
 	}
 
 	userID, ok := GetUserIDFromClaims(c)

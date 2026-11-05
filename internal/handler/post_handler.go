@@ -54,10 +54,23 @@ func (h *PostHandler) GetPosts(c *echo.Context) error {
 		Search:    c.QueryParam("search"),
 		SortBy:    c.QueryParam("sort_by"),
 		SortOrder: c.QueryParam("sort_order"),
-		StartDate: c.QueryParam("start_date"),
-		EndDate:   c.QueryParam("end_date"),
-		CreatedBy: c.QueryParam("created_by"),
 	}
+
+	startDate, ok := parseFilterDate(c.QueryParam("start_date"))
+	if !ok {
+		return response.BadRequest(c, "Invalid start_date format, expected YYYY-MM-DD or an RFC 3339 timestamp", nil)
+	}
+	endDate, ok := parseFilterDate(c.QueryParam("end_date"))
+	if !ok {
+		return response.BadRequest(c, "Invalid end_date format, expected YYYY-MM-DD or an RFC 3339 timestamp", nil)
+	}
+	createdBy := strings.TrimSpace(c.QueryParam("created_by"))
+	if createdBy != "" && !validator.IsValidUUID(createdBy) {
+		return response.BadRequest(c, "Invalid created_by value, expected UUID", nil)
+	}
+	filter.StartDate = startDate
+	filter.EndDate = endDate
+	filter.CreatedBy = createdBy
 
 	if limit := c.QueryParam("limit"); limit != "" {
 		if limitInt, err := strconv.Atoi(limit); err == nil && limitInt > 0 {

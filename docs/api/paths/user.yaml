@@ -512,6 +512,7 @@ usersStats:
   get:
     tags: [Users]
     summary: User statistics (admin)
+    description: '`startDate`/`endDate` must be `YYYY-MM-DD` (month and day may be unpadded); any other value is ignored (treated as absent), not rejected.'
     operationId: getUserStats
     security:
     - bearerAuth: []

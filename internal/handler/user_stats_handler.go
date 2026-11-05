@@ -19,8 +19,8 @@ func NewUserStatsHandler(statsService service.UserStatsService) *UserStatsHandle
 func (h *UserStatsHandler) GetStats(c *echo.Context) error {
 	limit, _ := ParsePaginationParams(c, 10)
 	stats, err := h.statsService.GetUserStats(c.Request().Context(), dto.DateRangeQuery{
-		StartDate: c.QueryParam("startDate"),
-		EndDate:   c.QueryParam("endDate"),
+		StartDate: parseStatsDate(c.QueryParam("startDate")),
+		EndDate:   parseStatsDate(c.QueryParam("endDate")),
 	}, limit)
 	if err != nil {
 		return response.InternalServerError(c, "Failed to fetch user stats", err)

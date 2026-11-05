@@ -32,13 +32,22 @@ posts:
         default: desc
     - name: start_date
       in: query
-      schema: {type: string, format: date}
+      description: |
+        Only posts created at or after this instant. `YYYY-MM-DD` (UTC
+        midnight; month and day may be unpadded), an RFC 3339 timestamp
+        (the date/time separator may also be a space or lowercase `t`), or a
+        zone-less `YYYY-MM-DDTHH:MM:SS` / `YYYY-MM-DD HH:MM:SS` timestamp read
+        as UTC. Any other value is rejected with 400.
+      schema: {type: string}
+      example: '2024-01-02'
     - name: end_date
       in: query
-      schema: {type: string, format: date}
+      description: Only posts created at or before this instant. Same formats as `start_date`.
+      schema: {type: string}
+      example: '2024-01-31T23:59:59Z'
     - name: created_by
       in: query
-      description: Author UUID.
+      description: Author UUID (surrounding whitespace is trimmed). A non-UUID value is rejected with 400.
       schema: {type: string, format: uuid}
     - name: tags
       in: query
@@ -51,6 +60,13 @@ posts:
         content:
           application/json:
             schema: {$ref: ../schemas/post.yaml#/PostListEnvelope}
+      '400':
+        description: |
+          Unusable filter: `Invalid start_date format, expected YYYY-MM-DD or an RFC 3339 timestamp`
+          (same for `end_date`) or `Invalid created_by value, expected UUID`.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '500': {$ref: ../responses.yaml#/ServerError}
   post:
     tags: [Posts]
@@ -646,7 +662,11 @@ postsByIdView:
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: Invalid post ID (not a UUID).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '500': {$ref: ../responses.yaml#/ServerError}
 postsByIdViews:
@@ -674,7 +694,11 @@ postsByIdViews:
                   data:
                     type: array
                     items: {$ref: ../schemas/post.yaml#/PostViewResponse}
-      '400': {$ref: ../responses.yaml#/BadRequest}
+      '400':
+        description: Invalid post ID (not a UUID).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '404': {$ref: ../responses.yaml#/NotFound}
@@ -875,6 +899,7 @@ postsStats:
   get:
     tags: [Posts]
     summary: Post statistics (admin)
+    description: '`startDate`/`endDate` must be `YYYY-MM-DD` (month and day may be unpadded); any other value is ignored (treated as absent), not rejected.'
     operationId: getPostStats
     security:
     - bearerAuth: []
@@ -907,6 +932,7 @@ postsStatsEngagement:
   get:
     tags: [Posts]
     summary: Engagement metrics (admin)
+    description: '`startDate`/`endDate` must be `YYYY-MM-DD` (month and day may be unpadded); any other value is ignored (treated as absent), not rejected.'
     operationId: getPostEngagementStats
     security:
     - bearerAuth: []

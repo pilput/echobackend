@@ -18,10 +18,11 @@ func NewPostStatsHandler(statsService service.PostStatsService) *PostStatsHandle
 	return &PostStatsHandler{statsService: statsService}
 }
 
+// dateRangeFromQuery reads the stats date range; unparsable dates are ignored.
 func dateRangeFromQuery(c *echo.Context) dto.DateRangeQuery {
 	return dto.DateRangeQuery{
-		StartDate: c.QueryParam("startDate"),
-		EndDate:   c.QueryParam("endDate"),
+		StartDate: parseStatsDate(c.QueryParam("startDate")),
+		EndDate:   parseStatsDate(c.QueryParam("endDate")),
 	}
 }
 

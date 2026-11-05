@@ -17,12 +17,16 @@ var _ service.PostService = (*mockPostService)(nil)
 
 type mockPostService struct {
 	getPostsForSitemapFn func(ctx context.Context, limit int) ([]*dto.SitemapPost, error)
+	getPostsFilteredFn   func(ctx context.Context, filter *dto.PostQueryFilter) ([]*dto.PostResponse, int64, error)
 }
 
 func (m *mockPostService) GetPosts(ctx context.Context, limit int, offset int) ([]*dto.PostResponse, int64, error) {
 	return nil, 0, nil
 }
 func (m *mockPostService) GetPostsFiltered(ctx context.Context, filter *dto.PostQueryFilter) ([]*dto.PostResponse, int64, error) {
+	if m.getPostsFilteredFn != nil {
+		return m.getPostsFilteredFn(ctx, filter)
+	}
 	return nil, 0, nil
 }
 func (m *mockPostService) GetPostsByUsername(ctx context.Context, username string, offset int, limit int) ([]*dto.PostResponse, int64, error) {
