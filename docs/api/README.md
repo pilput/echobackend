@@ -15,6 +15,7 @@ docs/api/
 │   ├── post.yaml         # includes comments, views, likes
 │   ├── tag.yaml
 │   ├── chat.yaml
+│   ├── ai.yaml           # AI article generation (SSE)
 │   ├── bookmark.yaml
 │   ├── notification.yaml
 │   ├── holding.yaml      # includes holding-types and the corporate-actions calendar
@@ -28,6 +29,7 @@ docs/api/
     ├── post.yaml
     ├── tag.yaml
     ├── chat.yaml
+    ├── ai.yaml
     ├── bookmark.yaml
     ├── notification.yaml
     ├── holding.yaml

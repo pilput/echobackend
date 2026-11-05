@@ -33,6 +33,7 @@ type Routes struct {
 	corporateActionHandler  *handler.CorporateActionHandler
 	guildHandler            *handler.GuildHandler
 	guildChannelHandler     *handler.GuildChannelHandler
+	aiHandler               *handler.AIHandler
 }
 
 func NewRoutes(
@@ -59,6 +60,7 @@ func NewRoutes(
 	corporateActionHandler *handler.CorporateActionHandler,
 	guildHandler *handler.GuildHandler,
 	guildChannelHandler *handler.GuildChannelHandler,
+	aiHandler *handler.AIHandler,
 ) *Routes {
 	return &Routes{
 		config:                  config,
@@ -84,6 +86,7 @@ func NewRoutes(
 		corporateActionHandler:  corporateActionHandler,
 		guildHandler:            guildHandler,
 		guildChannelHandler:     guildChannelHandler,
+		aiHandler:               aiHandler,
 	}
 }
 
@@ -104,4 +107,5 @@ func (r *Routes) setupAPIRoutes(api *echo.Group) {
 	r.setupBookmarkRoutes(api)
 	r.setupNotificationRoutes(api)
 	r.setupGuildRoutes(api)
+	r.setupAIRoutes(api)
 }

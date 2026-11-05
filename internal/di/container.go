@@ -98,6 +98,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
 	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterClient, cfg)
+	articleGenerationService := service.NewArticleGenerationService(openRouterClient, cfg)
 
 	// Market quotes (RapidAPI with shared Redis caching decorator)
 	rawQuoteClient := market.NewRapidAPIQuoteClient(cfg.MarketData.RapidAPIKey, nil)
@@ -137,6 +138,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	corporateActionHandler := handler.NewCorporateActionHandler(corporateActionService)
 	guildHandler := handler.NewGuildHandler(guildService)
 	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
+	aiHandler := handler.NewAIHandler(articleGenerationService)
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
@@ -163,6 +165,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		corporateActionHandler,
 		guildHandler,
 		guildChannelHandler,
+		aiHandler,
 	)
 
 	return &Container{

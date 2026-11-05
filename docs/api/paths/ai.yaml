@@ -1,0 +1,69 @@
+aiGenerateArticle:
+  post:
+    tags: [AI]
+    summary: Generate a draft blog article, streamed as server-sent events
+    description: |
+      Asks the configured OpenRouter model (`OPENROUTER_DEFAULT_MODEL`, temperature 0.7) to
+      write a complete blog article as HTML for the create/edit-post editor. Nothing is
+      stored. `prompt` and `title` are trimmed before validation; unknown body fields
+      (e.g. `model`, `temperature`) are ignored.
+
+      The model is instructed to answer with HTML only: the title in one `<h1>`, then a body
+      limited to `<h2>`, `<h3>`, `<p>`, `<ul>`, `<ol>`, `<li>`, `<strong>`, `<em>`,
+      `<blockquote>`, `<code>`, `<pre>` and `<a href>`, in the language of the request.
+      Clients must still sanitize the result before rendering it.
+
+      The response is `text/event-stream`; each event is a `data: <json>` line carrying
+      `{ "type": ..., "data": ... }` (there are no `event:` lines and no initial event):
+
+      | `type` | `data` |
+      |--------|--------|
+      | `ai_chunk` | text chunk |
+      | `ai_complete` | `GeneratedArticle` — `{ content, model }`, `content` being all chunks concatenated |
+      | `error` | error message |
+
+      Zero or more `ai_chunk` events come first, then exactly one of `ai_complete` or
+      `error`. The stream always terminates with `data: [DONE]`, including after an `error`
+      event. `error` data is the upstream provider's message or "OpenRouter returned an
+      empty response".
+
+      Super admins only for now (rollout): other authenticated users get 403
+      "Insufficient privileges". Admin status is read from the database.
+
+      Rate limited per client IP to 20 requests per hour (fixed window, shared via Redis
+      when configured), checked after authentication and the admin check.
+    operationId: generateArticle
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/ai.yaml#/GenerateArticleRequest}
+          example: {prompt: How to start journaling, tone: casual, length: short, title: Journaling 101}
+    responses:
+      '200':
+        description: Server-sent event stream (see the description for the event format).
+        content:
+          text/event-stream:
+            schema: {type: string}
+            example: |
+              data: {"data":"<h1>Journaling 101</h1>","type":"ai_chunk"}
+
+              data: {"data":{"content":"<h1>Journaling 101</h1>...","model":"openrouter/free"},"type":"ai_complete"}
+
+              data: [DONE]
+      '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+      '503':
+        description: |
+          AI is not configured (no OpenRouter client, blank `OPENROUTER_API_KEY` or
+          `OPENROUTER_DEFAULT_MODEL`).
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+            example: {success: false, message: AI article generation is not available, error: Service Unavailable}

@@ -21,8 +21,9 @@ info:
     when empty. Success responses carry no `error`/`errors`; error responses usually
     carry no `data`/`meta`.
 
-    The two exceptions are `GET /health` (plain `{"status": ...}` object) and the chat
-    streaming endpoints, which answer with `text/event-stream`.
+    The two exceptions are `GET /health` (plain `{"status": ...}` object) and the
+    streaming endpoints (chat streams, `POST /api/ai/generate-article` and the guild event
+    stream), which answer with `text/event-stream`.
 
     Framework-level errors use the same envelope: an unknown route returns 404
     `{"success":false,"message":"Route not found","error":"Resource not found"}`, a known
@@ -92,6 +93,7 @@ tags:
 - {name: Post reports, description: 'User reports of posts, the admin moderation queue, and the moderation audit log.'}
 - {name: Tags, description: Tag management and admin statistics.}
 - {name: Chat, description: 'Chat conversations, messages and SSE streaming.'}
+- {name: AI, description: 'AI writing assistance for the post editor (SSE streaming, nothing stored).'}
 - {name: Holdings, description: Investment portfolio records per user per month/year.}
 - {name: Exchange rates, description: Currency exchange rates.}
 - {name: Bookmarks, description: Post bookmarks and folders.}
@@ -211,6 +213,7 @@ paths:
   /api/chat/conversations/{conversationId}/messages: {$ref: ./paths/chat.yaml#/chatConversationsByConversationidMessages}
   /api/chat/conversations/{conversationId}/messages/stream: {$ref: ./paths/chat.yaml#/chatConversationsByConversationidMessagesStream}
   /api/chat/messages/{messageId}: {$ref: ./paths/chat.yaml#/chatMessagesByMessageid}
+  /api/ai/generate-article: {$ref: ./paths/ai.yaml#/aiGenerateArticle}
   /api/bookmarks: {$ref: ./paths/bookmark.yaml#/bookmarks}
   /api/bookmarks/folders: {$ref: ./paths/bookmark.yaml#/bookmarksFolders}
   /api/bookmarks/folders/{folder_id}: {$ref: ./paths/bookmark.yaml#/bookmarksFoldersByFolderId}

@@ -116,6 +116,20 @@ func TooManyRequests(c *echo.Context, message string) error {
 	})
 }
 
+// ServiceUnavailable sends a 503 response for a feature whose backing
+// integration is not configured. Unlike HTTPStatus it keeps message.
+func ServiceUnavailable(c *echo.Context, message string) error {
+	log.Warn("service unavailable",
+		"message", message,
+	)
+
+	return c.JSON(http.StatusServiceUnavailable, APIResponse{
+		Success: false,
+		Message: message,
+		Error:   http.StatusText(http.StatusServiceUnavailable),
+	})
+}
+
 // NotFound sends a not found error response
 func NotFound(c *echo.Context, message string, err error) error {
 	errorMsg := "Resource not found"

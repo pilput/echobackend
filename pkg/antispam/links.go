@@ -173,7 +173,7 @@ func linkHosts(lower string) []string {
 }
 
 func isHostTerminator(r rune) bool {
-	return !(isASCIIAlnum(r) || r == '.' || r == '-')
+	return !isASCIIAlnum(r) && r != '.' && r != '-'
 }
 
 func matchShortener(host string) string {

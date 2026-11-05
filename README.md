@@ -6,7 +6,7 @@ REST API for [pilput](https://pilput.net), built with Go 1.27, Echo v5, GORM, an
 
 - **Blog & community**: posts, comments, tags, likes, bookmarks, follows, notifications, admin statistics.
 - **Guilds**: Discord-style channels and messages with realtime updates over SSE.
-- **AI chat**: streaming replies from [OpenRouter](https://openrouter.ai).
+- **AI writing**: `POST /api/ai/generate-article` streams a draft HTML article for the post editor; AI chat streams replies. Both use [OpenRouter](https://openrouter.ai).
 - **Portfolio**: holdings, monthly summaries, price sync, exchange rates, IDX corporate-action calendar.
 - **Auth**: JWT with rotating refresh tokens, GitHub OAuth, password reset by email.
 

@@ -123,6 +123,18 @@ func TestForbidden(t *testing.T) {
 	}
 }
 
+func TestServiceUnavailable(t *testing.T) {
+	c, rec := newCtx(t)
+	_ = ServiceUnavailable(c, "AI article generation is not available")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	got := decode(t, rec.Body.Bytes())
+	if got.Success || got.Message != "AI article generation is not available" || got.Error != "Service Unavailable" {
+		t.Fatalf("body = %+v", got)
+	}
+}
+
 func TestNotFound(t *testing.T) {
 	c, rec := newCtx(t)
 	_ = NotFound(c, "missing", errors.New("post not found"))

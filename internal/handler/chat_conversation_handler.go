@@ -298,31 +298,11 @@ const chatStreamWriteTimeout = 10 * time.Second
 // `data: [DONE]`. A failed write means the client is gone; the handler then
 // returns, which cancels the request context and stops the producer.
 func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan string, complete <-chan dto.ChatMessageResponse, errCh <-chan error) error {
-	res := c.Response()
-	rc := http.NewResponseController(res)
-	// The request body is already bound. Lift the server's ReadTimeout so it
-	// cannot fire mid-stream and cancel the request context, which would abort
-	// the upstream call and skip saving the assistant reply.
-	_ = rc.SetReadDeadline(time.Time{})
-
-	res.Header().Set(echo.HeaderContentType, "text/event-stream")
-	res.Header().Set(echo.HeaderCacheControl, "no-cache")
-	res.Header().Set("Connection", "keep-alive")
-	res.WriteHeader(http.StatusOK)
-
-	write := func(frame []byte) error {
-		if err := rc.SetWriteDeadline(time.Now().Add(chatStreamWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
-		if _, err := res.Write(frame); err != nil {
-			return err
-		}
-		return rc.Flush()
-	}
+	write := openAIStream(c)
 
 	if initialEvent != nil {
 		if err := writeSSE(write, initialEvent); err != nil {
-			return nil
+			return nil //nolint:nilerr // write failed: the client is gone, nothing left to report
 		}
 	}
 
@@ -331,7 +311,7 @@ func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-cha
 			"type": "ai_chunk",
 			"data": chunk,
 		}); err != nil {
-			return nil
+			return nil //nolint:nilerr // write failed: the client is gone, nothing left to report
 		}
 	}
 
@@ -341,19 +321,46 @@ func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-cha
 			"type": "error",
 			"data": streamErrorMessage(err),
 		}); err != nil {
-			return nil
+			return nil //nolint:nilerr // write failed: the client is gone, nothing left to report
 		}
 	} else if msg, ok := <-complete; ok {
 		if err := writeSSE(write, map[string]any{
 			"type": "ai_complete",
 			"data": msg,
 		}); err != nil {
-			return nil
+			return nil //nolint:nilerr // write failed: the client is gone, nothing left to report
 		}
 	}
 
 	_ = write([]byte("data: [DONE]\n\n"))
 	return nil
+}
+
+// openAIStream starts a 200 text/event-stream response for an AI stream and
+// returns a frame writer that pushes the write deadline before every frame
+// and flushes after it.
+func openAIStream(c *echo.Context) func([]byte) error {
+	res := c.Response()
+	rc := http.NewResponseController(res)
+	// The request body is already bound. Lift the server's ReadTimeout so it
+	// cannot fire mid-stream and cancel the request context, which would abort
+	// the upstream call (and, for chat, skip saving the assistant reply).
+	_ = rc.SetReadDeadline(time.Time{})
+
+	res.Header().Set(echo.HeaderContentType, "text/event-stream")
+	res.Header().Set(echo.HeaderCacheControl, "no-cache")
+	res.Header().Set("Connection", "keep-alive")
+	res.WriteHeader(http.StatusOK)
+
+	return func(frame []byte) error {
+		if err := rc.SetWriteDeadline(time.Now().Add(chatStreamWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		if _, err := res.Write(frame); err != nil {
+			return err
+		}
+		return rc.Flush()
+	}
 }
 
 func writeSSE(write func([]byte) error, payload any) error {

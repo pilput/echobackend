@@ -1,0 +1,29 @@
+GenerateArticleRequest:
+  type: object
+  required: [prompt]
+  properties:
+    prompt:
+      type: string
+      minLength: 3
+      maxLength: 2000
+      description: What the article should be about. Trimmed before validation.
+    tone:
+      type: string
+      enum: [informative, professional, casual, storytelling]
+      default: informative
+    length:
+      type: string
+      enum: [short, medium, long]
+      default: medium
+      description: Target length — about 400, 800 or 1500 words.
+    title:
+      type: string
+      maxLength: 200
+      description: Optional working title. Trimmed; ignored when blank.
+GeneratedArticle:
+  type: object
+  description: '`data` of the `ai_complete` event.'
+  required: [content, model]
+  properties:
+    content: {type: string, description: The full generated article (HTML).}
+    model: {type: string, description: The OpenRouter model that produced it.}

@@ -47,9 +47,15 @@ var (
 	ErrChatConversationNotFound = errors.New("chat conversation not found")
 	ErrChatMessageNotFound      = errors.New("chat message not found")
 	ErrConversationNotOwned     = errors.New("access denied: conversation does not belong to user")
-	// ErrChatAIResponseSaveFailed: persisting a streamed AI reply failed; the
-	// SSE `error` event shows a generic message, never the underlying DB error.
+	// ErrChatAIResponseSaveFailed means persisting a streamed AI reply failed;
+	// the SSE `error` event shows a generic message, never the underlying DB error.
 	ErrChatAIResponseSaveFailed = errors.New("failed to save AI response")
+	// ErrAIArticleGenerationUnavailable is returned when AI article generation is not
+	// configured (no OpenRouter client, blank OPENROUTER_API_KEY or
+	// OPENROUTER_DEFAULT_MODEL); handlers answer 503.
+	ErrAIArticleGenerationUnavailable = errors.New("AI article generation is not available")
+	// ErrAIEmptyResponse is returned when an AI stream ends without content.
+	ErrAIEmptyResponse = errors.New("OpenRouter returned an empty response")
 
 	ErrInvalidPaginationLimit   = errors.New("limit must be greater than 0")
 	ErrPaginationLimitExceeded  = errors.New("limit must not exceed 100")
