@@ -22,9 +22,18 @@ import (
 
 var log = applog.Component("email")
 
-type passwordResetPayload struct {
-	To        string `json:"to"`
-	ResetLink string `json:"reset_link"`
+type emailKind int
+
+const (
+	kindPasswordReset emailKind = iota
+	kindAccountDeletion
+)
+
+// emailTask is one queued email. Link is the token link the email carries.
+type emailTask struct {
+	Kind emailKind
+	To   string
+	Link string
 }
 
 // Service sends application emails through SMTP using an in-process worker pool.
@@ -38,7 +47,7 @@ type Service struct {
 	taskTTL  time.Duration
 	useTLS   bool
 
-	tasks     chan passwordResetPayload
+	tasks     chan emailTask
 	quit      chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
@@ -55,7 +64,7 @@ func NewService(cfg config.EmailConfig) *Service {
 		timeout:  cfg.Timeout,
 		taskTTL:  cfg.TaskTimeout,
 		useTLS:   cfg.UseTLS,
-		tasks:    make(chan passwordResetPayload, 128),
+		tasks:    make(chan emailTask, 128),
 		quit:     make(chan struct{}),
 	}
 	if service.hasSMTPConfig() {
@@ -72,21 +81,11 @@ func (s *Service) startWorkers(workerCount int) {
 				select {
 				case <-s.quit:
 					return
-				case payload, ok := <-s.tasks:
+				case task, ok := <-s.tasks:
 					if !ok {
 						return
 					}
-					taskCtx := context.Background()
-					var cancel context.CancelFunc
-					if s.taskTTL > 0 {
-						taskCtx, cancel = context.WithTimeout(taskCtx, s.taskTTL)
-					}
-					if err := s.SendPasswordResetEmail(taskCtx, payload.To, payload.ResetLink); err != nil {
-						log.Error("failed to send password reset email", "error", err, "to", payload.To)
-					}
-					if cancel != nil {
-						cancel()
-					}
+					s.runTask(task)
 				}
 			}
 		})
@@ -114,19 +113,48 @@ func (s *Service) Close() error {
 	return nil
 }
 
-// EnqueuePasswordResetEmail queues a password reset email for background delivery.
-func (s *Service) EnqueuePasswordResetEmail(to, resetLink string) error {
+func (s *Service) runTask(task emailTask) {
+	ctx := context.Background()
+	if s.taskTTL > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.taskTTL)
+		defer cancel()
+	}
+
+	switch task.Kind {
+	case kindPasswordReset:
+		if err := s.SendPasswordResetEmail(ctx, task.To, task.Link); err != nil {
+			log.Error("failed to send password reset email", "error", err, "to", task.To)
+		}
+	case kindAccountDeletion:
+		if err := s.SendAccountDeletionEmail(ctx, task.To, task.Link); err != nil {
+			log.Error("failed to send account deletion email", "error", err, "to", task.To)
+		}
+	}
+}
+
+func (s *Service) enqueue(task emailTask) error {
 	if !s.IsConfigured() {
 		return errors.New("email service not configured")
 	}
 
-	payload := passwordResetPayload{To: to, ResetLink: resetLink}
 	select {
-	case s.tasks <- payload:
+	case s.tasks <- task:
 		return nil
 	default:
 		return errors.New("email queue is full")
 	}
+}
+
+// EnqueuePasswordResetEmail queues a password reset email for background delivery.
+func (s *Service) EnqueuePasswordResetEmail(to, resetLink string) error {
+	return s.enqueue(emailTask{Kind: kindPasswordReset, To: to, Link: resetLink})
+}
+
+// EnqueueAccountDeletionEmail queues an account deletion confirmation email for
+// background delivery.
+func (s *Service) EnqueueAccountDeletionEmail(to, confirmLink string) error {
+	return s.enqueue(emailTask{Kind: kindAccountDeletion, To: to, Link: confirmLink})
 }
 
 // SendPasswordResetEmail sends the password reset link email.
@@ -137,6 +165,16 @@ func (s *Service) SendPasswordResetEmail(ctx context.Context, to, resetLink stri
 
 	text, htmlBody := passwordResetTemplate(resetLink, "1 hour")
 	return s.send(ctx, to, "Reset your password", text, htmlBody)
+}
+
+// SendAccountDeletionEmail sends the link that confirms deleting the account.
+func (s *Service) SendAccountDeletionEmail(ctx context.Context, to, confirmLink string) error {
+	if !s.hasSMTPConfig() {
+		return errors.New("email service not configured")
+	}
+
+	text, htmlBody := accountDeletionTemplate(confirmLink, "30 minutes")
+	return s.send(ctx, to, "Confirm deleting your account", text, htmlBody)
 }
 
 func (s *Service) send(ctx context.Context, to, subject, textBody, htmlBody string) error {
@@ -297,21 +335,69 @@ func sanitizeHeader(value string) string {
 }
 
 func passwordResetTemplate(resetLink, expiresIn string) (string, string) {
-	escapedLink := html.EscapeString(resetLink)
-	escapedExpiresIn := html.EscapeString(expiresIn)
-
 	textBody := fmt.Sprintf(
 		"We received a request to reset your password.\n\nReset your password here:\n%s\n\nThis link expires in %s. If you did not request a password reset, you can safely ignore this email.",
 		resetLink,
 		expiresIn,
 	)
 
-	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
+	htmlBody := linkEmailHTML(linkEmail{
+		Title:      "Reset Your Password",
+		Heading:    "Reset your password",
+		Intro:      "We received a request to reset the password for your account. Use the button below to choose a new password.",
+		ButtonText: "Reset password",
+		Link:       resetLink,
+		ExpiresIn:  expiresIn,
+		Warning:    "For your security, do not forward this email or share the reset link.",
+		Footer:     "If you did not request a password reset, you can safely ignore this email.",
+	})
+
+	return textBody, htmlBody
+}
+
+func accountDeletionTemplate(confirmLink, expiresIn string) (string, string) {
+	textBody := fmt.Sprintf(
+		"We received a request to permanently delete your Pilput account.\n\nConfirm the deletion here:\n%s\n\nThis link expires in %s. If you did not request this, ignore this email and your account will stay as it is. You may also want to change your password.",
+		confirmLink,
+		expiresIn,
+	)
+
+	htmlBody := linkEmailHTML(linkEmail{
+		Title:      "Confirm Account Deletion",
+		Heading:    "Confirm deleting your account",
+		Intro:      "We received a request to delete your Pilput account. Use the button below to confirm. Once confirmed, you will be signed out everywhere and will no longer be able to sign in.",
+		ButtonText: "Delete my account",
+		Link:       confirmLink,
+		ExpiresIn:  expiresIn,
+		Warning:    "Do not forward this email. Anyone with this link can delete your account.",
+		Footer:     "If you did not request this, ignore this email and your account will stay as it is. You may also want to change your password.",
+	})
+
+	return textBody, htmlBody
+}
+
+// linkEmail is the content of an email whose main action is one link button.
+type linkEmail struct {
+	Title      string
+	Heading    string
+	Intro      string
+	ButtonText string
+	Link       string
+	ExpiresIn  string
+	Warning    string
+	Footer     string
+}
+
+func linkEmailHTML(e linkEmail) string {
+	esc := html.EscapeString
+	link := esc(e.Link)
+
+	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reset Your Password</title>
+  <title>%s</title>
   <style>
     body { margin: 0; padding: 0; background: #ffffff; color: #111111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
     .page { width: 100%%; padding: 32px 16px; background: #ffffff; }
@@ -342,14 +428,14 @@ func passwordResetTemplate(resetLink, expiresIn string) (string, string) {
     <div class="container">
       <div class="header">
         <p class="brand">Pilput</p>
-        <h1>Reset your password</h1>
+        <h1>%s</h1>
       </div>
       <div class="content">
-        <p>We received a request to reset the password for your account. Use the button below to choose a new password.</p>
+        <p>%s</p>
         <div class="button-wrap">
-          <a href="%s" class="button">Reset password</a>
+          <a href="%s" class="button">%s</a>
         </div>
-        <div class="meta">This link expires in <strong>%s</strong>. For your security, do not forward this email or share the reset link.</div>
+        <div class="meta">This link expires in <strong>%s</strong>. %s</div>
         <div class="fallback">
           <p>If the button does not work, copy and paste this link into your browser:</p>
           <p><a href="%s" class="link">%s</a></p>
@@ -357,11 +443,11 @@ func passwordResetTemplate(resetLink, expiresIn string) (string, string) {
       </div>
     </div>
     <div class="footer">
-      <p>If you did not request a password reset, you can safely ignore this email.</p>
+      <p>%s</p>
     </div>
   </div>
 </body>
-</html>`, escapedLink, escapedExpiresIn, escapedLink, escapedLink)
-
-	return textBody, htmlBody
+</html>`,
+		esc(e.Title), esc(e.Heading), esc(e.Intro), link, esc(e.ButtonText),
+		esc(e.ExpiresIn), esc(e.Warning), link, link, esc(e.Footer))
 }

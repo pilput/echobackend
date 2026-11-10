@@ -29,7 +29,11 @@ const (
 	ActivityPasswordChange   = "password_change"
 	ActivityPasswordResetReq = "password_reset_request"
 	ActivityPasswordReset    = "password_reset"
-	ActivityTokenRefresh     = "token_refresh"
+	// ActivityAccountDeletionReq records a confirmation email sent for
+	// deleting an account; ActivityAccountDeleted the confirmed deletion.
+	ActivityAccountDeletionReq = "account_deletion_request"
+	ActivityAccountDeleted     = "account_deleted"
+	ActivityTokenRefresh       = "token_refresh"
 	// ActivityTokenReuse records a refresh token replayed after rotation —
 	// the signal that a token leaked. Logged with StatusFailure.
 	ActivityTokenReuse = "token_reuse_detected"

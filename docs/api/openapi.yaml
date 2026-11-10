@@ -149,7 +149,8 @@ paths:
   /api/auth/check-username: {$ref: ./paths/auth.yaml#/authCheckUsername}
   /api/auth/logout: {$ref: ./paths/auth.yaml#/authLogout}
   /api/auth/profile: {$ref: ./paths/auth.yaml#/authProfile}
-  /api/auth/account: {$ref: ./paths/auth.yaml#/authAccount}
+  /api/auth/account/delete-request: {$ref: ./paths/auth.yaml#/authAccountDeleteRequest}
+  /api/auth/account/delete-confirm: {$ref: ./paths/auth.yaml#/authAccountDeleteConfirm}
   /api/auth/password: {$ref: ./paths/auth.yaml#/authPassword}
   /api/auth/activity-logs: {$ref: ./paths/auth.yaml#/authActivityLogs}
   /api/auth/activity-logs/recent: {$ref: ./paths/auth.yaml#/authActivityLogsRecent}

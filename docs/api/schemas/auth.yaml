@@ -36,6 +36,11 @@ ResetPasswordRequest:
   properties:
     token: {type: string}
     password: {type: string, format: password, minLength: 8, maxLength: 128}
+ConfirmAccountDeletionRequest:
+  type: object
+  required: [token]
+  properties:
+    token: {type: string, maxLength: 255, description: The `token` query parameter of the link in the account deletion email.}
 RefreshTokenRequest:
   type: object
   required: [refresh_token]

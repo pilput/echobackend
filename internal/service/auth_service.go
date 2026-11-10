@@ -39,7 +39,8 @@ type AuthService interface {
 	RevokeAllSessions(ctx context.Context, actorID, ipAddress, userAgent string) (int64, error)
 	GetProfile(ctx context.Context, userID string) (*model.User, error)
 	UpdateProfile(ctx context.Context, userID, username, firstName, lastName string) (*model.User, error)
-	DeleteAccount(ctx context.Context, userID string) error
+	RequestAccountDeletion(ctx context.Context, userID, ipAddress, userAgent string) error
+	ConfirmAccountDeletion(ctx context.Context, token, ipAddress, userAgent string) error
 	CheckUsernameExists(ctx context.Context, username string) (bool, error)
 	GetGithubOAuthURL(state string) string
 	GetGithubToken(ctx context.Context, code string) (string, error)
@@ -59,6 +60,7 @@ type GithubUser struct {
 
 type EmailSender interface {
 	EnqueuePasswordResetEmail(to, resetLink string) error
+	EnqueueAccountDeletionEmail(to, confirmLink string) error
 	IsConfigured() bool
 }
 
@@ -73,6 +75,7 @@ type authService struct {
 	userRepo               repository.UserRepository
 	sessionRepo            repository.SessionRepository
 	passwordResetTokenRepo repository.PasswordResetTokenRepository
+	accountDeletionRepo    repository.AccountDeletionTokenRepository
 	activityService        AuthActivityService
 	jwtSecret              []byte
 	jwtExpiry              time.Duration
@@ -90,6 +93,9 @@ type authService struct {
 
 const oauthExchangeTTL = 2 * time.Minute
 
+// accountDeletionTTL is how long the link in the account deletion email works.
+const accountDeletionTTL = 30 * time.Minute
+
 type oauthExchangeEntry struct {
 	AccessToken  string
 	RefreshToken string
@@ -102,6 +108,7 @@ func NewAuthService(
 	userRepo repository.UserRepository,
 	sessionRepo repository.SessionRepository,
 	passwordResetTokenRepo repository.PasswordResetTokenRepository,
+	accountDeletionRepo repository.AccountDeletionTokenRepository,
 	activityService AuthActivityService,
 	config *config.Config,
 	oauthExchangeCache AuthCache,
@@ -112,6 +119,7 @@ func NewAuthService(
 		userRepo:               userRepo,
 		sessionRepo:            sessionRepo,
 		passwordResetTokenRepo: passwordResetTokenRepo,
+		accountDeletionRepo:    accountDeletionRepo,
 		activityService:        activityService,
 		jwtSecret:              []byte(config.Auth.JWTSecret),
 		jwtExpiry:              config.Auth.JWTExpiry,
@@ -557,15 +565,86 @@ func (s *authService) UpdateProfile(ctx context.Context, userID, username, first
 	return user, nil
 }
 
-// DeleteAccount soft-deletes the authenticated user's own account and revokes
-// all of its refresh tokens.
-func (s *authService) DeleteAccount(ctx context.Context, userID string) error {
-	if err := s.userRepo.SoftDeleteByID(ctx, userID); err != nil {
+// RequestAccountDeletion emails the authenticated user a one-time link that
+// confirms deleting their account. Nothing is deleted until the link is used
+// (see ConfirmAccountDeletion). A new request replaces any earlier link.
+func (s *authService) RequestAccountDeletion(ctx context.Context, userID, ipAddress, userAgent string) error {
+	if s.emailService == nil || !s.emailService.IsConfigured() {
+		return apperrors.ErrEmailNotConfigured
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID, false)
+	if err != nil {
 		return err
 	}
-	if _, err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
-		authLog.Warn("failed to invalidate sessions after account deletion", "user_id", userID, "error", err)
+
+	tokenBytes, err := generateRandomBytes(32)
+	if err != nil {
+		return err
 	}
+	token := "ad_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
+
+	if err := s.accountDeletionRepo.DeleteByUserID(ctx, user.ID); err != nil {
+		authLog.Warn("failed to delete previous account deletion tokens", "user_id", user.ID, "error", err)
+	}
+
+	if err := s.accountDeletionRepo.Create(ctx, &model.AccountDeletionToken{
+		UserID:    user.ID,
+		Token:     tokenHash(token),
+		ExpiresAt: time.Now().Add(accountDeletionTTL),
+	}); err != nil {
+		return err
+	}
+
+	link := buildTokenLink(s.frontendConfig.DeleteAccountURL, "http://localhost:3000/confirm-delete-account", token)
+	if err := s.emailService.EnqueueAccountDeletionEmail(user.Email, link); err != nil {
+		errMsg := "Failed to queue email"
+		s.activityService.LogActivity(ctx, &user.ID, model.ActivityAccountDeletionReq, model.StatusFailure, ipAddress, userAgent, &errMsg, nil)
+		return fmt.Errorf("queue account deletion email: %w", err)
+	}
+
+	s.activityService.LogActivity(ctx, &user.ID, model.ActivityAccountDeletionReq, model.StatusSuccess, ipAddress, userAgent, nil, nil)
+	return nil
+}
+
+// ConfirmAccountDeletion soft-deletes the account that owns the token from the
+// deletion email and revokes all of its refresh tokens. A token works once.
+func (s *authService) ConfirmAccountDeletion(ctx context.Context, token, ipAddress, userAgent string) error {
+	entry, err := s.accountDeletionRepo.FindByToken(ctx, tokenHash(token))
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return apperrors.ErrInvalidToken
+	}
+	if entry.UsedAt != nil {
+		return apperrors.ErrAccountDeletionTokenUsed
+	}
+	if time.Now().After(entry.ExpiresAt) {
+		return apperrors.ErrAccountDeletionTokenExpired
+	}
+
+	// Spend the token before deleting, so two concurrent requests with the
+	// same link cannot both go through.
+	marked, err := s.accountDeletionRepo.MarkUsed(ctx, entry.ID)
+	if err != nil {
+		return err
+	}
+	if !marked {
+		return apperrors.ErrAccountDeletionTokenUsed
+	}
+
+	if err := s.userRepo.SoftDeleteByID(ctx, entry.UserID); err != nil {
+		if errors.Is(err, apperrors.ErrUserNotFound) {
+			return apperrors.ErrInvalidToken
+		}
+		return err
+	}
+	if _, err := s.sessionRepo.DeleteByUserID(ctx, entry.UserID); err != nil {
+		authLog.Warn("failed to invalidate sessions after account deletion", "user_id", entry.UserID, "error", err)
+	}
+
+	s.activityService.LogActivity(ctx, &entry.UserID, model.ActivityAccountDeleted, model.StatusSuccess, ipAddress, userAgent, nil, nil)
 	return nil
 }
 
@@ -859,8 +938,14 @@ func tokenHash(token string) string {
 }
 
 func buildPasswordResetLink(baseURL, token string) string {
+	return buildTokenLink(baseURL, "http://localhost:3000/reset-password", token)
+}
+
+// buildTokenLink appends token as the `token` query parameter of baseURL,
+// using fallbackURL when baseURL is empty.
+func buildTokenLink(baseURL, fallbackURL, token string) string {
 	if baseURL == "" {
-		baseURL = "http://localhost:3000/reset-password"
+		baseURL = fallbackURL
 	}
 
 	parsed, err := url.Parse(baseURL)

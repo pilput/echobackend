@@ -118,7 +118,11 @@ func (m *mockAuthService) UpdateProfile(ctx context.Context, userID, username, f
 	return nil, nil
 }
 
-func (m *mockAuthService) DeleteAccount(ctx context.Context, userID string) error {
+func (m *mockAuthService) RequestAccountDeletion(ctx context.Context, userID, ipAddress, userAgent string) error {
+	return nil
+}
+
+func (m *mockAuthService) ConfirmAccountDeletion(ctx context.Context, token, ipAddress, userAgent string) error {
 	return nil
 }
 

@@ -22,6 +22,11 @@ type ResetPasswordRequest struct {
 	Password string `json:"password" validate:"required,min=8,max=128"`
 }
 
+// ConfirmAccountDeletionRequest carries the token from the account deletion email.
+type ConfirmAccountDeletionRequest struct {
+	Token string `json:"token" validate:"required,max=255"`
+}
+
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }

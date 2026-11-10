@@ -272,17 +272,58 @@ authProfile:
       '409': {$ref: ../responses.yaml#/Conflict}
       '422': {$ref: ../responses.yaml#/ValidationFailed}
       '500': {$ref: ../responses.yaml#/ServerError}
-authAccount:
-  delete:
+authAccountDeleteRequest:
+  post:
     tags: [Auth]
-    summary: Soft-delete the current user's own account
+    summary: Email a link that confirms deleting the current user's account
     description: |
-      Sets `deleted_at`; the row is not removed. All refresh tokens are revoked. Access
-      tokens stay valid until they expire, so the frontend should clear local tokens after
-      this call.
-    operationId: deleteOwnAccount
+      Step 1 of 2. Nothing is deleted yet. A one-time link is emailed to the user,
+      built from `FRONTEND_DELETE_ACCOUNT_URL` with a `token` query parameter. The link
+      works for 30 minutes and only once; a new request replaces any earlier link.
+      The account is deleted when the token is sent to
+      `POST /api/auth/account/delete-confirm`.
+
+      Needs SMTP (`SMTP_HOST`): without it the endpoint answers 503, because the
+      deletion could never be confirmed.
+
+      Rate limit — 3 requests per 5 minutes per IP.
+    operationId: requestOwnAccountDeletion
     security:
     - bearerAuth: []
+    responses:
+      '200':
+        description: Confirmation email queued.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
+            example: {success: true, message: A confirmation link has been sent to your email}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '404': {$ref: ../responses.yaml#/NotFound}
+      '429': {$ref: ../responses.yaml#/RateLimited}
+      '500': {$ref: ../responses.yaml#/ServerError}
+      '503':
+        description: Email delivery is not configured.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+authAccountDeleteConfirm:
+  post:
+    tags: [Auth]
+    summary: Soft-delete an account with the token from the deletion email
+    description: |
+      Step 2 of 2. No bearer token needed: the emailed token proves ownership, so the
+      link can be opened on any device. Sets `deleted_at` on the user (the row is not
+      removed) and revokes all refresh tokens. Access tokens stay valid until they
+      expire, so a frontend that is signed in as this user should clear local tokens.
+
+      Rate limit — 5 requests per 5 minutes per IP.
+    operationId: confirmOwnAccountDeletion
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: ../schemas/auth.yaml#/ConfirmAccountDeletionRequest}
     responses:
       '200':
         description: Account soft-deleted.
@@ -290,7 +331,13 @@ authAccount:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/EmptyEnvelope}
             example: {success: true, message: Account deleted successfully}
-      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '400':
+        description: Invalid, expired or already-used token.
+        content:
+          application/json:
+            schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
+      '422': {$ref: ../responses.yaml#/ValidationFailed}
+      '429': {$ref: ../responses.yaml#/RateLimited}
       '500': {$ref: ../responses.yaml#/ServerError}
 authPassword:
   patch:

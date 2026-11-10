@@ -69,6 +69,21 @@ func TestEmailService_Template(t *testing.T) {
 	}
 }
 
+func TestEmailService_AccountDeletionTemplate(t *testing.T) {
+	link := "http://example.com/confirm-delete-account?token=ad_123&x=<b>"
+	textBody, htmlBody := accountDeletionTemplate(link, "30 minutes")
+
+	if !strings.Contains(textBody, link) {
+		t.Error("text body does not contain confirm link")
+	}
+	if !strings.Contains(htmlBody, "token=ad_123&amp;x=&lt;b&gt;") {
+		t.Error("html body does not contain the escaped confirm link")
+	}
+	if !strings.Contains(htmlBody, "30 minutes") {
+		t.Error("html body does not mention the expiry")
+	}
+}
+
 func TestEmailService_BuildMessage(t *testing.T) {
 	msg, err := buildMessage("sender@example.com", "recipient@example.com", "Test Subject", "Hello text", "<p>Hello html</p>")
 	if err != nil {

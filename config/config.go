@@ -149,6 +149,8 @@ type FrontendConfig struct {
 	URL              string
 	OAuthCallbackURL string
 	ResetPasswordURL string
+	// DeleteAccountURL is the frontend page the account deletion email links to.
+	DeleteAccountURL string
 	MainDomain       string
 }
 
@@ -236,6 +238,7 @@ func Load() (*Config, error) {
 			URL:              envString([]string{"FRONTEND_URL"}, "http://localhost:3000"),
 			OAuthCallbackURL: envString([]string{"FRONTEND_OAUTH_CALLBACK_URL"}, "http://localhost:3000/auth/callback"),
 			ResetPasswordURL: envString([]string{"FRONTEND_RESET_PASSWORD_URL"}, "http://localhost:3000/reset-password"),
+			DeleteAccountURL: envString([]string{"FRONTEND_DELETE_ACCOUNT_URL"}, "http://localhost:3000/confirm-delete-account"),
 			MainDomain:       envString([]string{"MAIN_DOMAIN"}, "localhost"),
 		},
 		Email: EmailConfig{

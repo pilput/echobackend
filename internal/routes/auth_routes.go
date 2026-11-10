@@ -13,6 +13,8 @@ func (r *Routes) setupAuthRoutes(api *echo.Group) {
 	registerRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:register", 5, 5*time.Minute)
 	forgotPasswordRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:forgot-password", 3, 5*time.Minute)
 	resetPasswordRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:reset-password", 5, 5*time.Minute)
+	accountDeletionRequestRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:account-delete-request", 3, 5*time.Minute)
+	accountDeletionConfirmRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:account-delete-confirm", 5, 5*time.Minute)
 	refreshRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:refresh", 30, time.Minute)
 	oauthExchangeRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:oauth-exchange", 10, time.Minute)
 	checkUsernameRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "auth:check-username", 20, 5*time.Minute)
@@ -26,7 +28,10 @@ func (r *Routes) setupAuthRoutes(api *echo.Group) {
 		auth.POST("/logout", r.authHandler.Logout, r.authMiddleware.Auth())
 		auth.GET("/profile", r.authHandler.GetProfile, r.authMiddleware.Auth())
 		auth.PUT("/profile", r.authHandler.UpdateProfile, r.authMiddleware.Auth())
-		auth.DELETE("/account", r.authHandler.DeleteAccount, r.authMiddleware.Auth())
+		// Deleting an account takes two steps: the request emails a one-time
+		// link, and only the confirm call with that link's token deletes it.
+		auth.POST("/account/delete-request", r.authHandler.RequestAccountDeletion, r.authMiddleware.Auth(), accountDeletionRequestRateLimit)
+		auth.POST("/account/delete-confirm", r.authHandler.ConfirmAccountDeletion, accountDeletionConfirmRateLimit)
 		auth.PATCH("/password", r.authHandler.ChangePassword, r.authMiddleware.Auth())
 		auth.GET("/activity-logs", r.authHandler.GetActivityLogs, r.authMiddleware.Auth())
 		auth.GET("/activity-logs/recent", r.authHandler.GetRecentActivity, r.authMiddleware.Auth())
