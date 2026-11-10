@@ -62,8 +62,8 @@ func NewDatabase(config *config.Config) (*gorm.DB, error) {
 	}
 
 	poolConfig := connectionPoolConfig{
-		maxOpenConns:    defaultInt(config.Database.MaxOpenConns, 25),
-		maxIdleConns:    defaultInt(config.Database.MaxIdleConns, 25),
+		maxOpenConns:    defaultInt(config.Database.MaxOpenConns, 5),
+		maxIdleConns:    defaultInt(config.Database.MaxIdleConns, 5),
 		connMaxLifetime: defaultDuration(config.Database.ConnMaxLifetime, 15*time.Minute),
 		connMaxIdleTime: defaultDuration(config.Database.ConnMaxIdleTime, 5*time.Minute),
 	}
