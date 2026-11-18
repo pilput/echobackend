@@ -6,6 +6,7 @@ import (
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
 	"echobackend/internal/modules/aichat"
+	"echobackend/internal/modules/guilds"
 	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
 	"echobackend/internal/platform/database"
@@ -81,8 +82,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postStatsRepo := repository.NewPostStatsRepository(db)
 	tagStatsRepo := repository.NewTagStatsRepository(db)
 	postReportRepo := repository.NewPostReportRepository(db)
-	guildRepo := repository.NewGuildRepository(db)
-	guildChannelRepo := repository.NewGuildChannelRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
 	userService := service.NewUserService(userRepo, s3Storage)
@@ -99,8 +98,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postStatsService := service.NewPostStatsService(postStatsRepo)
 	tagStatsService := service.NewTagStatsService(tagStatsRepo)
 	postReportService := service.NewPostReportService(postReportRepo, postRepo)
-	guildService := service.NewGuildService(guildRepo)
-	guildChannelService := service.NewGuildChannelService(guildChannelRepo, hub)
 
 	userHandler := handler.NewUserHandler(userService, userFollowService)
 	postHandler := handler.NewPostHandler(postService, postViewService)
@@ -116,8 +113,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postStatsHandler := handler.NewPostStatsHandler(postStatsService)
 	tagStatsHandler := handler.NewTagStatsHandler(tagStatsService)
 	postReportHandler := handler.NewPostReportHandler(postReportService)
-	guildHandler := handler.NewGuildHandler(guildService)
-	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
 
 	portfolioModule := portfolio.New(portfolio.Deps{
 		DB:          db,
@@ -130,6 +125,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		DB:     db,
 		Cache:  redisCache,
 	})
+
+	guildModule := guilds.New(guilds.Deps{DB: db, Hub: hub})
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
@@ -150,10 +147,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		postStatsHandler,
 		tagStatsHandler,
 		postReportHandler,
-		guildHandler,
-		guildChannelHandler,
 		portfolioModule,
 		aichatModule,
+		guildModule,
 	)
 
 	return &Container{

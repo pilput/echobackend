@@ -1,13 +1,9 @@
-package service
+package guilds
 
 import (
 	"context"
 	"errors"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
-	"echobackend/internal/repository"
 	"echobackend/pkg/slug"
 )
 
@@ -22,27 +18,27 @@ var reservedGuildSlugs = map[string]struct{}{
 }
 
 type GuildService interface {
-	CreateGuild(ctx context.Context, ownerID string, req *dto.CreateGuildRequest) (*dto.GuildResponse, error)
-	GetGuildBySlug(ctx context.Context, guildSlug, viewerID string) (*dto.GuildResponse, error)
-	ListGuilds(ctx context.Context, search string, limit, offset int) ([]*dto.GuildResponse, int64, error)
-	ListMyGuilds(ctx context.Context, userID string, limit, offset int) ([]*dto.GuildResponse, int64, error)
-	UpdateGuild(ctx context.Context, guildSlug, userID string, req *dto.UpdateGuildRequest) (*dto.GuildResponse, error)
+	CreateGuild(ctx context.Context, ownerID string, req *CreateGuildRequest) (*GuildResponse, error)
+	GetGuildBySlug(ctx context.Context, guildSlug, viewerID string) (*GuildResponse, error)
+	ListGuilds(ctx context.Context, search string, limit, offset int) ([]*GuildResponse, int64, error)
+	ListMyGuilds(ctx context.Context, userID string, limit, offset int) ([]*GuildResponse, int64, error)
+	UpdateGuild(ctx context.Context, guildSlug, userID string, req *UpdateGuildRequest) (*GuildResponse, error)
 	DeleteGuild(ctx context.Context, guildSlug, userID string) error
 
-	JoinGuild(ctx context.Context, guildSlug, userID string) (*dto.GuildMemberResponse, error)
+	JoinGuild(ctx context.Context, guildSlug, userID string) (*GuildMemberResponse, error)
 	LeaveGuild(ctx context.Context, guildSlug, userID string) error
-	ListMembers(ctx context.Context, guildSlug, viewerID string, limit, offset int) ([]*dto.GuildMemberResponse, int64, error)
+	ListMembers(ctx context.Context, guildSlug, viewerID string, limit, offset int) ([]*GuildMemberResponse, int64, error)
 }
 
 type guildService struct {
-	guildRepo repository.GuildRepository
+	guildRepo GuildRepository
 }
 
-func NewGuildService(guildRepo repository.GuildRepository) GuildService {
+func NewGuildService(guildRepo GuildRepository) GuildService {
 	return &guildService{guildRepo: guildRepo}
 }
 
-func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *dto.CreateGuildRequest) (*dto.GuildResponse, error) {
+func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *CreateGuildRequest) (*GuildResponse, error) {
 	if err := rejectSpamText(req.Name, optionalText(req.Slug), optionalText(req.Description)); err != nil {
 		return nil, err
 	}
@@ -53,10 +49,10 @@ func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *dto
 	}
 	generated := slug.Make(desired, guildSlugMaxLen)
 	if generated == "" {
-		return nil, apperrors.ErrGuildSlugInvalid
+		return nil, ErrGuildSlugInvalid
 	}
 	if _, reserved := reservedGuildSlugs[generated]; reserved {
-		return nil, apperrors.ErrGuildSlugReserved
+		return nil, ErrGuildSlugReserved
 	}
 
 	isPublic := true
@@ -64,7 +60,7 @@ func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *dto
 		isPublic = *req.IsPublic
 	}
 
-	guild := &model.Guild{
+	guild := &Guild{
 		OwnerID:     ownerID,
 		Name:        req.Name,
 		Slug:        generated,
@@ -81,15 +77,15 @@ func (s *guildService) CreateGuild(ctx context.Context, ownerID string, req *dto
 		return nil, err
 	}
 
-	resp := dto.GuildToResponse(created)
+	resp := GuildToResponse(created)
 	isMember := true
-	role := model.GuildRoleOwner
+	role := GuildRoleOwner
 	resp.IsMember = &isMember
 	resp.MyRole = &role
 	return resp, nil
 }
 
-func (s *guildService) GetGuildBySlug(ctx context.Context, guildSlug, viewerID string) (*dto.GuildResponse, error) {
+func (s *guildService) GetGuildBySlug(ctx context.Context, guildSlug, viewerID string) (*GuildResponse, error) {
 	guild, err := s.guildRepo.FindGuildBySlug(ctx, guildSlug)
 	if err != nil {
 		return nil, err
@@ -103,15 +99,15 @@ func (s *guildService) GetGuildBySlug(ctx context.Context, guildSlug, viewerID s
 	// A private guild is invisible to non-members: report it as missing rather
 	// than forbidden so that its existence does not leak.
 	if !guild.IsPublic && member == nil {
-		return nil, apperrors.ErrGuildNotFound
+		return nil, ErrGuildNotFound
 	}
 
-	resp := dto.GuildToResponse(guild)
+	resp := GuildToResponse(guild)
 	applyMembership(resp, member, viewerID)
 	return resp, nil
 }
 
-func (s *guildService) ListGuilds(ctx context.Context, search string, limit, offset int) ([]*dto.GuildResponse, int64, error) {
+func (s *guildService) ListGuilds(ctx context.Context, search string, limit, offset int) ([]*GuildResponse, int64, error) {
 	guilds, total, err := s.guildRepo.ListPublicGuilds(ctx, search, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -119,7 +115,7 @@ func (s *guildService) ListGuilds(ctx context.Context, search string, limit, off
 	return toGuildResponses(guilds), total, nil
 }
 
-func (s *guildService) ListMyGuilds(ctx context.Context, userID string, limit, offset int) ([]*dto.GuildResponse, int64, error) {
+func (s *guildService) ListMyGuilds(ctx context.Context, userID string, limit, offset int) ([]*GuildResponse, int64, error) {
 	guilds, total, err := s.guildRepo.ListGuildsByMember(ctx, userID, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -127,7 +123,7 @@ func (s *guildService) ListMyGuilds(ctx context.Context, userID string, limit, o
 	return toGuildResponses(guilds), total, nil
 }
 
-func (s *guildService) UpdateGuild(ctx context.Context, guildSlug, userID string, req *dto.UpdateGuildRequest) (*dto.GuildResponse, error) {
+func (s *guildService) UpdateGuild(ctx context.Context, guildSlug, userID string, req *UpdateGuildRequest) (*GuildResponse, error) {
 	if err := rejectSpamText(optionalText(req.Name), optionalText(req.Description)); err != nil {
 		return nil, err
 	}
@@ -141,8 +137,8 @@ func (s *guildService) UpdateGuild(ctx context.Context, guildSlug, userID string
 	if err != nil {
 		return nil, err
 	}
-	if member == nil || (member.Role != model.GuildRoleOwner && member.Role != model.GuildRoleAdmin) {
-		return nil, apperrors.ErrGuildNotOwned
+	if member == nil || (member.Role != GuildRoleOwner && member.Role != GuildRoleAdmin) {
+		return nil, ErrGuildNotOwned
 	}
 
 	updates := make(map[string]any)
@@ -167,7 +163,7 @@ func (s *guildService) UpdateGuild(ctx context.Context, guildSlug, userID string
 	if err != nil {
 		return nil, err
 	}
-	resp := dto.GuildToResponse(updated)
+	resp := GuildToResponse(updated)
 	applyMembership(resp, member, userID)
 	return resp, nil
 }
@@ -178,12 +174,12 @@ func (s *guildService) DeleteGuild(ctx context.Context, guildSlug, userID string
 		return err
 	}
 	if guild.OwnerID != userID {
-		return apperrors.ErrGuildNotOwned
+		return ErrGuildNotOwned
 	}
 	return s.guildRepo.DeleteGuild(ctx, guild.ID)
 }
 
-func (s *guildService) JoinGuild(ctx context.Context, guildSlug, userID string) (*dto.GuildMemberResponse, error) {
+func (s *guildService) JoinGuild(ctx context.Context, guildSlug, userID string) (*GuildMemberResponse, error) {
 	guild, err := s.guildRepo.FindGuildBySlug(ctx, guildSlug)
 	if err != nil {
 		return nil, err
@@ -191,7 +187,7 @@ func (s *guildService) JoinGuild(ctx context.Context, guildSlug, userID string) 
 	// Private guilds have no open join path yet; hide them the same way the
 	// detail endpoint does.
 	if !guild.IsPublic {
-		return nil, apperrors.ErrGuildNotFound
+		return nil, ErrGuildNotFound
 	}
 
 	existing, err := s.lookupMembership(ctx, guild.ID, userID)
@@ -199,13 +195,13 @@ func (s *guildService) JoinGuild(ctx context.Context, guildSlug, userID string) 
 		return nil, err
 	}
 	if existing != nil {
-		return nil, apperrors.ErrAlreadyGuildMember
+		return nil, ErrAlreadyGuildMember
 	}
 
-	member := &model.GuildMember{
+	member := &GuildMember{
 		GuildID: guild.ID,
 		UserID:  userID,
-		Role:    model.GuildRoleMember,
+		Role:    GuildRoleMember,
 	}
 	if err := s.guildRepo.AddMember(ctx, member); err != nil {
 		return nil, err
@@ -215,7 +211,7 @@ func (s *guildService) JoinGuild(ctx context.Context, guildSlug, userID string) 
 	if err != nil {
 		return nil, err
 	}
-	return dto.GuildMemberToResponse(created), nil
+	return GuildMemberToResponse(created), nil
 }
 
 func (s *guildService) LeaveGuild(ctx context.Context, guildSlug, userID string) error {
@@ -230,13 +226,13 @@ func (s *guildService) LeaveGuild(ctx context.Context, guildSlug, userID string)
 	}
 	// Letting the owner leave would strand the guild with nobody able to
 	// administer it.
-	if member.Role == model.GuildRoleOwner {
-		return apperrors.ErrGuildOwnerCannotLeave
+	if member.Role == GuildRoleOwner {
+		return ErrGuildOwnerCannotLeave
 	}
 	return s.guildRepo.RemoveMember(ctx, guild.ID, userID)
 }
 
-func (s *guildService) ListMembers(ctx context.Context, guildSlug, viewerID string, limit, offset int) ([]*dto.GuildMemberResponse, int64, error) {
+func (s *guildService) ListMembers(ctx context.Context, guildSlug, viewerID string, limit, offset int) ([]*GuildMemberResponse, int64, error) {
 	guild, err := s.guildRepo.FindGuildBySlug(ctx, guildSlug)
 	if err != nil {
 		return nil, 0, err
@@ -248,7 +244,7 @@ func (s *guildService) ListMembers(ctx context.Context, guildSlug, viewerID stri
 			return nil, 0, err
 		}
 		if member == nil {
-			return nil, 0, apperrors.ErrGuildNotFound
+			return nil, 0, ErrGuildNotFound
 		}
 	}
 
@@ -257,22 +253,22 @@ func (s *guildService) ListMembers(ctx context.Context, guildSlug, viewerID stri
 		return nil, 0, err
 	}
 
-	out := make([]*dto.GuildMemberResponse, 0, len(members))
+	out := make([]*GuildMemberResponse, 0, len(members))
 	for _, m := range members {
-		out = append(out, dto.GuildMemberToResponse(m))
+		out = append(out, GuildMemberToResponse(m))
 	}
 	return out, total, nil
 }
 
 // lookupMembership returns nil (and no error) when userID is empty or the user
 // is not a member, so callers can treat "anonymous" and "not joined" alike.
-func (s *guildService) lookupMembership(ctx context.Context, guildID, userID string) (*model.GuildMember, error) {
+func (s *guildService) lookupMembership(ctx context.Context, guildID, userID string) (*GuildMember, error) {
 	if userID == "" {
 		return nil, nil
 	}
 	member, err := s.guildRepo.FindMember(ctx, guildID, userID)
 	if err != nil {
-		if errors.Is(err, apperrors.ErrNotGuildMember) {
+		if errors.Is(err, ErrNotGuildMember) {
 			return nil, nil
 		}
 		return nil, err
@@ -282,7 +278,7 @@ func (s *guildService) lookupMembership(ctx context.Context, guildID, userID str
 
 // applyMembership fills the viewer-relative fields. They stay absent for
 // anonymous callers rather than being reported as false.
-func applyMembership(resp *dto.GuildResponse, member *model.GuildMember, viewerID string) {
+func applyMembership(resp *GuildResponse, member *GuildMember, viewerID string) {
 	if resp == nil || viewerID == "" {
 		return
 	}
@@ -294,10 +290,10 @@ func applyMembership(resp *dto.GuildResponse, member *model.GuildMember, viewerI
 	}
 }
 
-func toGuildResponses(guilds []*model.Guild) []*dto.GuildResponse {
-	out := make([]*dto.GuildResponse, 0, len(guilds))
+func toGuildResponses(guilds []*Guild) []*GuildResponse {
+	out := make([]*GuildResponse, 0, len(guilds))
 	for _, g := range guilds {
-		out = append(out, dto.GuildToResponse(g))
+		out = append(out, GuildToResponse(g))
 	}
 	return out
 }

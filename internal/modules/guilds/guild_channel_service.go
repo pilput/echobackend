@@ -1,15 +1,11 @@
-package service
+package guilds
 
 import (
 	"context"
 	"strings"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
 	"echobackend/internal/platform/realtime"
-	"echobackend/internal/repository"
 	"echobackend/pkg/slug"
 	"echobackend/pkg/validator"
 )
@@ -35,14 +31,14 @@ type GuildEventBroker interface {
 //
 // A private guild is reported as not found to non-members, as in GuildService.
 type GuildChannelService interface {
-	ListChannels(ctx context.Context, guildSlug, viewerID string) ([]*dto.GuildChannelResponse, error)
-	CreateChannel(ctx context.Context, guildSlug, userID string, req *dto.CreateGuildChannelRequest) (*dto.GuildChannelResponse, error)
-	UpdateChannel(ctx context.Context, guildSlug, channelID, userID string, req *dto.UpdateGuildChannelRequest) (*dto.GuildChannelResponse, error)
+	ListChannels(ctx context.Context, guildSlug, viewerID string) ([]*GuildChannelResponse, error)
+	CreateChannel(ctx context.Context, guildSlug, userID string, req *CreateGuildChannelRequest) (*GuildChannelResponse, error)
+	UpdateChannel(ctx context.Context, guildSlug, channelID, userID string, req *UpdateGuildChannelRequest) (*GuildChannelResponse, error)
 	DeleteChannel(ctx context.Context, guildSlug, channelID, userID string) error
 
-	ListMessages(ctx context.Context, guildSlug, channelID, userID, before string, limit int) ([]*dto.GuildMessageResponse, *dto.GuildMessageCursorMeta, error)
-	SendMessage(ctx context.Context, guildSlug, channelID, userID string, req *dto.CreateGuildMessageRequest) (*dto.GuildMessageResponse, error)
-	EditMessage(ctx context.Context, guildSlug, channelID, messageID, userID string, req *dto.UpdateGuildMessageRequest) (*dto.GuildMessageResponse, error)
+	ListMessages(ctx context.Context, guildSlug, channelID, userID, before string, limit int) ([]*GuildMessageResponse, *GuildMessageCursorMeta, error)
+	SendMessage(ctx context.Context, guildSlug, channelID, userID string, req *CreateGuildMessageRequest) (*GuildMessageResponse, error)
+	EditMessage(ctx context.Context, guildSlug, channelID, messageID, userID string, req *UpdateGuildMessageRequest) (*GuildMessageResponse, error)
 	DeleteMessage(ctx context.Context, guildSlug, channelID, messageID, userID string) error
 
 	// Subscribe opens the realtime event stream of a guild for a member. The
@@ -56,11 +52,11 @@ type GuildChannelService interface {
 // guild, the caller's role and the channel together, instead of separate
 // guild, member and channel lookups.
 type guildChannelService struct {
-	channelRepo repository.GuildChannelRepository
+	channelRepo GuildChannelRepository
 	broker      GuildEventBroker
 }
 
-func NewGuildChannelService(channelRepo repository.GuildChannelRepository, broker GuildEventBroker) GuildChannelService {
+func NewGuildChannelService(channelRepo GuildChannelRepository, broker GuildEventBroker) GuildChannelService {
 	return &guildChannelService{channelRepo: channelRepo, broker: broker}
 }
 
@@ -69,7 +65,7 @@ func GuildEventTopic(guildID string) string {
 	return "guild:" + guildID
 }
 
-func (s *guildChannelService) ListChannels(ctx context.Context, guildSlug, viewerID string) ([]*dto.GuildChannelResponse, error) {
+func (s *guildChannelService) ListChannels(ctx context.Context, guildSlug, viewerID string) ([]*GuildChannelResponse, error) {
 	access, err := s.resolveGuild(ctx, guildSlug, viewerID, "")
 	if err != nil {
 		return nil, err
@@ -78,24 +74,24 @@ func (s *guildChannelService) ListChannels(ctx context.Context, guildSlug, viewe
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*dto.GuildChannelResponse, 0, len(channels))
+	out := make([]*GuildChannelResponse, 0, len(channels))
 	for _, ch := range channels {
-		out = append(out, dto.GuildChannelToResponse(ch))
+		out = append(out, GuildChannelToResponse(ch))
 	}
 	return out, nil
 }
 
-func (s *guildChannelService) CreateChannel(ctx context.Context, guildSlug, userID string, req *dto.CreateGuildChannelRequest) (*dto.GuildChannelResponse, error) {
+func (s *guildChannelService) CreateChannel(ctx context.Context, guildSlug, userID string, req *CreateGuildChannelRequest) (*GuildChannelResponse, error) {
 	access, err := s.requireManager(ctx, guildSlug, userID, "")
 	if err != nil {
 		return nil, err
 	}
 	name := slug.Make(req.Name, guildChannelNameMaxLen)
 	if name == "" {
-		return nil, apperrors.ErrGuildChannelNameInvalid
+		return nil, ErrGuildChannelNameInvalid
 	}
 
-	channel := &model.GuildChannel{
+	channel := &GuildChannel{
 		GuildID:   access.GuildID,
 		Name:      name,
 		Topic:     req.Topic,
@@ -109,12 +105,12 @@ func (s *guildChannelService) CreateChannel(ctx context.Context, guildSlug, user
 		return nil, err
 	}
 
-	resp := dto.GuildChannelToResponse(channel)
-	s.publish(ctx, access.GuildID, channel.ID, dto.GuildEventChannelCreated, resp)
+	resp := GuildChannelToResponse(channel)
+	s.publish(ctx, access.GuildID, channel.ID, GuildEventChannelCreated, resp)
 	return resp, nil
 }
 
-func (s *guildChannelService) UpdateChannel(ctx context.Context, guildSlug, channelID, userID string, req *dto.UpdateGuildChannelRequest) (*dto.GuildChannelResponse, error) {
+func (s *guildChannelService) UpdateChannel(ctx context.Context, guildSlug, channelID, userID string, req *UpdateGuildChannelRequest) (*GuildChannelResponse, error) {
 	if !validator.IsValidUUID(channelID) {
 		channelID = ""
 	}
@@ -123,14 +119,14 @@ func (s *guildChannelService) UpdateChannel(ctx context.Context, guildSlug, chan
 		return nil, err
 	}
 	if access.ChannelID == nil {
-		return nil, apperrors.ErrGuildChannelNotFound
+		return nil, ErrGuildChannelNotFound
 	}
 
 	updates := make(map[string]any)
 	if req.Name != nil {
 		name := slug.Make(*req.Name, guildChannelNameMaxLen)
 		if name == "" {
-			return nil, apperrors.ErrGuildChannelNameInvalid
+			return nil, ErrGuildChannelNameInvalid
 		}
 		updates["name"] = name
 	}
@@ -148,9 +144,9 @@ func (s *guildChannelService) UpdateChannel(ctx context.Context, guildSlug, chan
 	if err != nil {
 		return nil, err
 	}
-	resp := dto.GuildChannelToResponse(updated)
+	resp := GuildChannelToResponse(updated)
 	if len(updates) > 0 {
-		s.publish(ctx, access.GuildID, channelID, dto.GuildEventChannelUpdated, resp)
+		s.publish(ctx, access.GuildID, channelID, GuildEventChannelUpdated, resp)
 	}
 	return resp, nil
 }
@@ -164,18 +160,18 @@ func (s *guildChannelService) DeleteChannel(ctx context.Context, guildSlug, chan
 		return err
 	}
 	if access.ChannelID == nil {
-		return apperrors.ErrGuildChannelNotFound
+		return ErrGuildChannelNotFound
 	}
 	if err := s.channelRepo.DeleteChannel(ctx, access.GuildID, channelID); err != nil {
 		return err
 	}
-	s.publish(ctx, access.GuildID, channelID, dto.GuildEventChannelDeleted, map[string]string{"id": channelID})
+	s.publish(ctx, access.GuildID, channelID, GuildEventChannelDeleted, map[string]string{"id": channelID})
 	return nil
 }
 
-func (s *guildChannelService) ListMessages(ctx context.Context, guildSlug, channelID, userID, before string, limit int) ([]*dto.GuildMessageResponse, *dto.GuildMessageCursorMeta, error) {
+func (s *guildChannelService) ListMessages(ctx context.Context, guildSlug, channelID, userID, before string, limit int) ([]*GuildMessageResponse, *GuildMessageCursorMeta, error) {
 	if before != "" && !validator.IsValidUUID(before) {
-		return nil, nil, apperrors.ErrInvalidMessageCursor
+		return nil, nil, ErrInvalidMessageCursor
 	}
 	access, err := s.resolveMemberChannel(ctx, guildSlug, channelID, userID)
 	if err != nil {
@@ -187,7 +183,7 @@ func (s *guildChannelService) ListMessages(ctx context.Context, guildSlug, chann
 	if err != nil {
 		return nil, nil, err
 	}
-	meta := &dto.GuildMessageCursorMeta{Limit: limit}
+	meta := &GuildMessageCursorMeta{Limit: limit}
 	if len(messages) > limit {
 		messages = messages[:limit]
 		meta.HasMore = true
@@ -195,24 +191,24 @@ func (s *guildChannelService) ListMessages(ctx context.Context, guildSlug, chann
 		meta.NextBefore = &next
 	}
 
-	out := make([]*dto.GuildMessageResponse, 0, len(messages))
+	out := make([]*GuildMessageResponse, 0, len(messages))
 	for _, m := range messages {
-		out = append(out, dto.GuildMessageToResponse(m, access.GuildID))
+		out = append(out, GuildMessageToResponse(m, access.GuildID))
 	}
 	return out, meta, nil
 }
 
-func (s *guildChannelService) SendMessage(ctx context.Context, guildSlug, channelID, userID string, req *dto.CreateGuildMessageRequest) (*dto.GuildMessageResponse, error) {
+func (s *guildChannelService) SendMessage(ctx context.Context, guildSlug, channelID, userID string, req *CreateGuildMessageRequest) (*GuildMessageResponse, error) {
 	content := strings.TrimSpace(req.Content)
 	if content == "" {
-		return nil, apperrors.ErrGuildMessageEmpty
+		return nil, ErrGuildMessageEmpty
 	}
 	access, err := s.resolveMemberChannel(ctx, guildSlug, channelID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	message := &model.GuildChannelMessage{
+	message := &GuildChannelMessage{
 		ChannelID: channelID,
 		AuthorID:  userID,
 		Content:   content,
@@ -223,7 +219,7 @@ func (s *guildChannelService) SendMessage(ctx context.Context, guildSlug, channe
 			return nil, err
 		}
 		if !exists {
-			return nil, apperrors.ErrGuildMessageReplyNotFound
+			return nil, ErrGuildMessageReplyNotFound
 		}
 		message.ReplyToID = req.ReplyToID
 	}
@@ -237,15 +233,15 @@ func (s *guildChannelService) SendMessage(ctx context.Context, guildSlug, channe
 	if err != nil {
 		return nil, err
 	}
-	resp := dto.GuildMessageToResponse(created, access.GuildID)
-	s.publish(ctx, access.GuildID, channelID, dto.GuildEventMessageCreated, resp)
+	resp := GuildMessageToResponse(created, access.GuildID)
+	s.publish(ctx, access.GuildID, channelID, GuildEventMessageCreated, resp)
 	return resp, nil
 }
 
-func (s *guildChannelService) EditMessage(ctx context.Context, guildSlug, channelID, messageID, userID string, req *dto.UpdateGuildMessageRequest) (*dto.GuildMessageResponse, error) {
+func (s *guildChannelService) EditMessage(ctx context.Context, guildSlug, channelID, messageID, userID string, req *UpdateGuildMessageRequest) (*GuildMessageResponse, error) {
 	content := strings.TrimSpace(req.Content)
 	if content == "" {
-		return nil, apperrors.ErrGuildMessageEmpty
+		return nil, ErrGuildMessageEmpty
 	}
 	access, err := s.resolveMemberChannel(ctx, guildSlug, channelID, userID)
 	if err != nil {
@@ -258,7 +254,7 @@ func (s *guildChannelService) EditMessage(ctx context.Context, guildSlug, channe
 	// Moderators may delete other people's messages but never put words in
 	// their mouth.
 	if authorID != userID {
-		return nil, apperrors.ErrGuildMessageNotOwned
+		return nil, ErrGuildMessageNotOwned
 	}
 
 	if err := s.channelRepo.UpdateMessageContent(ctx, channelID, messageID, content, time.Now()); err != nil {
@@ -268,8 +264,8 @@ func (s *guildChannelService) EditMessage(ctx context.Context, guildSlug, channe
 	if err != nil {
 		return nil, err
 	}
-	resp := dto.GuildMessageToResponse(updated, access.GuildID)
-	s.publish(ctx, access.GuildID, channelID, dto.GuildEventMessageUpdated, resp)
+	resp := GuildMessageToResponse(updated, access.GuildID)
+	s.publish(ctx, access.GuildID, channelID, GuildEventMessageUpdated, resp)
 	return resp, nil
 }
 
@@ -283,13 +279,13 @@ func (s *guildChannelService) DeleteMessage(ctx context.Context, guildSlug, chan
 		return err
 	}
 	if authorID != userID && !isGuildManager(access.Role) {
-		return apperrors.ErrGuildMessageNotOwned
+		return ErrGuildMessageNotOwned
 	}
 
 	if err := s.channelRepo.DeleteMessage(ctx, channelID, messageID); err != nil {
 		return err
 	}
-	s.publish(ctx, access.GuildID, channelID, dto.GuildEventMessageDeleted, map[string]string{
+	s.publish(ctx, access.GuildID, channelID, GuildEventMessageDeleted, map[string]string{
 		"id":         messageID,
 		"channel_id": channelID,
 	})
@@ -302,7 +298,7 @@ func (s *guildChannelService) Subscribe(ctx context.Context, guildSlug, userID s
 		return "", nil, err
 	}
 	if access.Role == "" {
-		return "", nil, apperrors.ErrNotGuildMember
+		return "", nil, ErrNotGuildMember
 	}
 	return access.GuildID, s.broker.Subscribe(GuildEventTopic(access.GuildID)), nil
 }
@@ -313,33 +309,33 @@ func (s *guildChannelService) IsMember(ctx context.Context, guildID, userID stri
 
 // resolveGuild reads the caller's access in one query and hides private
 // guilds from non-members. channelID may be empty.
-func (s *guildChannelService) resolveGuild(ctx context.Context, guildSlug, userID, channelID string) (*repository.GuildChannelAccess, error) {
+func (s *guildChannelService) resolveGuild(ctx context.Context, guildSlug, userID, channelID string) (*GuildChannelAccess, error) {
 	access, err := s.channelRepo.ResolveAccess(ctx, guildSlug, userID, channelID)
 	if err != nil {
 		return nil, err
 	}
 	if !access.IsPublic && access.Role == "" {
-		return nil, apperrors.ErrGuildNotFound
+		return nil, ErrGuildNotFound
 	}
 	return access, nil
 }
 
 // requireManager checks for an owner or admin. The caller checks
 // access.ChannelID itself when it passed a channel.
-func (s *guildChannelService) requireManager(ctx context.Context, guildSlug, userID, channelID string) (*repository.GuildChannelAccess, error) {
+func (s *guildChannelService) requireManager(ctx context.Context, guildSlug, userID, channelID string) (*GuildChannelAccess, error) {
 	access, err := s.resolveGuild(ctx, guildSlug, userID, channelID)
 	if err != nil {
 		return nil, err
 	}
 	if !isGuildManager(access.Role) {
-		return nil, apperrors.ErrGuildNotOwned
+		return nil, ErrGuildNotOwned
 	}
 	return access, nil
 }
 
 // resolveMemberChannel checks that the caller is a member of the guild and
 // that the channel belongs to it.
-func (s *guildChannelService) resolveMemberChannel(ctx context.Context, guildSlug, channelID, userID string) (*repository.GuildChannelAccess, error) {
+func (s *guildChannelService) resolveMemberChannel(ctx context.Context, guildSlug, channelID, userID string) (*GuildChannelAccess, error) {
 	// A malformed id is looked up as "no channel", so the guild checks still
 	// run first and a hidden guild keeps reading as missing.
 	if !validator.IsValidUUID(channelID) {
@@ -350,17 +346,17 @@ func (s *guildChannelService) resolveMemberChannel(ctx context.Context, guildSlu
 		return nil, err
 	}
 	if access.Role == "" {
-		return nil, apperrors.ErrNotGuildMember
+		return nil, ErrNotGuildMember
 	}
 	if access.ChannelID == nil {
-		return nil, apperrors.ErrGuildChannelNotFound
+		return nil, ErrGuildChannelNotFound
 	}
 	return access, nil
 }
 
 func (s *guildChannelService) findMessageAuthor(ctx context.Context, channelID, messageID string) (string, error) {
 	if !validator.IsValidUUID(messageID) {
-		return "", apperrors.ErrGuildMessageNotFound
+		return "", ErrGuildMessageNotFound
 	}
 	return s.channelRepo.FindMessageAuthor(ctx, channelID, messageID)
 }
@@ -372,12 +368,12 @@ func (s *guildChannelService) publish(ctx context.Context, guildID, channelID, e
 	if s.broker == nil {
 		return
 	}
-	event := dto.GuildEvent{Type: eventType, GuildID: guildID, ChannelID: channelID, Data: data}
+	event := GuildEvent{Type: eventType, GuildID: guildID, ChannelID: channelID, Data: data}
 	if err := s.broker.Publish(ctx, GuildEventTopic(guildID), event); err != nil {
 		guildChatLog.Warn("guild chat: failed to publish event", "type", eventType, "guild_id", guildID, "error", err)
 	}
 }
 
 func isGuildManager(role string) bool {
-	return role == model.GuildRoleOwner || role == model.GuildRoleAdmin
+	return role == GuildRoleOwner || role == GuildRoleAdmin
 }

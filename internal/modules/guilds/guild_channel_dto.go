@@ -1,7 +1,7 @@
-package dto
+package guilds
 
 import (
-	"echobackend/internal/model"
+	"echobackend/internal/core/userref"
 	"time"
 	"unicode/utf8"
 )
@@ -39,13 +39,13 @@ type UpdateGuildMessageRequest struct {
 }
 
 type GuildMessageResponse struct {
-	ID        string     `json:"id"`
-	GuildID   string     `json:"guild_id"`
-	ChannelID string     `json:"channel_id"`
-	AuthorID  string     `json:"author_id"`
-	Author    *UserBrief `json:"author,omitempty"`
-	Content   string     `json:"content"`
-	ReplyToID *string    `json:"reply_to_id"`
+	ID        string         `json:"id"`
+	GuildID   string         `json:"guild_id"`
+	ChannelID string         `json:"channel_id"`
+	AuthorID  string         `json:"author_id"`
+	Author    *userref.Brief `json:"author,omitempty"`
+	Content   string         `json:"content"`
+	ReplyToID *string        `json:"reply_to_id"`
 	// ReplyTo is a quote of the parent message; nil once the parent is deleted.
 	ReplyTo   *GuildMessageReply `json:"reply_to,omitempty"`
 	EditedAt  *time.Time         `json:"edited_at"`
@@ -59,10 +59,10 @@ const GuildMessageReplyPreviewLen = 200
 // GuildMessageReply is the parent message quoted above a reply. Content is
 // truncated to GuildMessageReplyPreviewLen runes.
 type GuildMessageReply struct {
-	ID       string     `json:"id"`
-	AuthorID string     `json:"author_id"`
-	Author   *UserBrief `json:"author,omitempty"`
-	Content  string     `json:"content"`
+	ID       string         `json:"id"`
+	AuthorID string         `json:"author_id"`
+	Author   *userref.Brief `json:"author,omitempty"`
+	Content  string         `json:"content"`
 }
 
 // GuildMessageCursorMeta paginates channel history backwards. Pass NextBefore
@@ -91,7 +91,7 @@ const (
 	GuildEventMessageDeleted = "message.deleted"
 )
 
-func GuildChannelToResponse(ch *model.GuildChannel) *GuildChannelResponse {
+func GuildChannelToResponse(ch *GuildChannel) *GuildChannelResponse {
 	if ch == nil {
 		return nil
 	}
@@ -107,7 +107,7 @@ func GuildChannelToResponse(ch *model.GuildChannel) *GuildChannelResponse {
 	}
 }
 
-func GuildMessageToResponse(m *model.GuildChannelMessage, guildID string) *GuildMessageResponse {
+func GuildMessageToResponse(m *GuildChannelMessage, guildID string) *GuildMessageResponse {
 	if m == nil {
 		return nil
 	}
@@ -116,7 +116,7 @@ func GuildMessageToResponse(m *model.GuildChannelMessage, guildID string) *Guild
 		GuildID:   guildID,
 		ChannelID: m.ChannelID,
 		AuthorID:  m.AuthorID,
-		Author:    UserToBrief(m.Author),
+		Author:    userref.ToBrief(m.Author),
 		Content:   m.Content,
 		ReplyToID: m.ReplyToID,
 		EditedAt:  m.EditedAt,
@@ -126,7 +126,7 @@ func GuildMessageToResponse(m *model.GuildChannelMessage, guildID string) *Guild
 		resp.ReplyTo = &GuildMessageReply{
 			ID:       m.ReplyTo.ID,
 			AuthorID: m.ReplyTo.AuthorID,
-			Author:   UserToBrief(m.ReplyTo.Author),
+			Author:   userref.ToBrief(m.ReplyTo.Author),
 			Content:  truncateRunes(m.ReplyTo.Content, GuildMessageReplyPreviewLen),
 		}
 	}

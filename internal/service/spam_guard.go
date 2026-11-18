@@ -14,12 +14,3 @@ func rejectSpamText(texts ...string) error {
 	}
 	return nil
 }
-
-// optionalText treats an absent optional field as empty text, which never
-// trips any anti-spam rule.
-func optionalText(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}

@@ -1,13 +1,11 @@
-package repository
+package guilds
 
 import (
 	"context"
+	"echobackend/internal/core/userref"
 	"errors"
 	"fmt"
 	"time"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -32,22 +30,22 @@ type GuildChannelRepository interface {
 	// IsGuildMember is a cheap existence check for re-validating open streams.
 	IsGuildMember(ctx context.Context, guildID, userID string) (bool, error)
 
-	CreateChannel(ctx context.Context, channel *model.GuildChannel) error
+	CreateChannel(ctx context.Context, channel *GuildChannel) error
 	// FindChannel only matches a channel that belongs to guildID, so a channel
 	// id from another guild reads as not found.
-	FindChannel(ctx context.Context, guildID, channelID string) (*model.GuildChannel, error)
-	ListChannels(ctx context.Context, guildID string) ([]*model.GuildChannel, error)
+	FindChannel(ctx context.Context, guildID, channelID string) (*GuildChannel, error)
+	ListChannels(ctx context.Context, guildID string) ([]*GuildChannel, error)
 	UpdateChannel(ctx context.Context, guildID, channelID string, updates map[string]any) error
 	DeleteChannel(ctx context.Context, guildID, channelID string) error
 
-	CreateMessage(ctx context.Context, message *model.GuildChannelMessage) error
-	FindMessage(ctx context.Context, channelID, messageID string) (*model.GuildChannelMessage, error)
+	CreateMessage(ctx context.Context, message *GuildChannelMessage) error
+	FindMessage(ctx context.Context, channelID, messageID string) (*GuildChannelMessage, error)
 	// FindMessageAuthor returns only the author id, for permission checks.
 	FindMessageAuthor(ctx context.Context, channelID, messageID string) (string, error)
 	MessageExists(ctx context.Context, channelID, messageID string) (bool, error)
 	// ListMessages returns up to limit messages newest first; with before set,
 	// only messages older than that message id.
-	ListMessages(ctx context.Context, channelID, before string, limit int) ([]*model.GuildChannelMessage, error)
+	ListMessages(ctx context.Context, channelID, before string, limit int) ([]*GuildChannelMessage, error)
 	UpdateMessageContent(ctx context.Context, channelID, messageID, content string, editedAt time.Time) error
 	DeleteMessage(ctx context.Context, channelID, messageID string) error
 }
@@ -81,7 +79,7 @@ func (r *guildChannelRepository) ResolveAccess(ctx context.Context, guildSlug, u
 		return nil, fmt.Errorf("failed to resolve guild access: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return nil, apperrors.ErrGuildNotFound
+		return nil, ErrGuildNotFound
 	}
 	return &GuildChannelAccess{
 		GuildID:   row.GuildID,
@@ -102,33 +100,33 @@ func (r *guildChannelRepository) IsGuildMember(ctx context.Context, guildID, use
 	return exists, nil
 }
 
-func (r *guildChannelRepository) CreateChannel(ctx context.Context, channel *model.GuildChannel) error {
+func (r *guildChannelRepository) CreateChannel(ctx context.Context, channel *GuildChannel) error {
 	if err := r.db.WithContext(ctx).Create(channel).Error; err != nil {
 		// Unique (guild_id, name).
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return apperrors.ErrGuildChannelNameExists
+			return ErrGuildChannelNameExists
 		}
 		return fmt.Errorf("failed to create guild channel: %w", err)
 	}
 	return nil
 }
 
-func (r *guildChannelRepository) FindChannel(ctx context.Context, guildID, channelID string) (*model.GuildChannel, error) {
-	var channel model.GuildChannel
+func (r *guildChannelRepository) FindChannel(ctx context.Context, guildID, channelID string) (*GuildChannel, error) {
+	var channel GuildChannel
 	err := r.db.WithContext(ctx).
 		Where("id = ? AND guild_id = ?", channelID, guildID).
 		First(&channel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrGuildChannelNotFound
+			return nil, ErrGuildChannelNotFound
 		}
 		return nil, fmt.Errorf("failed to find guild channel: %w", err)
 	}
 	return &channel, nil
 }
 
-func (r *guildChannelRepository) ListChannels(ctx context.Context, guildID string) ([]*model.GuildChannel, error) {
-	var channels []*model.GuildChannel
+func (r *guildChannelRepository) ListChannels(ctx context.Context, guildID string) ([]*GuildChannel, error) {
+	var channels []*GuildChannel
 	err := r.db.WithContext(ctx).
 		Where("guild_id = ?", guildID).
 		Order("position ASC, created_at ASC").
@@ -144,17 +142,17 @@ func (r *guildChannelRepository) UpdateChannel(ctx context.Context, guildID, cha
 		return nil
 	}
 	result := r.db.WithContext(ctx).
-		Model(&model.GuildChannel{}).
+		Model(&GuildChannel{}).
 		Where("id = ? AND guild_id = ?", channelID, guildID).
 		Updates(updates)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
-			return apperrors.ErrGuildChannelNameExists
+			return ErrGuildChannelNameExists
 		}
 		return fmt.Errorf("failed to update guild channel: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildChannelNotFound
+		return ErrGuildChannelNotFound
 	}
 	return nil
 }
@@ -162,31 +160,31 @@ func (r *guildChannelRepository) UpdateChannel(ctx context.Context, guildID, cha
 func (r *guildChannelRepository) DeleteChannel(ctx context.Context, guildID, channelID string) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND guild_id = ?", channelID, guildID).
-		Delete(&model.GuildChannel{})
+		Delete(&GuildChannel{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete guild channel: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildChannelNotFound
+		return ErrGuildChannelNotFound
 	}
 	return nil
 }
 
-func (r *guildChannelRepository) CreateMessage(ctx context.Context, message *model.GuildChannelMessage) error {
+func (r *guildChannelRepository) CreateMessage(ctx context.Context, message *GuildChannelMessage) error {
 	if err := r.db.WithContext(ctx).Omit("Author", "ReplyTo").Create(message).Error; err != nil {
 		return fmt.Errorf("failed to create guild message: %w", err)
 	}
 	return nil
 }
 
-func (r *guildChannelRepository) FindMessage(ctx context.Context, channelID, messageID string) (*model.GuildChannelMessage, error) {
-	var message model.GuildChannelMessage
+func (r *guildChannelRepository) FindMessage(ctx context.Context, channelID, messageID string) (*GuildChannelMessage, error) {
+	var message GuildChannelMessage
 	err := r.preloadMessage(r.db.WithContext(ctx)).
 		Where("id = ? AND channel_id = ?", messageID, channelID).
 		First(&message).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrGuildMessageNotFound
+			return nil, ErrGuildMessageNotFound
 		}
 		return nil, fmt.Errorf("failed to find guild message: %w", err)
 	}
@@ -196,7 +194,7 @@ func (r *guildChannelRepository) FindMessage(ctx context.Context, channelID, mes
 func (r *guildChannelRepository) FindMessageAuthor(ctx context.Context, channelID, messageID string) (string, error) {
 	var authorIDs []string
 	err := r.db.WithContext(ctx).
-		Model(&model.GuildChannelMessage{}).
+		Model(&GuildChannelMessage{}).
 		Where("id = ? AND channel_id = ?", messageID, channelID).
 		Limit(1).
 		Pluck("author_id", &authorIDs).Error
@@ -204,7 +202,7 @@ func (r *guildChannelRepository) FindMessageAuthor(ctx context.Context, channelI
 		return "", fmt.Errorf("failed to find guild message author: %w", err)
 	}
 	if len(authorIDs) == 0 {
-		return "", apperrors.ErrGuildMessageNotFound
+		return "", ErrGuildMessageNotFound
 	}
 	return authorIDs[0], nil
 }
@@ -220,8 +218,8 @@ func (r *guildChannelRepository) MessageExists(ctx context.Context, channelID, m
 	return exists, nil
 }
 
-func (r *guildChannelRepository) ListMessages(ctx context.Context, channelID, before string, limit int) ([]*model.GuildChannelMessage, error) {
-	var messages []*model.GuildChannelMessage
+func (r *guildChannelRepository) ListMessages(ctx context.Context, channelID, before string, limit int) ([]*GuildChannelMessage, error) {
+	var messages []*GuildChannelMessage
 	query := r.preloadMessage(r.db.WithContext(ctx)).Where("channel_id = ?", channelID)
 	if before != "" {
 		// uuidv7 ids sort in insert order, so the id is the cursor.
@@ -236,14 +234,14 @@ func (r *guildChannelRepository) ListMessages(ctx context.Context, channelID, be
 
 func (r *guildChannelRepository) UpdateMessageContent(ctx context.Context, channelID, messageID, content string, editedAt time.Time) error {
 	result := r.db.WithContext(ctx).
-		Model(&model.GuildChannelMessage{}).
+		Model(&GuildChannelMessage{}).
 		Where("id = ? AND channel_id = ?", messageID, channelID).
 		Updates(map[string]any{"content": content, "edited_at": editedAt})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update guild message: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildMessageNotFound
+		return ErrGuildMessageNotFound
 	}
 	return nil
 }
@@ -251,12 +249,12 @@ func (r *guildChannelRepository) UpdateMessageContent(ctx context.Context, chann
 func (r *guildChannelRepository) DeleteMessage(ctx context.Context, channelID, messageID string) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND channel_id = ?", messageID, channelID).
-		Delete(&model.GuildChannelMessage{})
+		Delete(&GuildChannelMessage{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete guild message: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildMessageNotFound
+		return ErrGuildMessageNotFound
 	}
 	return nil
 }
@@ -265,11 +263,11 @@ func (r *guildChannelRepository) DeleteMessage(ctx context.Context, channelID, m
 // the reply queries entirely when no message on the page is a reply.
 func (r *guildChannelRepository) preloadMessage(db *gorm.DB) *gorm.DB {
 	return db.
-		Preload("Author", preloadUserBrief).
+		Preload("Author", userref.PreloadBrief).
 		Preload("ReplyTo", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id", "author_id", "content")
 		}).
-		Preload("ReplyTo.Author", preloadUserBrief)
+		Preload("ReplyTo.Author", userref.PreloadBrief)
 }
 
 func nullIfEmpty(s string) any {

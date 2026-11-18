@@ -5,6 +5,7 @@ import (
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
 	"echobackend/internal/modules/aichat"
+	"echobackend/internal/modules/guilds"
 	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
 
@@ -29,10 +30,9 @@ type Routes struct {
 	postStatsHandler    *handler.PostStatsHandler
 	tagStatsHandler     *handler.TagStatsHandler
 	postReportHandler   *handler.PostReportHandler
-	guildHandler        *handler.GuildHandler
-	guildChannelHandler *handler.GuildChannelHandler
 	portfolio           *portfolio.Module
 	aichat              *aichat.Module
+	guild               *guilds.Module
 }
 
 func NewRoutes(
@@ -53,10 +53,9 @@ func NewRoutes(
 	postStatsHandler *handler.PostStatsHandler,
 	tagStatsHandler *handler.TagStatsHandler,
 	postReportHandler *handler.PostReportHandler,
-	guildHandler *handler.GuildHandler,
-	guildChannelHandler *handler.GuildChannelHandler,
 	portfolioModule *portfolio.Module,
 	aichatModule *aichat.Module,
+	guildModule *guilds.Module,
 ) *Routes {
 	return &Routes{
 		config:              config,
@@ -76,10 +75,9 @@ func NewRoutes(
 		postStatsHandler:    postStatsHandler,
 		tagStatsHandler:     tagStatsHandler,
 		postReportHandler:   postReportHandler,
-		guildHandler:        guildHandler,
-		guildChannelHandler: guildChannelHandler,
 		portfolio:           portfolioModule,
 		aichat:              aichatModule,
+		guild:               guildModule,
 	}
 }
 
@@ -96,9 +94,9 @@ func (r *Routes) setupAPIRoutes(api *echo.Group) {
 	r.setupTagRoutes(api)
 	r.setupBookmarkRoutes(api)
 	r.setupNotificationRoutes(api)
-	r.setupGuildRoutes(api)
 
 	// Self-contained modules (internal/modules/*).
 	r.portfolio.RegisterRoutes(api, r.authMiddleware.Auth())
 	r.aichat.RegisterRoutes(api, aichat.Guards{Auth: r.authMiddleware.Auth(), Admin: r.authMiddleware.AuthAdmin()})
+	r.guild.RegisterRoutes(api, guilds.Guards{Auth: r.authMiddleware.Auth(), OptionalAuth: r.authMiddleware.OptionalAuth()})
 }

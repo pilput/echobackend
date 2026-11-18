@@ -1,6 +1,7 @@
-package model
+package guilds
 
 import (
+	"echobackend/internal/core/userref"
 	"time"
 )
 
@@ -21,7 +22,7 @@ type Guild struct {
 	// Never write it by hand.
 	MemberCount int64 `json:"member_count" gorm:"type:bigint;not null;default:0"`
 
-	Owner   *User         `json:"owner,omitempty" gorm:"foreignKey:OwnerID"`
+	Owner   *userref.Ref  `json:"owner,omitempty" gorm:"foreignKey:OwnerID"`
 	Members []GuildMember `json:"-" gorm:"foreignKey:GuildID"`
 }
 

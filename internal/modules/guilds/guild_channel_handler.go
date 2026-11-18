@@ -1,21 +1,16 @@
-package handler
+package guilds
 
 import (
+	"echobackend/internal/middleware"
 	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/service"
-	"echobackend/pkg/applog"
 	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
 )
-
-var guildChatLog = applog.Component("guild_chat")
 
 const (
 	// guildStreamHeartbeat keeps proxies from closing an idle stream and is
@@ -28,16 +23,16 @@ const (
 )
 
 type GuildChannelHandler struct {
-	channelService service.GuildChannelService
+	channelService GuildChannelService
 }
 
-func NewGuildChannelHandler(channelService service.GuildChannelService) *GuildChannelHandler {
+func NewGuildChannelHandler(channelService GuildChannelService) *GuildChannelHandler {
 	return &GuildChannelHandler{channelService: channelService}
 }
 
 func (h *GuildChannelHandler) ListChannels(c *echo.Context) error {
 	guildSlug := c.Param("slug")
-	viewerID, _ := GetUserIDFromClaims(c)
+	viewerID, _ := middleware.UserIDFromContext(c)
 
 	channels, err := h.channelService.ListChannels(c.Request().Context(), guildSlug, viewerID)
 	if err != nil {
@@ -47,12 +42,12 @@ func (h *GuildChannelHandler) ListChannels(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) CreateChannel(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
 
-	var req dto.CreateGuildChannelRequest
+	var req CreateGuildChannelRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -68,12 +63,12 @@ func (h *GuildChannelHandler) CreateChannel(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) UpdateChannel(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
 
-	var req dto.UpdateGuildChannelRequest
+	var req UpdateGuildChannelRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -89,7 +84,7 @@ func (h *GuildChannelHandler) UpdateChannel(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) DeleteChannel(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -104,11 +99,11 @@ func (h *GuildChannelHandler) DeleteChannel(c *echo.Context) error {
 // the ?before=<message id> cursor rather than offset, so that messages
 // arriving meanwhile do not shift the pages.
 func (h *GuildChannelHandler) ListMessages(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
-	limit, _ := ParsePaginationParams(c, 50)
+	limit, _ := response.ParsePaginationParams(c, 50)
 
 	messages, meta, err := h.channelService.ListMessages(
 		c.Request().Context(), c.Param("slug"), c.Param("channelId"), userID, c.QueryParam("before"), limit)
@@ -119,12 +114,12 @@ func (h *GuildChannelHandler) ListMessages(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) SendMessage(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
 
-	var req dto.CreateGuildMessageRequest
+	var req CreateGuildMessageRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -140,12 +135,12 @@ func (h *GuildChannelHandler) SendMessage(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) EditMessage(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
 
-	var req dto.UpdateGuildMessageRequest
+	var req UpdateGuildMessageRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -162,7 +157,7 @@ func (h *GuildChannelHandler) EditMessage(c *echo.Context) error {
 }
 
 func (h *GuildChannelHandler) DeleteMessage(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -177,12 +172,12 @@ func (h *GuildChannelHandler) DeleteMessage(c *echo.Context) error {
 
 // StreamEvents holds a Server-Sent Events stream open and forwards every
 // realtime event of the guild (all channels) to a member. Each event is one
-// `data:` line holding a dto.GuildEvent. The stream ends when the client
+// `data:` line holding a GuildEvent. The stream ends when the client
 // disconnects, the member leaves the guild, the subscriber falls too far
 // behind, or the server shuts down; clients should reconnect and refetch
 // recent history to fill any gap.
 func (h *GuildChannelHandler) StreamEvents(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -251,23 +246,23 @@ func (h *GuildChannelHandler) StreamEvents(c *echo.Context) error {
 
 func handleGuildChannelError(c *echo.Context, message string, err error) error {
 	switch {
-	case errors.Is(err, apperrors.ErrGuildNotFound):
+	case errors.Is(err, ErrGuildNotFound):
 		return response.NotFound(c, "Guild not found", err)
-	case errors.Is(err, apperrors.ErrGuildNotOwned):
+	case errors.Is(err, ErrGuildNotOwned):
 		return response.Forbidden(c, "Access forbidden")
-	case errors.Is(err, apperrors.ErrGuildChannelNotFound):
+	case errors.Is(err, ErrGuildChannelNotFound):
 		return response.NotFound(c, "Channel not found", err)
-	case errors.Is(err, apperrors.ErrGuildMessageNotFound):
+	case errors.Is(err, ErrGuildMessageNotFound):
 		return response.NotFound(c, "Message not found", err)
-	case errors.Is(err, apperrors.ErrNotGuildMember),
-		errors.Is(err, apperrors.ErrGuildMessageNotOwned):
+	case errors.Is(err, ErrNotGuildMember),
+		errors.Is(err, ErrGuildMessageNotOwned):
 		return response.Forbidden(c, "Access forbidden")
-	case errors.Is(err, apperrors.ErrGuildChannelNameExists):
+	case errors.Is(err, ErrGuildChannelNameExists):
 		return response.Conflict(c, "Channel name already taken", err.Error())
-	case errors.Is(err, apperrors.ErrGuildChannelNameInvalid),
-		errors.Is(err, apperrors.ErrGuildMessageEmpty),
-		errors.Is(err, apperrors.ErrGuildMessageReplyNotFound),
-		errors.Is(err, apperrors.ErrInvalidMessageCursor):
+	case errors.Is(err, ErrGuildChannelNameInvalid),
+		errors.Is(err, ErrGuildMessageEmpty),
+		errors.Is(err, ErrGuildMessageReplyNotFound),
+		errors.Is(err, ErrInvalidMessageCursor):
 		return response.BadRequest(c, err.Error(), err)
 	default:
 		return response.InternalServerError(c, message, err)

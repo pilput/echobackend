@@ -1,13 +1,11 @@
-package repository
+package guilds
 
 import (
 	"context"
+	"echobackend/internal/core/userref"
 	"errors"
 	"fmt"
 	"strings"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -15,18 +13,18 @@ import (
 type GuildRepository interface {
 	// CreateGuild inserts the guild, its owner membership and its #general
 	// channel in one transaction.
-	CreateGuild(ctx context.Context, guild *model.Guild) error
-	FindGuildByID(ctx context.Context, id string) (*model.Guild, error)
-	FindGuildBySlug(ctx context.Context, slug string) (*model.Guild, error)
-	ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*model.Guild, int64, error)
-	ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*model.Guild, int64, error)
+	CreateGuild(ctx context.Context, guild *Guild) error
+	FindGuildByID(ctx context.Context, id string) (*Guild, error)
+	FindGuildBySlug(ctx context.Context, slug string) (*Guild, error)
+	ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*Guild, int64, error)
+	ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*Guild, int64, error)
 	UpdateGuild(ctx context.Context, id string, updates map[string]any) error
 	DeleteGuild(ctx context.Context, id string) error
 
-	AddMember(ctx context.Context, member *model.GuildMember) error
-	FindMember(ctx context.Context, guildID, userID string) (*model.GuildMember, error)
+	AddMember(ctx context.Context, member *GuildMember) error
+	FindMember(ctx context.Context, guildID, userID string) (*GuildMember, error)
 	RemoveMember(ctx context.Context, guildID, userID string) error
-	ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*model.GuildMember, int64, error)
+	ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*GuildMember, int64, error)
 }
 
 type guildRepository struct {
@@ -37,25 +35,25 @@ func NewGuildRepository(db *gorm.DB) GuildRepository {
 	return &guildRepository{db: db}
 }
 
-func (r *guildRepository) CreateGuild(ctx context.Context, guild *model.Guild) error {
+func (r *guildRepository) CreateGuild(ctx context.Context, guild *Guild) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(guild).Error; err != nil {
 			return err
 		}
 		// The owner is a member from the start, which is also what makes
 		// member_count start at 1 via the guild_members trigger.
-		owner := &model.GuildMember{
+		owner := &GuildMember{
 			GuildID: guild.ID,
 			UserID:  guild.OwnerID,
-			Role:    model.GuildRoleOwner,
+			Role:    GuildRoleOwner,
 		}
 		if err := tx.Create(owner).Error; err != nil {
 			return err
 		}
 		ownerID := guild.OwnerID
-		general := &model.GuildChannel{
+		general := &GuildChannel{
 			GuildID:   guild.ID,
-			Name:      model.GuildDefaultChannelName,
+			Name:      GuildDefaultChannelName,
 			CreatedBy: &ownerID,
 		}
 		return tx.Create(general).Error
@@ -64,48 +62,48 @@ func (r *guildRepository) CreateGuild(ctx context.Context, guild *model.Guild) e
 		// gorm.Config.TranslateError turns SQLSTATE 23505 into ErrDuplicatedKey;
 		// the only unique constraint reachable here is guilds.slug.
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return apperrors.ErrGuildSlugExists
+			return ErrGuildSlugExists
 		}
 		return fmt.Errorf("failed to create guild: %w", err)
 	}
 	return nil
 }
 
-func (r *guildRepository) FindGuildByID(ctx context.Context, id string) (*model.Guild, error) {
-	var guild model.Guild
+func (r *guildRepository) FindGuildByID(ctx context.Context, id string) (*Guild, error) {
+	var guild Guild
 	err := r.db.WithContext(ctx).
-		Preload("Owner", preloadUserBrief).
+		Preload("Owner", userref.PreloadBrief).
 		Where("id = ?", id).
 		First(&guild).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrGuildNotFound
+			return nil, ErrGuildNotFound
 		}
 		return nil, fmt.Errorf("failed to find guild: %w", err)
 	}
 	return &guild, nil
 }
 
-func (r *guildRepository) FindGuildBySlug(ctx context.Context, slug string) (*model.Guild, error) {
-	var guild model.Guild
+func (r *guildRepository) FindGuildBySlug(ctx context.Context, slug string) (*Guild, error) {
+	var guild Guild
 	err := r.db.WithContext(ctx).
-		Preload("Owner", preloadUserBrief).
+		Preload("Owner", userref.PreloadBrief).
 		Where("slug = ?", slug).
 		First(&guild).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrGuildNotFound
+			return nil, ErrGuildNotFound
 		}
 		return nil, fmt.Errorf("failed to find guild by slug: %w", err)
 	}
 	return &guild, nil
 }
 
-func (r *guildRepository) ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*model.Guild, int64, error) {
-	var guilds []*model.Guild
+func (r *guildRepository) ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*Guild, int64, error) {
+	var guilds []*Guild
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&model.Guild{}).Where("is_public = ?", true)
+	query := r.db.WithContext(ctx).Model(&Guild{}).Where("is_public = ?", true)
 	if search = strings.TrimSpace(search); search != "" {
 		// ILIKE with a leading wildcard cannot use the btree index; acceptable
 		// while the directory is small, revisit with pg_trgm when it is not.
@@ -120,7 +118,7 @@ func (r *guildRepository) ListPublicGuilds(ctx context.Context, search string, l
 	}
 
 	err := query.
-		Preload("Owner", preloadUserBrief).
+		Preload("Owner", userref.PreloadBrief).
 		Order("member_count DESC, created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -131,11 +129,11 @@ func (r *guildRepository) ListPublicGuilds(ctx context.Context, search string, l
 	return guilds, total, nil
 }
 
-func (r *guildRepository) ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*model.Guild, int64, error) {
-	var guilds []*model.Guild
+func (r *guildRepository) ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*Guild, int64, error) {
+	var guilds []*Guild
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&model.Guild{}).
+	query := r.db.WithContext(ctx).Model(&Guild{}).
 		Joins("JOIN guild_members ON guild_members.guild_id = guilds.id AND guild_members.user_id = ?", userID)
 
 	if err := query.Count(&total).Error; err != nil {
@@ -143,7 +141,7 @@ func (r *guildRepository) ListGuildsByMember(ctx context.Context, userID string,
 	}
 
 	err := query.
-		Preload("Owner", preloadUserBrief).
+		Preload("Owner", userref.PreloadBrief).
 		Order("guild_members.created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -158,48 +156,48 @@ func (r *guildRepository) UpdateGuild(ctx context.Context, id string, updates ma
 	if len(updates) == 0 {
 		return nil
 	}
-	result := r.db.WithContext(ctx).Model(&model.Guild{}).Where("id = ?", id).Updates(updates)
+	result := r.db.WithContext(ctx).Model(&Guild{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update guild: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildNotFound
+		return ErrGuildNotFound
 	}
 	return nil
 }
 
 func (r *guildRepository) DeleteGuild(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&model.Guild{}, "id = ?", id)
+	result := r.db.WithContext(ctx).Delete(&Guild{}, "id = ?", id)
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete guild: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrGuildNotFound
+		return ErrGuildNotFound
 	}
 	return nil
 }
 
-func (r *guildRepository) AddMember(ctx context.Context, member *model.GuildMember) error {
+func (r *guildRepository) AddMember(ctx context.Context, member *GuildMember) error {
 	err := r.db.WithContext(ctx).Create(member).Error
 	if err != nil {
 		// Unique (guild_id, user_id): a concurrent join lost the race.
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return apperrors.ErrAlreadyGuildMember
+			return ErrAlreadyGuildMember
 		}
 		return fmt.Errorf("failed to add guild member: %w", err)
 	}
 	return nil
 }
 
-func (r *guildRepository) FindMember(ctx context.Context, guildID, userID string) (*model.GuildMember, error) {
-	var member model.GuildMember
+func (r *guildRepository) FindMember(ctx context.Context, guildID, userID string) (*GuildMember, error) {
+	var member GuildMember
 	err := r.db.WithContext(ctx).
-		Preload("User", preloadUserBrief).
+		Preload("User", userref.PreloadBrief).
 		Where("guild_id = ? AND user_id = ?", guildID, userID).
 		First(&member).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrNotGuildMember
+			return nil, ErrNotGuildMember
 		}
 		return nil, fmt.Errorf("failed to find guild member: %w", err)
 	}
@@ -209,27 +207,27 @@ func (r *guildRepository) FindMember(ctx context.Context, guildID, userID string
 func (r *guildRepository) RemoveMember(ctx context.Context, guildID, userID string) error {
 	result := r.db.WithContext(ctx).
 		Where("guild_id = ? AND user_id = ?", guildID, userID).
-		Delete(&model.GuildMember{})
+		Delete(&GuildMember{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to remove guild member: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrNotGuildMember
+		return ErrNotGuildMember
 	}
 	return nil
 }
 
-func (r *guildRepository) ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*model.GuildMember, int64, error) {
-	var members []*model.GuildMember
+func (r *guildRepository) ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*GuildMember, int64, error) {
+	var members []*GuildMember
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&model.GuildMember{}).Where("guild_id = ?", guildID)
+	query := r.db.WithContext(ctx).Model(&GuildMember{}).Where("guild_id = ?", guildID)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to count guild members: %w", err)
 	}
 
 	err := query.
-		Preload("User", preloadUserBrief).
+		Preload("User", userref.PreloadBrief).
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).

@@ -1,4 +1,4 @@
-package handler
+package guilds
 
 import (
 	"bufio"
@@ -9,10 +9,7 @@ import (
 	"testing"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
 	"echobackend/internal/platform/realtime"
-	"echobackend/internal/service"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
@@ -20,23 +17,23 @@ import (
 
 // stubGuildChannelService implements only what the stream handler uses.
 type stubGuildChannelService struct {
-	service.GuildChannelService
+	GuildChannelService
 	hub      *realtime.Hub
 	isMember bool
 }
 
 func (s *stubGuildChannelService) Subscribe(_ context.Context, guildSlug, _ string) (string, *realtime.Subscription, error) {
 	if guildSlug != "g" {
-		return "", nil, apperrors.ErrGuildNotFound
+		return "", nil, ErrGuildNotFound
 	}
-	return "guild-1", s.hub.Subscribe(service.GuildEventTopic("guild-1")), nil
+	return "guild-1", s.hub.Subscribe(GuildEventTopic("guild-1")), nil
 }
 
 func (s *stubGuildChannelService) IsMember(context.Context, string, string) (bool, error) {
 	return s.isMember, nil
 }
 
-func newStreamServer(t *testing.T, svc service.GuildChannelService) *httptest.Server {
+func newStreamServer(t *testing.T, svc GuildChannelService) *httptest.Server {
 	t.Helper()
 	e := echo.New()
 	h := NewGuildChannelHandler(svc)
@@ -84,7 +81,7 @@ func TestStreamEvents_ForwardsEventsUntilHubCloses(t *testing.T) {
 	readLine() // blank frame separator
 
 	// The subscription is registered before the handler writes ": connected".
-	_ = hub.Publish(ctx, service.GuildEventTopic("guild-1"), dto.GuildEvent{Type: dto.GuildEventMessageCreated, GuildID: "guild-1"})
+	_ = hub.Publish(ctx, GuildEventTopic("guild-1"), GuildEvent{Type: GuildEventMessageCreated, GuildID: "guild-1"})
 	if line := readLine(); !strings.HasPrefix(line, "data: ") || !strings.Contains(line, `"type":"message.created"`) {
 		t.Fatalf("event line = %q", line)
 	}
@@ -119,7 +116,7 @@ func TestHandleGuildChannelError_NonMemberIsForbidden(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil), rec)
 
-	_ = handleGuildChannelError(c, "x", apperrors.ErrNotGuildMember)
+	_ = handleGuildChannelError(c, "x", ErrNotGuildMember)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
 	}

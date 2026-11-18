@@ -1,31 +1,30 @@
-package handler
+package guilds
 
 import (
+	"echobackend/internal/middleware"
 	"errors"
 
 	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/service"
 	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
 )
 
 type GuildHandler struct {
-	guildService service.GuildService
+	guildService GuildService
 }
 
-func NewGuildHandler(guildService service.GuildService) *GuildHandler {
+func NewGuildHandler(guildService GuildService) *GuildHandler {
 	return &GuildHandler{guildService: guildService}
 }
 
 func (h *GuildHandler) CreateGuild(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
 
-	var req dto.CreateGuildRequest
+	var req CreateGuildRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -46,7 +45,7 @@ func (h *GuildHandler) CreateGuild(c *echo.Context) error {
 // ListGuilds returns the public guild directory. It is open to anonymous
 // callers, so no viewer-relative fields are filled in.
 func (h *GuildHandler) ListGuilds(c *echo.Context) error {
-	limit, offset := ParsePaginationParams(c, 20)
+	limit, offset := response.ParsePaginationParams(c, 20)
 	search := c.QueryParam("search")
 
 	guilds, total, err := h.guildService.ListGuilds(c.Request().Context(), search, limit, offset)
@@ -63,11 +62,11 @@ func (h *GuildHandler) ListGuilds(c *echo.Context) error {
 
 // GetMyGuilds lists the guilds the caller belongs to, including private ones.
 func (h *GuildHandler) GetMyGuilds(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
-	limit, offset := ParsePaginationParams(c, 20)
+	limit, offset := response.ParsePaginationParams(c, 20)
 
 	guilds, total, err := h.guildService.ListMyGuilds(c.Request().Context(), userID, limit, offset)
 	if err != nil {
@@ -87,7 +86,7 @@ func (h *GuildHandler) GetGuild(c *echo.Context) error {
 		return response.BadRequest(c, "Guild slug is required", nil)
 	}
 	// OptionalAuth: an anonymous caller simply gets no membership fields.
-	viewerID, _ := GetUserIDFromClaims(c)
+	viewerID, _ := middleware.UserIDFromContext(c)
 
 	guild, err := h.guildService.GetGuildBySlug(c.Request().Context(), guildSlug, viewerID)
 	if err != nil {
@@ -100,7 +99,7 @@ func (h *GuildHandler) GetGuild(c *echo.Context) error {
 }
 
 func (h *GuildHandler) UpdateGuild(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -109,7 +108,7 @@ func (h *GuildHandler) UpdateGuild(c *echo.Context) error {
 		return response.BadRequest(c, "Guild slug is required", nil)
 	}
 
-	var req dto.UpdateGuildRequest
+	var req UpdateGuildRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request body", err)
 	}
@@ -128,7 +127,7 @@ func (h *GuildHandler) UpdateGuild(c *echo.Context) error {
 }
 
 func (h *GuildHandler) DeleteGuild(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -147,7 +146,7 @@ func (h *GuildHandler) DeleteGuild(c *echo.Context) error {
 }
 
 func (h *GuildHandler) JoinGuild(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -167,7 +166,7 @@ func (h *GuildHandler) JoinGuild(c *echo.Context) error {
 }
 
 func (h *GuildHandler) LeaveGuild(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User authentication required")
 	}
@@ -190,8 +189,8 @@ func (h *GuildHandler) GetMembers(c *echo.Context) error {
 	if guildSlug == "" {
 		return response.BadRequest(c, "Guild slug is required", nil)
 	}
-	viewerID, _ := GetUserIDFromClaims(c)
-	limit, offset := ParsePaginationParams(c, 50)
+	viewerID, _ := middleware.UserIDFromContext(c)
+	limit, offset := response.ParsePaginationParams(c, 50)
 
 	members, total, err := h.guildService.ListMembers(c.Request().Context(), guildSlug, viewerID, limit, offset)
 	if err != nil {
@@ -209,18 +208,18 @@ func (h *GuildHandler) GetMembers(c *echo.Context) error {
 // the error is not one of them so the caller can fall back to a 500.
 func handleGuildError(c *echo.Context, err error) error {
 	switch {
-	case errors.Is(err, apperrors.ErrGuildNotFound):
+	case errors.Is(err, ErrGuildNotFound):
 		return response.NotFound(c, "Guild not found", err)
-	case errors.Is(err, apperrors.ErrGuildNotOwned):
+	case errors.Is(err, ErrGuildNotOwned):
 		return response.Forbidden(c, "Access forbidden")
-	case errors.Is(err, apperrors.ErrGuildSlugExists):
+	case errors.Is(err, ErrGuildSlugExists):
 		return response.Conflict(c, "Guild slug already taken", err.Error())
-	case errors.Is(err, apperrors.ErrAlreadyGuildMember):
+	case errors.Is(err, ErrAlreadyGuildMember):
 		return response.Conflict(c, "Already a member of this guild", err.Error())
-	case errors.Is(err, apperrors.ErrNotGuildMember),
-		errors.Is(err, apperrors.ErrGuildOwnerCannotLeave),
-		errors.Is(err, apperrors.ErrGuildSlugInvalid),
-		errors.Is(err, apperrors.ErrGuildSlugReserved):
+	case errors.Is(err, ErrNotGuildMember),
+		errors.Is(err, ErrGuildOwnerCannotLeave),
+		errors.Is(err, ErrGuildSlugInvalid),
+		errors.Is(err, ErrGuildSlugReserved):
 		return response.BadRequest(c, err.Error(), err)
 	case errors.Is(err, apperrors.ErrContentSpamRejected):
 		return respondSpamRejected(c, "Content rejected by anti-spam policy", "name", err)

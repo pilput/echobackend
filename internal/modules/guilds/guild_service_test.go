@@ -1,46 +1,42 @@
-package service
+package guilds
 
 import (
 	"context"
 	"errors"
 	"testing"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
 )
 
 type mockGuildRepo struct {
-	createGuildFn        func(ctx context.Context, guild *model.Guild) error
-	findGuildByIDFn      func(ctx context.Context, id string) (*model.Guild, error)
-	findGuildBySlugFn    func(ctx context.Context, slug string) (*model.Guild, error)
-	listPublicGuildsFn   func(ctx context.Context, search string, limit, offset int) ([]*model.Guild, int64, error)
-	listGuildsByMemberFn func(ctx context.Context, userID string, limit, offset int) ([]*model.Guild, int64, error)
+	createGuildFn        func(ctx context.Context, guild *Guild) error
+	findGuildByIDFn      func(ctx context.Context, id string) (*Guild, error)
+	findGuildBySlugFn    func(ctx context.Context, slug string) (*Guild, error)
+	listPublicGuildsFn   func(ctx context.Context, search string, limit, offset int) ([]*Guild, int64, error)
+	listGuildsByMemberFn func(ctx context.Context, userID string, limit, offset int) ([]*Guild, int64, error)
 	updateGuildFn        func(ctx context.Context, id string, updates map[string]any) error
 	deleteGuildFn        func(ctx context.Context, id string) error
-	addMemberFn          func(ctx context.Context, member *model.GuildMember) error
-	findMemberFn         func(ctx context.Context, guildID, userID string) (*model.GuildMember, error)
+	addMemberFn          func(ctx context.Context, member *GuildMember) error
+	findMemberFn         func(ctx context.Context, guildID, userID string) (*GuildMember, error)
 	removeMemberFn       func(ctx context.Context, guildID, userID string) error
-	listMembersFn        func(ctx context.Context, guildID string, limit, offset int) ([]*model.GuildMember, int64, error)
+	listMembersFn        func(ctx context.Context, guildID string, limit, offset int) ([]*GuildMember, int64, error)
 }
 
-func (m *mockGuildRepo) CreateGuild(ctx context.Context, guild *model.Guild) error {
+func (m *mockGuildRepo) CreateGuild(ctx context.Context, guild *Guild) error {
 	return m.createGuildFn(ctx, guild)
 }
 
-func (m *mockGuildRepo) FindGuildByID(ctx context.Context, id string) (*model.Guild, error) {
+func (m *mockGuildRepo) FindGuildByID(ctx context.Context, id string) (*Guild, error) {
 	return m.findGuildByIDFn(ctx, id)
 }
 
-func (m *mockGuildRepo) FindGuildBySlug(ctx context.Context, slug string) (*model.Guild, error) {
+func (m *mockGuildRepo) FindGuildBySlug(ctx context.Context, slug string) (*Guild, error) {
 	return m.findGuildBySlugFn(ctx, slug)
 }
 
-func (m *mockGuildRepo) ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*model.Guild, int64, error) {
+func (m *mockGuildRepo) ListPublicGuilds(ctx context.Context, search string, limit, offset int) ([]*Guild, int64, error) {
 	return m.listPublicGuildsFn(ctx, search, limit, offset)
 }
 
-func (m *mockGuildRepo) ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*model.Guild, int64, error) {
+func (m *mockGuildRepo) ListGuildsByMember(ctx context.Context, userID string, limit, offset int) ([]*Guild, int64, error) {
 	return m.listGuildsByMemberFn(ctx, userID, limit, offset)
 }
 
@@ -52,11 +48,11 @@ func (m *mockGuildRepo) DeleteGuild(ctx context.Context, id string) error {
 	return m.deleteGuildFn(ctx, id)
 }
 
-func (m *mockGuildRepo) AddMember(ctx context.Context, member *model.GuildMember) error {
+func (m *mockGuildRepo) AddMember(ctx context.Context, member *GuildMember) error {
 	return m.addMemberFn(ctx, member)
 }
 
-func (m *mockGuildRepo) FindMember(ctx context.Context, guildID, userID string) (*model.GuildMember, error) {
+func (m *mockGuildRepo) FindMember(ctx context.Context, guildID, userID string) (*GuildMember, error) {
 	return m.findMemberFn(ctx, guildID, userID)
 }
 
@@ -64,30 +60,30 @@ func (m *mockGuildRepo) RemoveMember(ctx context.Context, guildID, userID string
 	return m.removeMemberFn(ctx, guildID, userID)
 }
 
-func (m *mockGuildRepo) ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*model.GuildMember, int64, error) {
+func (m *mockGuildRepo) ListMembers(ctx context.Context, guildID string, limit, offset int) ([]*GuildMember, int64, error) {
 	return m.listMembersFn(ctx, guildID, limit, offset)
 }
 
 // notAMember is the repo behaviour for a user with no membership row.
-func notAMember(context.Context, string, string) (*model.GuildMember, error) {
-	return nil, apperrors.ErrNotGuildMember
+func notAMember(context.Context, string, string) (*GuildMember, error) {
+	return nil, ErrNotGuildMember
 }
 
 func TestCreateGuild_GeneratesSlugFromName(t *testing.T) {
-	var created *model.Guild
+	var created *Guild
 	repo := &mockGuildRepo{
-		createGuildFn: func(_ context.Context, g *model.Guild) error {
+		createGuildFn: func(_ context.Context, g *Guild) error {
 			g.ID = "guild-1"
 			created = g
 			return nil
 		},
-		findGuildByIDFn: func(context.Context, string) (*model.Guild, error) {
+		findGuildByIDFn: func(context.Context, string) (*Guild, error) {
 			return created, nil
 		},
 	}
 
 	svc := NewGuildService(repo)
-	resp, err := svc.CreateGuild(context.Background(), "user-1", &dto.CreateGuildRequest{
+	resp, err := svc.CreateGuild(context.Background(), "user-1", &CreateGuildRequest{
 		Name: "Guild Dokter Indonesia",
 	})
 	if err != nil {
@@ -103,7 +99,7 @@ func TestCreateGuild_GeneratesSlugFromName(t *testing.T) {
 	if created.OwnerID != "user-1" {
 		t.Errorf("owner = %q, want %q", created.OwnerID, "user-1")
 	}
-	if resp.MyRole == nil || *resp.MyRole != model.GuildRoleOwner {
+	if resp.MyRole == nil || *resp.MyRole != GuildRoleOwner {
 		t.Error("creator should be reported as owner")
 	}
 	if resp.IsMember == nil || !*resp.IsMember {
@@ -113,22 +109,22 @@ func TestCreateGuild_GeneratesSlugFromName(t *testing.T) {
 
 func TestCreateGuild_RejectsNameWithoutAlphanumerics(t *testing.T) {
 	repo := &mockGuildRepo{
-		createGuildFn: func(context.Context, *model.Guild) error {
+		createGuildFn: func(context.Context, *Guild) error {
 			t.Fatal("CreateGuild should not reach the repository")
 			return nil
 		},
 	}
 
 	svc := NewGuildService(repo)
-	_, err := svc.CreateGuild(context.Background(), "user-1", &dto.CreateGuildRequest{Name: "!!!???"})
-	if !errors.Is(err, apperrors.ErrGuildSlugInvalid) {
+	_, err := svc.CreateGuild(context.Background(), "user-1", &CreateGuildRequest{Name: "!!!???"})
+	if !errors.Is(err, ErrGuildSlugInvalid) {
 		t.Errorf("err = %v, want ErrGuildSlugInvalid", err)
 	}
 }
 
 func TestCreateGuild_RejectsSlugReservedByAStaticRoute(t *testing.T) {
 	repo := &mockGuildRepo{
-		createGuildFn: func(context.Context, *model.Guild) error {
+		createGuildFn: func(context.Context, *Guild) error {
 			t.Fatal("CreateGuild should not reach the repository")
 			return nil
 		},
@@ -137,34 +133,34 @@ func TestCreateGuild_RejectsSlugReservedByAStaticRoute(t *testing.T) {
 	svc := NewGuildService(repo)
 	// "Me!" passes the min=3 name validation but slugifies to "me", which
 	// GET /api/guilds/me already owns.
-	_, err := svc.CreateGuild(context.Background(), "user-1", &dto.CreateGuildRequest{Name: "Me!"})
-	if !errors.Is(err, apperrors.ErrGuildSlugReserved) {
+	_, err := svc.CreateGuild(context.Background(), "user-1", &CreateGuildRequest{Name: "Me!"})
+	if !errors.Is(err, ErrGuildSlugReserved) {
 		t.Errorf("err = %v, want ErrGuildSlugReserved", err)
 	}
 }
 
 func TestGetGuildBySlug_PrivateGuildHiddenFromNonMember(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", Slug: "rahasia", IsPublic: false}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", Slug: "rahasia", IsPublic: false}, nil
 		},
 		findMemberFn: notAMember,
 	}
 
 	svc := NewGuildService(repo)
 	_, err := svc.GetGuildBySlug(context.Background(), "rahasia", "outsider")
-	if !errors.Is(err, apperrors.ErrGuildNotFound) {
+	if !errors.Is(err, ErrGuildNotFound) {
 		t.Errorf("err = %v, want ErrGuildNotFound so the guild does not leak", err)
 	}
 }
 
 func TestGetGuildBySlug_PrivateGuildVisibleToMember(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", Slug: "rahasia", IsPublic: false}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", Slug: "rahasia", IsPublic: false}, nil
 		},
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
-			return &model.GuildMember{GuildID: "guild-1", UserID: "member-1", Role: model.GuildRoleMember}, nil
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
+			return &GuildMember{GuildID: "guild-1", UserID: "member-1", Role: GuildRoleMember}, nil
 		},
 	}
 
@@ -173,17 +169,17 @@ func TestGetGuildBySlug_PrivateGuildVisibleToMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetGuildBySlug returned error: %v", err)
 	}
-	if resp.MyRole == nil || *resp.MyRole != model.GuildRoleMember {
+	if resp.MyRole == nil || *resp.MyRole != GuildRoleMember {
 		t.Error("member role should be reported")
 	}
 }
 
 func TestGetGuildBySlug_AnonymousGetsNoMembershipFields(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", Slug: "publik", IsPublic: true}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", Slug: "publik", IsPublic: true}, nil
 		},
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
 			t.Fatal("membership should not be looked up for an anonymous viewer")
 			return nil, nil
 		},
@@ -201,13 +197,13 @@ func TestGetGuildBySlug_AnonymousGetsNoMembershipFields(t *testing.T) {
 
 func TestJoinGuild_RejectsExistingMember(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", IsPublic: true}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", IsPublic: true}, nil
 		},
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
-			return &model.GuildMember{Role: model.GuildRoleMember}, nil
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
+			return &GuildMember{Role: GuildRoleMember}, nil
 		},
-		addMemberFn: func(context.Context, *model.GuildMember) error {
+		addMemberFn: func(context.Context, *GuildMember) error {
 			t.Fatal("AddMember should not be called for an existing member")
 			return nil
 		},
@@ -215,17 +211,17 @@ func TestJoinGuild_RejectsExistingMember(t *testing.T) {
 
 	svc := NewGuildService(repo)
 	_, err := svc.JoinGuild(context.Background(), "guild", "user-1")
-	if !errors.Is(err, apperrors.ErrAlreadyGuildMember) {
+	if !errors.Is(err, ErrAlreadyGuildMember) {
 		t.Errorf("err = %v, want ErrAlreadyGuildMember", err)
 	}
 }
 
 func TestJoinGuild_RejectsPrivateGuild(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", IsPublic: false}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", IsPublic: false}, nil
 		},
-		addMemberFn: func(context.Context, *model.GuildMember) error {
+		addMemberFn: func(context.Context, *GuildMember) error {
 			t.Fatal("AddMember should not be called for a private guild")
 			return nil
 		},
@@ -233,18 +229,18 @@ func TestJoinGuild_RejectsPrivateGuild(t *testing.T) {
 
 	svc := NewGuildService(repo)
 	_, err := svc.JoinGuild(context.Background(), "rahasia", "user-1")
-	if !errors.Is(err, apperrors.ErrGuildNotFound) {
+	if !errors.Is(err, ErrGuildNotFound) {
 		t.Errorf("err = %v, want ErrGuildNotFound", err)
 	}
 }
 
 func TestLeaveGuild_OwnerCannotLeave(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
 		},
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
-			return &model.GuildMember{Role: model.GuildRoleOwner}, nil
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
+			return &GuildMember{Role: GuildRoleOwner}, nil
 		},
 		removeMemberFn: func(context.Context, string, string) error {
 			t.Fatal("RemoveMember should not be called for the owner")
@@ -254,18 +250,18 @@ func TestLeaveGuild_OwnerCannotLeave(t *testing.T) {
 
 	svc := NewGuildService(repo)
 	err := svc.LeaveGuild(context.Background(), "guild", "owner-1")
-	if !errors.Is(err, apperrors.ErrGuildOwnerCannotLeave) {
+	if !errors.Is(err, ErrGuildOwnerCannotLeave) {
 		t.Errorf("err = %v, want ErrGuildOwnerCannotLeave", err)
 	}
 }
 
 func TestUpdateGuild_RejectsPlainMember(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
 		},
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
-			return &model.GuildMember{Role: model.GuildRoleMember}, nil
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
+			return &GuildMember{Role: GuildRoleMember}, nil
 		},
 		updateGuildFn: func(context.Context, string, map[string]any) error {
 			t.Fatal("UpdateGuild should not be called for a plain member")
@@ -275,20 +271,20 @@ func TestUpdateGuild_RejectsPlainMember(t *testing.T) {
 
 	name := "Nama Baru"
 	svc := NewGuildService(repo)
-	_, err := svc.UpdateGuild(context.Background(), "guild", "member-1", &dto.UpdateGuildRequest{Name: &name})
-	if !errors.Is(err, apperrors.ErrGuildNotOwned) {
+	_, err := svc.UpdateGuild(context.Background(), "guild", "member-1", &UpdateGuildRequest{Name: &name})
+	if !errors.Is(err, ErrGuildNotOwned) {
 		t.Errorf("err = %v, want ErrGuildNotOwned", err)
 	}
 }
 
 func TestUpdateGuild_AdminMayUpdateButNotSlug(t *testing.T) {
 	var gotUpdates map[string]any
-	guild := &model.Guild{ID: "guild-1", Slug: "asli", OwnerID: "owner-1"}
+	guild := &Guild{ID: "guild-1", Slug: "asli", OwnerID: "owner-1"}
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) { return guild, nil },
-		findGuildByIDFn:   func(context.Context, string) (*model.Guild, error) { return guild, nil },
-		findMemberFn: func(context.Context, string, string) (*model.GuildMember, error) {
-			return &model.GuildMember{Role: model.GuildRoleAdmin}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) { return guild, nil },
+		findGuildByIDFn:   func(context.Context, string) (*Guild, error) { return guild, nil },
+		findMemberFn: func(context.Context, string, string) (*GuildMember, error) {
+			return &GuildMember{Role: GuildRoleAdmin}, nil
 		},
 		updateGuildFn: func(_ context.Context, _ string, updates map[string]any) error {
 			gotUpdates = updates
@@ -298,7 +294,7 @@ func TestUpdateGuild_AdminMayUpdateButNotSlug(t *testing.T) {
 
 	name := "Nama Baru"
 	svc := NewGuildService(repo)
-	if _, err := svc.UpdateGuild(context.Background(), "asli", "admin-1", &dto.UpdateGuildRequest{Name: &name}); err != nil {
+	if _, err := svc.UpdateGuild(context.Background(), "asli", "admin-1", &UpdateGuildRequest{Name: &name}); err != nil {
 		t.Fatalf("UpdateGuild returned error: %v", err)
 	}
 
@@ -312,8 +308,8 @@ func TestUpdateGuild_AdminMayUpdateButNotSlug(t *testing.T) {
 
 func TestDeleteGuild_OnlyOwner(t *testing.T) {
 	repo := &mockGuildRepo{
-		findGuildBySlugFn: func(context.Context, string) (*model.Guild, error) {
-			return &model.Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
+		findGuildBySlugFn: func(context.Context, string) (*Guild, error) {
+			return &Guild{ID: "guild-1", OwnerID: "owner-1"}, nil
 		},
 		deleteGuildFn: func(context.Context, string) error {
 			t.Fatal("DeleteGuild should not be called by a non-owner")
@@ -322,7 +318,7 @@ func TestDeleteGuild_OnlyOwner(t *testing.T) {
 	}
 
 	svc := NewGuildService(repo)
-	if err := svc.DeleteGuild(context.Background(), "guild", "admin-1"); !errors.Is(err, apperrors.ErrGuildNotOwned) {
+	if err := svc.DeleteGuild(context.Background(), "guild", "admin-1"); !errors.Is(err, ErrGuildNotOwned) {
 		t.Errorf("err = %v, want ErrGuildNotOwned", err)
 	}
 }

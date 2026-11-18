@@ -1,6 +1,7 @@
-package model
+package guilds
 
 import (
+	"echobackend/internal/core/userref"
 	"time"
 )
 
@@ -38,7 +39,7 @@ type GuildChannelMessage struct {
 	ReplyToID *string    `json:"reply_to_id" gorm:"type:uuid"`
 	EditedAt  *time.Time `json:"edited_at"`
 
-	Author  *User                `json:"author,omitempty" gorm:"foreignKey:AuthorID"`
+	Author  *userref.Ref         `json:"author,omitempty" gorm:"foreignKey:AuthorID"`
 	ReplyTo *GuildChannelMessage `json:"reply_to,omitempty" gorm:"foreignKey:ReplyToID"`
 }
 

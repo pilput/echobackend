@@ -1,6 +1,7 @@
-package model
+package guilds
 
 import (
+	"echobackend/internal/core/userref"
 	"time"
 )
 
@@ -22,8 +23,8 @@ type GuildMember struct {
 	UserID    string     `json:"user_id" gorm:"type:uuid;not null;uniqueIndex:idx_guild_members_unique"`
 	Role      string     `json:"role" gorm:"type:varchar(20);not null;default:member"`
 
-	Guild *Guild `json:"-" gorm:"foreignKey:GuildID"`
-	User  *User  `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Guild *Guild       `json:"-" gorm:"foreignKey:GuildID"`
+	User  *userref.Ref `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
 func (GuildMember) TableName() string {

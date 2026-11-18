@@ -4,14 +4,12 @@ import (
 	"errors"
 	"time"
 
+	"echobackend/internal/core/userref"
 	"echobackend/internal/model"
 )
 
-type UserBrief struct {
-	ID       string  `json:"id"`
-	Username *string `json:"username"`
-	Image    *string `json:"image"`
-}
+// UserBrief is the public user summary; shared with modules via userref.
+type UserBrief = userref.Brief
 
 func UserToBrief(u *model.User) *UserBrief {
 	if u == nil || u.ID == "" {

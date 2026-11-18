@@ -1,7 +1,7 @@
-package dto
+package guilds
 
 import (
-	"echobackend/internal/model"
+	"echobackend/internal/core/userref"
 	"time"
 )
 
@@ -21,15 +21,15 @@ type UpdateGuildRequest struct {
 }
 
 type GuildResponse struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Slug        string     `json:"slug"`
-	Description *string    `json:"description"`
-	AvatarURL   *string    `json:"avatar_url"`
-	IsPublic    bool       `json:"is_public"`
-	MemberCount int64      `json:"member_count"`
-	OwnerID     string     `json:"owner_id"`
-	Owner       *UserBrief `json:"owner,omitempty"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description *string        `json:"description"`
+	AvatarURL   *string        `json:"avatar_url"`
+	IsPublic    bool           `json:"is_public"`
+	MemberCount int64          `json:"member_count"`
+	OwnerID     string         `json:"owner_id"`
+	Owner       *userref.Brief `json:"owner,omitempty"`
 	// IsMember and MyRole are only set for authenticated callers.
 	IsMember  *bool      `json:"is_member,omitempty"`
 	MyRole    *string    `json:"my_role,omitempty"`
@@ -38,15 +38,15 @@ type GuildResponse struct {
 }
 
 type GuildMemberResponse struct {
-	ID        string     `json:"id"`
-	GuildID   string     `json:"guild_id"`
-	UserID    string     `json:"user_id"`
-	Role      string     `json:"role"`
-	User      *UserBrief `json:"user,omitempty"`
-	CreatedAt *time.Time `json:"created_at"`
+	ID        string         `json:"id"`
+	GuildID   string         `json:"guild_id"`
+	UserID    string         `json:"user_id"`
+	Role      string         `json:"role"`
+	User      *userref.Brief `json:"user,omitempty"`
+	CreatedAt *time.Time     `json:"created_at"`
 }
 
-func GuildToResponse(g *model.Guild) *GuildResponse {
+func GuildToResponse(g *Guild) *GuildResponse {
 	if g == nil {
 		return nil
 	}
@@ -59,13 +59,13 @@ func GuildToResponse(g *model.Guild) *GuildResponse {
 		IsPublic:    g.IsPublic,
 		MemberCount: g.MemberCount,
 		OwnerID:     g.OwnerID,
-		Owner:       UserToBrief(g.Owner),
+		Owner:       userref.ToBrief(g.Owner),
 		CreatedAt:   g.CreatedAt,
 		UpdatedAt:   g.UpdatedAt,
 	}
 }
 
-func GuildMemberToResponse(m *model.GuildMember) *GuildMemberResponse {
+func GuildMemberToResponse(m *GuildMember) *GuildMemberResponse {
 	if m == nil {
 		return nil
 	}
@@ -74,7 +74,7 @@ func GuildMemberToResponse(m *model.GuildMember) *GuildMemberResponse {
 		GuildID:   m.GuildID,
 		UserID:    m.UserID,
 		Role:      m.Role,
-		User:      UserToBrief(m.User),
+		User:      userref.ToBrief(m.User),
 		CreatedAt: m.CreatedAt,
 	}
 }
