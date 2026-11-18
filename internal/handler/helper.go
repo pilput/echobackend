@@ -6,56 +6,17 @@ import (
 	"strconv"
 
 	apperrors "echobackend/internal/apperror"
+	"echobackend/internal/middleware"
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 )
 
+// GetUserIDFromClaims returns the user ID that Auth/OptionalAuth stored on the
+// context. It delegates to middleware.UserIDFromContext.
 func GetUserIDFromClaims(c *echo.Context) (string, bool) {
-	userClaims := c.Get("user")
-	if userClaims == nil {
-		return "", false
-	}
-
-	switch v := userClaims.(type) {
-	case jwt.MapClaims:
-		userID, exists := v["user_id"]
-		if !exists {
-			return "", false
-		}
-		userIDStr, ok := userID.(string)
-		if !ok {
-			return "", false
-		}
-		return userIDStr, true
-	case *jwt.Token:
-		claims, ok := v.Claims.(jwt.MapClaims)
-		if !ok {
-			return "", false
-		}
-		userID, exists := claims["user_id"]
-		if !exists {
-			return "", false
-		}
-		userIDStr, ok := userID.(string)
-		if !ok {
-			return "", false
-		}
-		return userIDStr, true
-	case map[string]any:
-		userID, exists := v["user_id"]
-		if !exists {
-			return "", false
-		}
-		userIDStr, ok := userID.(string)
-		if !ok {
-			return "", false
-		}
-		return userIDStr, true
-	}
-	return "", false
+	return middleware.UserIDFromContext(c)
 }
 
 // isSuperAdmin reports whether userID is currently a super admin. It always

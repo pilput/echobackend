@@ -1,4 +1,4 @@
-package dto
+package portfolio
 
 // CorporateActionResponse represents a single corporate action event
 // returned by the calendar endpoint.

@@ -1,7 +1,9 @@
-package handler
+package portfolio
 
 import (
 	"context"
+	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,36 +12,29 @@ import (
 	"testing"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
-	"echobackend/internal/service"
-	"echobackend/pkg/response"
-	"echobackend/pkg/validator"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 )
 
-var _ service.HoldingService = (*mockHoldingService)(nil)
+var _ HoldingService = (*mockHoldingService)(nil)
 
 type mockHoldingService struct {
-	getMonthlyDataFn func(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error)
+	getMonthlyDataFn func(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error)
 }
 
-func (m *mockHoldingService) GetHoldings(ctx context.Context, userID string, filter *dto.HoldingQueryFilter) ([]model.Holding, error) {
+func (m *mockHoldingService) GetHoldings(ctx context.Context, userID string, filter *HoldingQueryFilter) ([]Holding, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) GetHoldingByID(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+func (m *mockHoldingService) GetHoldingByID(ctx context.Context, id int64, userID string) (*Holding, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) CreateHolding(ctx context.Context, userID string, req *dto.CreateHoldingRequest) (*model.Holding, error) {
+func (m *mockHoldingService) CreateHolding(ctx context.Context, userID string, req *CreateHoldingRequest) (*Holding, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) UpdateHolding(ctx context.Context, id int64, userID string, req *dto.UpdateHoldingRequest) (*model.Holding, error) {
+func (m *mockHoldingService) UpdateHolding(ctx context.Context, id int64, userID string, req *UpdateHoldingRequest) (*Holding, error) {
 	return nil, nil
 }
 
@@ -47,34 +42,34 @@ func (m *mockHoldingService) DeleteHolding(ctx context.Context, id int64, userID
 	return nil
 }
 
-func (m *mockHoldingService) GetHoldingTypes(ctx context.Context) ([]model.HoldingType, error) {
+func (m *mockHoldingService) GetHoldingTypes(ctx context.Context) ([]HoldingType, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) GetSummary(ctx context.Context, userID string, q *dto.HoldingSummaryQuery) (*dto.HoldingSummaryResponse, error) {
+func (m *mockHoldingService) GetSummary(ctx context.Context, userID string, q *HoldingSummaryQuery) (*HoldingSummaryResponse, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) GetTrends(ctx context.Context, userID string, q *dto.HoldingTrendsQuery) ([]dto.HoldingTrendResponse, error) {
+func (m *mockHoldingService) GetTrends(ctx context.Context, userID string, q *HoldingTrendsQuery) ([]HoldingTrendResponse, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) CompareMonths(ctx context.Context, userID string, q *dto.HoldingCompareQuery) (*dto.HoldingMonthComparisonResponse, error) {
+func (m *mockHoldingService) CompareMonths(ctx context.Context, userID string, q *HoldingCompareQuery) (*HoldingMonthComparisonResponse, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) GetMonthlyData(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error) {
+func (m *mockHoldingService) GetMonthlyData(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error) {
 	if m.getMonthlyDataFn != nil {
 		return m.getMonthlyDataFn(ctx, userID, q)
 	}
 	return nil, nil
 }
 
-func (m *mockHoldingService) SyncPrices(ctx context.Context, userID string) (*dto.HoldingSyncResponse, error) {
+func (m *mockHoldingService) SyncPrices(ctx context.Context, userID string) (*HoldingSyncResponse, error) {
 	return nil, nil
 }
 
-func (m *mockHoldingService) DuplicateHoldings(ctx context.Context, userID string, req *dto.DuplicateHoldingRequest) ([]dto.DuplicateResultItem, error) {
+func (m *mockHoldingService) DuplicateHoldings(ctx context.Context, userID string, req *DuplicateHoldingRequest) ([]DuplicateResultItem, error) {
 	return nil, nil
 }
 
@@ -92,11 +87,11 @@ func newHoldingTestContext(t *testing.T, method, target string) (*echo.Context, 
 }
 
 func TestHoldingHandler_GetMonthlyData_NormalizesNaturalRange(t *testing.T) {
-	var captured *dto.HoldingMonthlyQuery
+	var captured *HoldingMonthlyQuery
 	h := NewHoldingHandler(&mockHoldingService{
-		getMonthlyDataFn: func(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error) {
+		getMonthlyDataFn: func(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error) {
 			captured = q
-			return []dto.HoldingMonthlyDataResponse{}, nil
+			return []HoldingMonthlyDataResponse{}, nil
 		},
 	})
 
@@ -119,11 +114,11 @@ func TestHoldingHandler_GetMonthlyData_NormalizesNaturalRange(t *testing.T) {
 }
 
 func TestHoldingHandler_GetMonthlyData_DefaultsEndTo11MonthsBeforeStart(t *testing.T) {
-	var captured *dto.HoldingMonthlyQuery
+	var captured *HoldingMonthlyQuery
 	h := NewHoldingHandler(&mockHoldingService{
-		getMonthlyDataFn: func(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error) {
+		getMonthlyDataFn: func(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error) {
 			captured = q
-			return []dto.HoldingMonthlyDataResponse{}, nil
+			return []HoldingMonthlyDataResponse{}, nil
 		},
 	})
 
@@ -161,7 +156,7 @@ func TestHoldingHandler_GetMonthlyData_RequiresAuth(t *testing.T) {
 	}
 }
 
-func runParseMonthlyQuery(target string) (*dto.HoldingMonthlyQuery, error) {
+func runParseMonthlyQuery(target string) (*HoldingMonthlyQuery, error) {
 	e := echo.New()
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 	rec := httptest.NewRecorder()
@@ -214,7 +209,7 @@ func TestParseMonthlyQuery_RejectsOutOfBoundsYears(t *testing.T) {
 		"endYear=1989",
 		"endYear=" + next,
 	} {
-		if _, err := runParseMonthlyQuery("/api/holdings/monthly?" + qs); !errors.Is(err, apperrors.ErrHoldingInvalidRange) {
+		if _, err := runParseMonthlyQuery("/api/holdings/monthly?" + qs); !errors.Is(err, ErrHoldingInvalidRange) {
 			t.Errorf("%s: expected ErrHoldingInvalidRange, got %v", qs, err)
 		}
 	}
@@ -237,7 +232,7 @@ func TestParseMonthlyQuery_AcceptsYearBounds(t *testing.T) {
 
 func TestHoldingHandler_GetMonthlyData_InvalidYear400(t *testing.T) {
 	h := NewHoldingHandler(&mockHoldingService{
-		getMonthlyDataFn: func(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error) {
+		getMonthlyDataFn: func(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error) {
 			t.Fatal("service must not be called for an invalid year")
 			return nil, nil
 		},
@@ -250,7 +245,7 @@ func TestHoldingHandler_GetMonthlyData_InvalidYear400(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if rec.Code != http.StatusBadRequest || body.Message != "Invalid monthly range" || body.Error != apperrors.ErrHoldingInvalidRange.Error() {
+	if rec.Code != http.StatusBadRequest || body.Message != "Invalid monthly range" || body.Error != ErrHoldingInvalidRange.Error() {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
@@ -261,8 +256,8 @@ func TestHoldingHandler_RespondHoldingError_BadRequestMappings(t *testing.T) {
 		err       error
 		wantError string
 	}{
-		{apperrors.ErrHoldingRangeTooLarge, "requested month/year range is too large"},
-		{&apperrors.HoldingInvalidDecimalError{Field: "current_value"}, "Invalid decimal value for current_value"},
+		{ErrHoldingRangeTooLarge, "requested month/year range is too large"},
+		{&HoldingInvalidDecimalError{Field: "current_value"}, "Invalid decimal value for current_value"},
 	} {
 		c, rec := newHoldingTestContext(t, http.MethodGet, "/")
 		if err := h.respondHoldingError(c, "Failed to get monthly data", tc.err); err != nil {

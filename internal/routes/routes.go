@@ -4,6 +4,7 @@ import (
 	"echobackend/config"
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
+	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
 
 	"github.com/labstack/echo/v5"
@@ -22,18 +23,16 @@ type Routes struct {
 	postLikeHandler         *handler.PostLikeHandler
 	userFollowHandler       *handler.UserFollowHandler
 	chatConversationHandler *handler.ChatConversationHandler
-	holdingHandler          *handler.HoldingHandler
-	exchangeRateHandler     *handler.ExchangeRateHandler
 	bookmarkHandler         *handler.BookmarkHandler
 	notificationHandler     *handler.NotificationHandler
 	userStatsHandler        *handler.UserStatsHandler
 	postStatsHandler        *handler.PostStatsHandler
 	tagStatsHandler         *handler.TagStatsHandler
 	postReportHandler       *handler.PostReportHandler
-	corporateActionHandler  *handler.CorporateActionHandler
 	guildHandler            *handler.GuildHandler
 	guildChannelHandler     *handler.GuildChannelHandler
 	aiHandler               *handler.AIHandler
+	portfolio               *portfolio.Module
 }
 
 func NewRoutes(
@@ -49,18 +48,16 @@ func NewRoutes(
 	postLikeHandler *handler.PostLikeHandler,
 	userFollowHandler *handler.UserFollowHandler,
 	chatConversationHandler *handler.ChatConversationHandler,
-	holdingHandler *handler.HoldingHandler,
-	exchangeRateHandler *handler.ExchangeRateHandler,
 	bookmarkHandler *handler.BookmarkHandler,
 	notificationHandler *handler.NotificationHandler,
 	userStatsHandler *handler.UserStatsHandler,
 	postStatsHandler *handler.PostStatsHandler,
 	tagStatsHandler *handler.TagStatsHandler,
 	postReportHandler *handler.PostReportHandler,
-	corporateActionHandler *handler.CorporateActionHandler,
 	guildHandler *handler.GuildHandler,
 	guildChannelHandler *handler.GuildChannelHandler,
 	aiHandler *handler.AIHandler,
+	portfolioModule *portfolio.Module,
 ) *Routes {
 	return &Routes{
 		config:                  config,
@@ -75,18 +72,16 @@ func NewRoutes(
 		postLikeHandler:         postLikeHandler,
 		userFollowHandler:       userFollowHandler,
 		chatConversationHandler: chatConversationHandler,
-		holdingHandler:          holdingHandler,
-		exchangeRateHandler:     exchangeRateHandler,
 		bookmarkHandler:         bookmarkHandler,
 		notificationHandler:     notificationHandler,
 		userStatsHandler:        userStatsHandler,
 		postStatsHandler:        postStatsHandler,
 		tagStatsHandler:         tagStatsHandler,
 		postReportHandler:       postReportHandler,
-		corporateActionHandler:  corporateActionHandler,
 		guildHandler:            guildHandler,
 		guildChannelHandler:     guildChannelHandler,
 		aiHandler:               aiHandler,
+		portfolio:               portfolioModule,
 	}
 }
 
@@ -102,10 +97,11 @@ func (r *Routes) setupAPIRoutes(api *echo.Group) {
 	r.setupAuthRoutes(api)
 	r.setupTagRoutes(api)
 	r.setupChatConversationRoutes(api)
-	r.setupHoldingRoutes(api)
-	r.setupExchangeRateRoutes(api)
 	r.setupBookmarkRoutes(api)
 	r.setupNotificationRoutes(api)
 	r.setupGuildRoutes(api)
 	r.setupAIRoutes(api)
+
+	// Self-contained modules (internal/modules/*).
+	r.portfolio.RegisterRoutes(api, r.authMiddleware.Auth())
 }

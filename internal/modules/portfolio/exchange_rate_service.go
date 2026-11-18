@@ -1,15 +1,13 @@
-package service
+package portfolio
 
 import (
 	"context"
+	"echobackend/internal/platform/market"
 	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
-
-	"echobackend/internal/dto"
-	"echobackend/internal/platform/market"
 )
 
 const exchangeRateCacheTTL = 15 * time.Minute
@@ -17,7 +15,7 @@ const exchangeRateCacheTTL = 15 * time.Minute
 var ErrInvalidCurrencyPair = errors.New("invalid currency pair")
 
 type ExchangeRateService interface {
-	GetRate(ctx context.Context, from, to string) (*dto.ExchangeRateResponse, error)
+	GetRate(ctx context.Context, from, to string) (*ExchangeRateResponse, error)
 }
 
 type exchangeRateCache interface {
@@ -40,7 +38,7 @@ func NewExchangeRateService(quoteClient market.QuoteClient, cache exchangeRateCa
 	}
 }
 
-func (s *exchangeRateService) GetRate(ctx context.Context, from, to string) (*dto.ExchangeRateResponse, error) {
+func (s *exchangeRateService) GetRate(ctx context.Context, from, to string) (*ExchangeRateResponse, error) {
 	from = normalizeCurrencyCode(from)
 	to = normalizeCurrencyCode(to)
 	if !validCurrencyCode(from) || !validCurrencyCode(to) {
@@ -48,7 +46,7 @@ func (s *exchangeRateService) GetRate(ctx context.Context, from, to string) (*dt
 	}
 
 	cacheKey := s.cacheKey(from, to)
-	var cached dto.ExchangeRateResponse
+	var cached ExchangeRateResponse
 	if s.cache != nil {
 		if ok, _ := s.cache.GetJSON(ctx, cacheKey, &cached); ok {
 			cached.Cached = true
@@ -85,7 +83,7 @@ func (s *exchangeRateService) GetRate(ctx context.Context, from, to string) (*dt
 	return nil, fmt.Errorf("exchange rate not found for %s/%s", from, to)
 }
 
-func (s *exchangeRateService) setCache(ctx context.Context, key string, result *dto.ExchangeRateResponse) {
+func (s *exchangeRateService) setCache(ctx context.Context, key string, result *ExchangeRateResponse) {
 	if s.cache != nil {
 		_ = s.cache.SetJSONWithTTL(ctx, key, result, exchangeRateCacheTTL)
 	}
@@ -98,8 +96,8 @@ func (s *exchangeRateService) cacheKey(from, to string) string {
 	return s.cache.BuildKey("exchange-rate", from, to)
 }
 
-func (s *exchangeRateService) response(from, to, symbol string, rate float64, cached bool) *dto.ExchangeRateResponse {
-	return &dto.ExchangeRateResponse{
+func (s *exchangeRateService) response(from, to, symbol string, rate float64, cached bool) *ExchangeRateResponse {
+	return &ExchangeRateResponse{
 		From:      from,
 		To:        to,
 		Symbol:    symbol,

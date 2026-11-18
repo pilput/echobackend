@@ -1,14 +1,10 @@
-package service
+package portfolio
 
 import (
 	"context"
+	"echobackend/internal/platform/market"
 	"sort"
 	"time"
-
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
-	"echobackend/internal/platform/market"
-	"echobackend/internal/repository"
 )
 
 const calendarDateFormat = "2006-01-02"
@@ -16,18 +12,18 @@ const calendarDateFormat = "2006-01-02"
 // CorporateActionService fetches dividend and RUPS events for the user's
 // stock holdings and persists them in Postgres.
 type CorporateActionService interface {
-	GetCalendar(ctx context.Context, userID string, year, month int) (*dto.CorporateActionCalendarResponse, error)
+	GetCalendar(ctx context.Context, userID string, year, month int) (*CorporateActionCalendarResponse, error)
 }
 
 type corporateActionService struct {
 	idxClient market.CorporateActionClient // RapidAPI IDX (IDX stocks)
-	repo      repository.CorporateActionRepository
+	repo      CorporateActionRepository
 }
 
 // NewCorporateActionService creates the service.
 func NewCorporateActionService(
 	idxClient market.CorporateActionClient,
-	repo repository.CorporateActionRepository,
+	repo CorporateActionRepository,
 ) CorporateActionService {
 	return &corporateActionService{
 		idxClient: idxClient,
@@ -42,7 +38,7 @@ func NewCorporateActionService(
 // queried, the results are upserted, and the freshly stored rows are
 // returned. Individual API errors are swallowed (fail-open) so that a
 // partial result is always returned.
-func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year, month int) (*dto.CorporateActionCalendarResponse, error) {
+func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year, month int) (*CorporateActionCalendarResponse, error) {
 	if month < 1 || month > 12 {
 		month = int(time.Now().Month())
 	}
@@ -61,9 +57,9 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 	if !cached && s.idxClient != nil {
 		idxActions, _ := s.idxClient.GetCorporateActions(ctx, from, to)
 		if len(idxActions) > 0 && s.repo != nil {
-			rows := make([]model.CorporateAction, 0, len(idxActions))
+			rows := make([]CorporateAction, 0, len(idxActions))
 			for _, a := range idxActions {
-				rows = append(rows, model.CorporateAction{
+				rows = append(rows, CorporateAction{
 					Symbol:    a.Symbol,
 					Name:      a.Name,
 					Type:      string(a.Type),
@@ -81,7 +77,7 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 		}
 	}
 
-	var stored []model.CorporateAction
+	var stored []CorporateAction
 	if s.repo != nil {
 		stored, _ = s.repo.FindByDateRange(ctx, from, to)
 	}
@@ -90,9 +86,9 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 		return stored[i].EventDate.Before(stored[j].EventDate)
 	})
 
-	responses := make([]dto.CorporateActionResponse, 0, len(stored))
+	responses := make([]CorporateActionResponse, 0, len(stored))
 	for _, a := range stored {
-		r := dto.CorporateActionResponse{
+		r := CorporateActionResponse{
 			Symbol:   a.Symbol,
 			Name:     a.Name,
 			Type:     a.Type,
@@ -117,7 +113,7 @@ func (s *corporateActionService) GetCalendar(ctx context.Context, _ string, year
 		responses = append(responses, r)
 	}
 
-	return &dto.CorporateActionCalendarResponse{
+	return &CorporateActionCalendarResponse{
 		From:    from.Format(calendarDateFormat),
 		To:      to.Format(calendarDateFormat),
 		Total:   len(responses),

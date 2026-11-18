@@ -1,7 +1,8 @@
-package service
+package portfolio
 
 import (
 	"context"
+	"echobackend/internal/platform/market"
 	"fmt"
 	"math"
 	"regexp"
@@ -9,12 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
-	"echobackend/internal/platform/market"
-	"echobackend/internal/repository"
 )
 
 // maxMonthlyRangeMonths bounds how many months GetMonthlyData will iterate,
@@ -35,7 +30,7 @@ func normalizeDecimal(raw *string, field string) error {
 	}
 	v := strings.TrimSpace(*raw)
 	if !decimalPattern.MatchString(v) {
-		return &apperrors.HoldingInvalidDecimalError{Field: field}
+		return &HoldingInvalidDecimalError{Field: field}
 	}
 	*raw = v
 	return nil
@@ -48,27 +43,27 @@ type holdingCache interface {
 }
 
 type holdingService struct {
-	holdingRepo repository.HoldingRepository
+	holdingRepo HoldingRepository
 	quoteClient market.QuoteClient
 	cache       holdingCache
 }
 
 type HoldingService interface {
-	GetHoldings(ctx context.Context, userID string, filter *dto.HoldingQueryFilter) ([]model.Holding, error)
-	GetHoldingByID(ctx context.Context, id int64, userID string) (*model.Holding, error)
-	CreateHolding(ctx context.Context, userID string, req *dto.CreateHoldingRequest) (*model.Holding, error)
-	UpdateHolding(ctx context.Context, id int64, userID string, req *dto.UpdateHoldingRequest) (*model.Holding, error)
+	GetHoldings(ctx context.Context, userID string, filter *HoldingQueryFilter) ([]Holding, error)
+	GetHoldingByID(ctx context.Context, id int64, userID string) (*Holding, error)
+	CreateHolding(ctx context.Context, userID string, req *CreateHoldingRequest) (*Holding, error)
+	UpdateHolding(ctx context.Context, id int64, userID string, req *UpdateHoldingRequest) (*Holding, error)
 	DeleteHolding(ctx context.Context, id int64, userID string) error
-	GetHoldingTypes(ctx context.Context) ([]model.HoldingType, error)
-	GetSummary(ctx context.Context, userID string, q *dto.HoldingSummaryQuery) (*dto.HoldingSummaryResponse, error)
-	GetTrends(ctx context.Context, userID string, q *dto.HoldingTrendsQuery) ([]dto.HoldingTrendResponse, error)
-	CompareMonths(ctx context.Context, userID string, q *dto.HoldingCompareQuery) (*dto.HoldingMonthComparisonResponse, error)
-	GetMonthlyData(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error)
-	SyncPrices(ctx context.Context, userID string) (*dto.HoldingSyncResponse, error)
-	DuplicateHoldings(ctx context.Context, userID string, req *dto.DuplicateHoldingRequest) ([]dto.DuplicateResultItem, error)
+	GetHoldingTypes(ctx context.Context) ([]HoldingType, error)
+	GetSummary(ctx context.Context, userID string, q *HoldingSummaryQuery) (*HoldingSummaryResponse, error)
+	GetTrends(ctx context.Context, userID string, q *HoldingTrendsQuery) ([]HoldingTrendResponse, error)
+	CompareMonths(ctx context.Context, userID string, q *HoldingCompareQuery) (*HoldingMonthComparisonResponse, error)
+	GetMonthlyData(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error)
+	SyncPrices(ctx context.Context, userID string) (*HoldingSyncResponse, error)
+	DuplicateHoldings(ctx context.Context, userID string, req *DuplicateHoldingRequest) ([]DuplicateResultItem, error)
 }
 
-func NewHoldingService(holdingRepo repository.HoldingRepository, quoteClient market.QuoteClient, cache ...holdingCache) HoldingService {
+func NewHoldingService(holdingRepo HoldingRepository, quoteClient market.QuoteClient, cache ...holdingCache) HoldingService {
 	var c holdingCache
 	if len(cache) > 0 {
 		c = cache[0]
@@ -80,7 +75,7 @@ func NewHoldingService(holdingRepo repository.HoldingRepository, quoteClient mar
 	}
 }
 
-func (s *holdingService) GetHoldings(ctx context.Context, userID string, filter *dto.HoldingQueryFilter) ([]model.Holding, error) {
+func (s *holdingService) GetHoldings(ctx context.Context, userID string, filter *HoldingQueryFilter) ([]Holding, error) {
 	repoFilter := &struct {
 		Month     *int
 		Year      *int
@@ -95,11 +90,11 @@ func (s *holdingService) GetHoldings(ctx context.Context, userID string, filter 
 	return s.holdingRepo.FindAll(ctx, userID, repoFilter)
 }
 
-func (s *holdingService) GetHoldingByID(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+func (s *holdingService) GetHoldingByID(ctx context.Context, id int64, userID string) (*Holding, error) {
 	return s.holdingRepo.FindByID(ctx, id, userID)
 }
 
-func (s *holdingService) CreateHolding(ctx context.Context, userID string, req *dto.CreateHoldingRequest) (*model.Holding, error) {
+func (s *holdingService) CreateHolding(ctx context.Context, userID string, req *CreateHoldingRequest) (*Holding, error) {
 	if _, err := s.holdingRepo.FindHoldingTypeByID(ctx, req.HoldingTypeID); err != nil {
 		return nil, err
 	}
@@ -119,7 +114,7 @@ func (s *holdingService) CreateHolding(ctx context.Context, userID string, req *
 		}
 	}
 
-	holding := &model.Holding{
+	holding := &Holding{
 		UserID:         userID,
 		Name:           req.Name,
 		Symbol:         req.Symbol,
@@ -150,7 +145,7 @@ func (s *holdingService) CreateHolding(ctx context.Context, userID string, req *
 	return s.holdingRepo.FindByID(ctx, holding.ID, userID)
 }
 
-func (s *holdingService) UpdateHolding(ctx context.Context, id int64, userID string, req *dto.UpdateHoldingRequest) (*model.Holding, error) {
+func (s *holdingService) UpdateHolding(ctx context.Context, id int64, userID string, req *UpdateHoldingRequest) (*Holding, error) {
 	existing, err := s.holdingRepo.FindByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
@@ -234,9 +229,9 @@ func (s *holdingService) DeleteHolding(ctx context.Context, id int64, userID str
 	return s.holdingRepo.Delete(ctx, id, userID)
 }
 
-func (s *holdingService) GetHoldingTypes(ctx context.Context) ([]model.HoldingType, error) {
+func (s *holdingService) GetHoldingTypes(ctx context.Context) ([]HoldingType, error) {
 	if s.cache != nil {
-		var cached []model.HoldingType
+		var cached []HoldingType
 		key := s.cache.BuildKey("holding-types")
 		if ok, err := s.cache.GetJSON(ctx, key, &cached); err == nil && ok {
 			return cached, nil
@@ -256,7 +251,7 @@ func (s *holdingService) GetHoldingTypes(ctx context.Context) ([]model.HoldingTy
 	return types, nil
 }
 
-func (s *holdingService) GetSummary(ctx context.Context, userID string, q *dto.HoldingSummaryQuery) (*dto.HoldingSummaryResponse, error) {
+func (s *holdingService) GetSummary(ctx context.Context, userID string, q *HoldingSummaryQuery) (*HoldingSummaryResponse, error) {
 	invested, current, count, err := s.holdingRepo.GetSummary(ctx, userID, q.Month, q.Year)
 	if err != nil {
 		return nil, err
@@ -274,7 +269,7 @@ func (s *holdingService) GetSummary(ctx context.Context, userID string, q *dto.H
 		return nil, err
 	}
 
-	return &dto.HoldingSummaryResponse{
+	return &HoldingSummaryResponse{
 		TotalInvested:             formatFloat(invested),
 		TotalCurrentValue:         formatFloat(current),
 		TotalProfitLoss:           formatFloat(profitLoss),
@@ -285,7 +280,7 @@ func (s *holdingService) GetSummary(ctx context.Context, userID string, q *dto.H
 	}, nil
 }
 
-func (s *holdingService) GetTrends(ctx context.Context, userID string, q *dto.HoldingTrendsQuery) ([]dto.HoldingTrendResponse, error) {
+func (s *holdingService) GetTrends(ctx context.Context, userID string, q *HoldingTrendsQuery) ([]HoldingTrendResponse, error) {
 	var years []int
 	if q != nil && len(q.Years) > 0 {
 		years = q.Years
@@ -296,10 +291,10 @@ func (s *holdingService) GetTrends(ctx context.Context, userID string, q *dto.Ho
 		return nil, err
 	}
 
-	result := make([]dto.HoldingTrendResponse, 0, len(data))
+	result := make([]HoldingTrendResponse, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
-		result = append(result, dto.HoldingTrendResponse{
+		result = append(result, HoldingTrendResponse{
 			Date:                 fmt.Sprintf("%04d-%02d", d.Year, d.Month),
 			Invested:             formatFloat(d.Invested),
 			Current:              formatFloat(d.CurrentValue),
@@ -310,12 +305,12 @@ func (s *holdingService) GetTrends(ctx context.Context, userID string, q *dto.Ho
 	return result, nil
 }
 
-func (s *holdingService) CompareMonths(ctx context.Context, userID string, q *dto.HoldingCompareQuery) (*dto.HoldingMonthComparisonResponse, error) {
-	fromSummary, err := s.GetSummary(ctx, userID, &dto.HoldingSummaryQuery{Month: q.FromMonth, Year: q.FromYear})
+func (s *holdingService) CompareMonths(ctx context.Context, userID string, q *HoldingCompareQuery) (*HoldingMonthComparisonResponse, error) {
+	fromSummary, err := s.GetSummary(ctx, userID, &HoldingSummaryQuery{Month: q.FromMonth, Year: q.FromYear})
 	if err != nil {
 		return nil, err
 	}
-	toSummary, err := s.GetSummary(ctx, userID, &dto.HoldingSummaryQuery{Month: &q.ToMonth, Year: &q.ToYear})
+	toSummary, err := s.GetSummary(ctx, userID, &HoldingSummaryQuery{Month: &q.ToMonth, Year: &q.ToYear})
 	if err != nil {
 		return nil, err
 	}
@@ -340,10 +335,10 @@ func (s *holdingService) CompareMonths(ctx context.Context, userID string, q *dt
 		return nil, err
 	}
 
-	return &dto.HoldingMonthComparisonResponse{
-		FromMonth: dto.HoldingMonthPoint{Month: fm, Year: fy},
-		ToMonth:   dto.HoldingMonthPoint{Month: q.ToMonth, Year: q.ToYear},
-		Summary: dto.HoldingCompareSummary{
+	return &HoldingMonthComparisonResponse{
+		FromMonth: HoldingMonthPoint{Month: fm, Year: fy},
+		ToMonth:   HoldingMonthPoint{Month: q.ToMonth, Year: q.ToYear},
+		Summary: HoldingCompareSummary{
 			From:                        toSummaryValues(fromSummary),
 			To:                          toSummaryValues(toSummary),
 			InvestedDiff:                toInvested - fromInvested,
@@ -359,19 +354,19 @@ func (s *holdingService) CompareMonths(ctx context.Context, userID string, q *dt
 	}, nil
 }
 
-func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *dto.HoldingMonthlyQuery) ([]dto.HoldingMonthlyDataResponse, error) {
+func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *HoldingMonthlyQuery) ([]HoldingMonthlyDataResponse, error) {
 	// The iteration walks from (EndMonth, EndYear) FORWARD to (StartMonth, StartYear),
 	// so End must be on or before Start chronologically. Reject inverted ranges up
 	// front — without this guard the loop below never terminates and burns CPU/RAM.
 	if q.EndYear > q.StartYear || (q.EndYear == q.StartYear && q.EndMonth > q.StartMonth) {
-		return nil, apperrors.ErrHoldingInvalidRange
+		return nil, ErrHoldingInvalidRange
 	}
 
 	// Cap the span so the month-by-month loop below (and its result slice)
 	// can't be forced to grow unbounded by a caller passing a huge valid range.
 	spanMonths := (q.StartYear-q.EndYear)*12 + (q.StartMonth - q.EndMonth)
 	if spanMonths > maxMonthlyRangeMonths {
-		return nil, apperrors.ErrHoldingRangeTooLarge
+		return nil, ErrHoldingRangeTooLarge
 	}
 
 	data, err := s.holdingRepo.GetMonthlyData(ctx, userID, q.StartMonth, q.StartYear, q.EndMonth, q.EndYear)
@@ -391,7 +386,7 @@ func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *d
 		dataMap[key] = d
 	}
 
-	var result []dto.HoldingMonthlyDataResponse
+	var result []HoldingMonthlyDataResponse
 	sm, sy := q.EndMonth, q.EndYear
 	em, ey := q.StartMonth, q.StartYear
 
@@ -399,7 +394,7 @@ func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *d
 	for {
 		key := fmt.Sprintf("%04d-%02d", curY, curM)
 		if d, ok := dataMap[key]; ok {
-			result = append(result, dto.HoldingMonthlyDataResponse{
+			result = append(result, HoldingMonthlyDataResponse{
 				Month:             d.Month,
 				Year:              d.Year,
 				Date:              key,
@@ -408,7 +403,7 @@ func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *d
 				HoldingsCount:     d.Count,
 			})
 		} else {
-			result = append(result, dto.HoldingMonthlyDataResponse{
+			result = append(result, HoldingMonthlyDataResponse{
 				Month:             curM,
 				Year:              curY,
 				Date:              key,
@@ -431,7 +426,7 @@ func (s *holdingService) GetMonthlyData(ctx context.Context, userID string, q *d
 	return result, nil
 }
 
-func (s *holdingService) SyncPrices(ctx context.Context, userID string) (*dto.HoldingSyncResponse, error) {
+func (s *holdingService) SyncPrices(ctx context.Context, userID string) (*HoldingSyncResponse, error) {
 	now := time.Now()
 	month := int(now.Month())
 	year := now.Year()
@@ -442,7 +437,7 @@ func (s *holdingService) SyncPrices(ctx context.Context, userID string) (*dto.Ho
 	}
 
 	if len(holdings) == 0 {
-		return &dto.HoldingSyncResponse{
+		return &HoldingSyncResponse{
 			SyncedCount: 0,
 			Month:       month,
 			Year:        year,
@@ -491,16 +486,16 @@ func (s *holdingService) SyncPrices(ctx context.Context, userID string) (*dto.Ho
 		syncedCount++
 	}
 
-	return &dto.HoldingSyncResponse{
+	return &HoldingSyncResponse{
 		SyncedCount: syncedCount,
 		Month:       month,
 		Year:        year,
 	}, nil
 }
 
-func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, req *dto.DuplicateHoldingRequest) ([]dto.DuplicateResultItem, error) {
+func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, req *DuplicateHoldingRequest) ([]DuplicateResultItem, error) {
 	if req.FromMonth == req.ToMonth && req.FromYear == req.ToYear {
-		return nil, apperrors.ErrHoldingDuplicateSame
+		return nil, ErrHoldingDuplicateSame
 	}
 
 	holdings, err := s.holdingRepo.FindForDuplicate(ctx, userID, req.FromMonth, req.FromYear)
@@ -509,7 +504,7 @@ func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, r
 	}
 
 	if len(holdings) == 0 {
-		return nil, apperrors.ErrHoldingNotFound
+		return nil, ErrHoldingNotFound
 	}
 
 	if req.Overwrite {
@@ -518,9 +513,9 @@ func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, r
 		}
 	}
 
-	var results []dto.DuplicateResultItem
+	var results []DuplicateResultItem
 	for _, h := range holdings {
-		newHolding := &model.Holding{
+		newHolding := &Holding{
 			UserID:         userID,
 			Name:           h.Name,
 			Symbol:         h.Symbol,
@@ -539,7 +534,7 @@ func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, r
 		if err := s.holdingRepo.Create(ctx, newHolding); err != nil {
 			return nil, err
 		}
-		results = append(results, dto.DuplicateResultItem{
+		results = append(results, DuplicateResultItem{
 			ID:    strconv.FormatInt(newHolding.ID, 10),
 			Name:  newHolding.Name,
 			Month: newHolding.Month,
@@ -550,15 +545,15 @@ func (s *holdingService) DuplicateHoldings(ctx context.Context, userID string, r
 	return results, nil
 }
 
-func (s *holdingService) buildTypeBreakdown(ctx context.Context, userID string, month, year *int) ([]dto.HoldingTypeBreakdown, error) {
+func (s *holdingService) buildTypeBreakdown(ctx context.Context, userID string, month, year *int) ([]HoldingTypeBreakdown, error) {
 	data, err := s.holdingRepo.GetTypeBreakdown(ctx, userID, month, year)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]dto.HoldingTypeBreakdown, 0, len(data))
+	result := make([]HoldingTypeBreakdown, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
-		result = append(result, dto.HoldingTypeBreakdown{
+		result = append(result, HoldingTypeBreakdown{
 			Name:                 d.Name,
 			Invested:             formatFloat(d.Invested),
 			Current:              formatFloat(d.CurrentValue),
@@ -569,15 +564,15 @@ func (s *holdingService) buildTypeBreakdown(ctx context.Context, userID string, 
 	return result, nil
 }
 
-func (s *holdingService) buildPlatformBreakdown(ctx context.Context, userID string, month, year *int) ([]dto.HoldingPlatformBreakdown, error) {
+func (s *holdingService) buildPlatformBreakdown(ctx context.Context, userID string, month, year *int) ([]HoldingPlatformBreakdown, error) {
 	data, err := s.holdingRepo.GetPlatformBreakdown(ctx, userID, month, year)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]dto.HoldingPlatformBreakdown, 0, len(data))
+	result := make([]HoldingPlatformBreakdown, 0, len(data))
 	for _, d := range data {
 		pl := d.CurrentValue - d.Invested
-		result = append(result, dto.HoldingPlatformBreakdown{
+		result = append(result, HoldingPlatformBreakdown{
 			Name:                 d.Name,
 			Invested:             formatFloat(d.Invested),
 			Current:              formatFloat(d.CurrentValue),
@@ -600,28 +595,28 @@ func buildCompareMap(data []struct {
 	return m
 }
 
-func buildCompareBreakdownResult(allNames map[string]bool, fromMap, toMap map[string]struct{ Invested, CurrentValue float64 }) []dto.HoldingCompareBreakdown {
+func buildCompareBreakdownResult(allNames map[string]bool, fromMap, toMap map[string]struct{ Invested, CurrentValue float64 }) []HoldingCompareBreakdown {
 	names := make([]string, 0, len(allNames))
 	for name := range allNames {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	result := make([]dto.HoldingCompareBreakdown, 0, len(names))
+	result := make([]HoldingCompareBreakdown, 0, len(names))
 	for _, name := range names {
 		from := fromMap[name]
 		to := toMap[name]
 		fromPL := from.CurrentValue - from.Invested
 		toPL := to.CurrentValue - to.Invested
-		result = append(result, dto.HoldingCompareBreakdown{
+		result = append(result, HoldingCompareBreakdown{
 			Name: name,
-			From: dto.HoldingBreakdownValues{
+			From: HoldingBreakdownValues{
 				Invested:             from.Invested,
 				Current:              from.CurrentValue,
 				ProfitLoss:           fromPL,
 				ProfitLossPercentage: calcPercentNumber(from.Invested, from.CurrentValue),
 			},
-			To: dto.HoldingBreakdownValues{
+			To: HoldingBreakdownValues{
 				Invested:             to.Invested,
 				Current:              to.CurrentValue,
 				ProfitLoss:           toPL,
@@ -637,7 +632,7 @@ func buildCompareBreakdownResult(allNames map[string]bool, fromMap, toMap map[st
 	return result
 }
 
-func (s *holdingService) buildTypeCompareBreakdown(ctx context.Context, userID string, fromMonth, fromYear, toMonth, toYear *int) ([]dto.HoldingCompareBreakdown, error) {
+func (s *holdingService) buildTypeCompareBreakdown(ctx context.Context, userID string, fromMonth, fromYear, toMonth, toYear *int) ([]HoldingCompareBreakdown, error) {
 	fromData, err := s.holdingRepo.GetTypeBreakdown(ctx, userID, fromMonth, fromYear)
 	if err != nil {
 		return nil, err
@@ -652,7 +647,7 @@ func (s *holdingService) buildTypeCompareBreakdown(ctx context.Context, userID s
 	return buildCompareBreakdownResult(allNames, fromMap, toMap), nil
 }
 
-func (s *holdingService) buildPlatformCompareBreakdown(ctx context.Context, userID string, fromMonth, fromYear, toMonth, toYear *int) ([]dto.HoldingCompareBreakdown, error) {
+func (s *holdingService) buildPlatformCompareBreakdown(ctx context.Context, userID string, fromMonth, fromYear, toMonth, toYear *int) ([]HoldingCompareBreakdown, error) {
 	fromData, err := s.holdingRepo.GetPlatformBreakdown(ctx, userID, fromMonth, fromYear)
 	if err != nil {
 		return nil, err
@@ -732,10 +727,10 @@ func parseFloatValue(value string) float64 {
 	return parsed
 }
 
-func toNamedBreakdowns(types []dto.HoldingTypeBreakdown) []dto.HoldingNamedBreakdown {
-	result := make([]dto.HoldingNamedBreakdown, 0, len(types))
+func toNamedBreakdowns(types []HoldingTypeBreakdown) []HoldingNamedBreakdown {
+	result := make([]HoldingNamedBreakdown, 0, len(types))
 	for _, item := range types {
-		result = append(result, dto.HoldingNamedBreakdown{
+		result = append(result, HoldingNamedBreakdown{
 			Name:                 item.Name,
 			Invested:             parseFloatValue(item.Invested),
 			Current:              parseFloatValue(item.Current),
@@ -746,10 +741,10 @@ func toNamedBreakdowns(types []dto.HoldingTypeBreakdown) []dto.HoldingNamedBreak
 	return result
 }
 
-func toNamedPlatformBreakdowns(platforms []dto.HoldingPlatformBreakdown) []dto.HoldingNamedBreakdown {
-	result := make([]dto.HoldingNamedBreakdown, 0, len(platforms))
+func toNamedPlatformBreakdowns(platforms []HoldingPlatformBreakdown) []HoldingNamedBreakdown {
+	result := make([]HoldingNamedBreakdown, 0, len(platforms))
 	for _, item := range platforms {
-		result = append(result, dto.HoldingNamedBreakdown{
+		result = append(result, HoldingNamedBreakdown{
 			Name:                 item.Name,
 			Invested:             parseFloatValue(item.Invested),
 			Current:              parseFloatValue(item.Current),
@@ -760,8 +755,8 @@ func toNamedPlatformBreakdowns(platforms []dto.HoldingPlatformBreakdown) []dto.H
 	return result
 }
 
-func toSummaryValues(s *dto.HoldingSummaryResponse) dto.HoldingSummaryValues {
-	return dto.HoldingSummaryValues{
+func toSummaryValues(s *HoldingSummaryResponse) HoldingSummaryValues {
+	return HoldingSummaryValues{
 		TotalInvested:             parseFloatValue(s.TotalInvested),
 		TotalCurrentValue:         parseFloatValue(s.TotalCurrentValue),
 		TotalProfitLoss:           parseFloatValue(s.TotalProfitLoss),

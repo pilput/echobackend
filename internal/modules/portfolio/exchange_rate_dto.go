@@ -1,4 +1,4 @@
-package dto
+package portfolio
 
 type ExchangeRateResponse struct {
 	From      string  `json:"from"`

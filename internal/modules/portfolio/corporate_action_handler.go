@@ -1,22 +1,21 @@
-package handler
+package portfolio
 
 import (
+	"echobackend/internal/middleware"
+	"echobackend/pkg/response"
 	"strconv"
 	"time"
-
-	"echobackend/internal/service"
-	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
 )
 
 // CorporateActionHandler serves the GET /api/holdings/calendar endpoint.
 type CorporateActionHandler struct {
-	service service.CorporateActionService
+	service CorporateActionService
 }
 
 // NewCorporateActionHandler constructs the handler.
-func NewCorporateActionHandler(svc service.CorporateActionService) *CorporateActionHandler {
+func NewCorporateActionHandler(svc CorporateActionService) *CorporateActionHandler {
 	return &CorporateActionHandler{service: svc}
 }
 
@@ -30,7 +29,7 @@ func NewCorporateActionHandler(svc service.CorporateActionService) *CorporateAct
 //
 // Returns dividend and RUPS events for the given month, backed by Postgres.
 func (h *CorporateActionHandler) GetCalendar(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}

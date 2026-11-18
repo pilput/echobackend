@@ -1,11 +1,9 @@
-package repository
+package portfolio
 
 import (
 	"context"
 	"strings"
 	"time"
-
-	"echobackend/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -18,10 +16,10 @@ type CorporateActionRepository interface {
 	// ExistsInRange reports whether any corporate action rows already fall
 	// within [from, to]. Used to decide whether an IDX fetch is needed.
 	ExistsInRange(ctx context.Context, from, to time.Time) (bool, error)
-	FindByDateRange(ctx context.Context, from, to time.Time) ([]model.CorporateAction, error)
+	FindByDateRange(ctx context.Context, from, to time.Time) ([]CorporateAction, error)
 	// UpsertMany inserts actions, updating mutable fields on conflict of
 	// (symbol, type, event_date).
-	UpsertMany(ctx context.Context, actions []model.CorporateAction) error
+	UpsertMany(ctx context.Context, actions []CorporateAction) error
 }
 
 type corporateActionRepository struct {
@@ -35,14 +33,14 @@ func NewCorporateActionRepository(db *gorm.DB) CorporateActionRepository {
 func (r *corporateActionRepository) ExistsInRange(ctx context.Context, from, to time.Time) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&model.CorporateAction{}).
+		Model(&CorporateAction{}).
 		Where("event_date BETWEEN ? AND ?", from, to).
 		Count(&count).Error
 	return count > 0, err
 }
 
-func (r *corporateActionRepository) FindByDateRange(ctx context.Context, from, to time.Time) ([]model.CorporateAction, error) {
-	var actions []model.CorporateAction
+func (r *corporateActionRepository) FindByDateRange(ctx context.Context, from, to time.Time) ([]CorporateAction, error) {
+	var actions []CorporateAction
 	err := r.db.WithContext(ctx).
 		Where("event_date BETWEEN ? AND ?", from, to).
 		Order("event_date ASC").
@@ -50,7 +48,7 @@ func (r *corporateActionRepository) FindByDateRange(ctx context.Context, from, t
 	return actions, err
 }
 
-func (r *corporateActionRepository) UpsertMany(ctx context.Context, actions []model.CorporateAction) error {
+func (r *corporateActionRepository) UpsertMany(ctx context.Context, actions []CorporateAction) error {
 	actions = dedupeCorporateActions(actions)
 	if len(actions) == 0 {
 		return nil
@@ -68,14 +66,14 @@ func (r *corporateActionRepository) UpsertMany(ctx context.Context, actions []mo
 // ("cannot affect row a second time") if its target key repeats within the
 // batch, so duplicates must be merged before reaching the DB. Distinct notes
 // are concatenated so no agenda information is silently dropped.
-func dedupeCorporateActions(actions []model.CorporateAction) []model.CorporateAction {
+func dedupeCorporateActions(actions []CorporateAction) []CorporateAction {
 	type key struct {
 		symbol string
 		typ    string
 		date   string
 	}
 	order := make([]key, 0, len(actions))
-	merged := make(map[key]model.CorporateAction, len(actions))
+	merged := make(map[key]CorporateAction, len(actions))
 
 	for _, a := range actions {
 		k := key{a.Symbol, a.Type, a.EventDate.Format(corporateActionDedupeDateFormat)}
@@ -107,7 +105,7 @@ func dedupeCorporateActions(actions []model.CorporateAction) []model.CorporateAc
 		merged[k] = existing
 	}
 
-	out := make([]model.CorporateAction, 0, len(order))
+	out := make([]CorporateAction, 0, len(order))
 	for _, k := range order {
 		out = append(out, merged[k])
 	}

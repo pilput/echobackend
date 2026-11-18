@@ -1,4 +1,4 @@
-package service
+package portfolio
 
 import (
 	"context"
@@ -6,12 +6,10 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"echobackend/internal/dto"
 )
 
 type fakeExchangeRateCache struct {
-	values map[string]dto.ExchangeRateResponse
+	values map[string]ExchangeRateResponse
 	setTTL time.Duration
 }
 
@@ -31,15 +29,15 @@ func (f *fakeExchangeRateCache) GetJSON(ctx context.Context, key string, dest an
 	if !ok {
 		return false, nil
 	}
-	*(dest.(*dto.ExchangeRateResponse)) = value
+	*(dest.(*ExchangeRateResponse)) = value
 	return true, nil
 }
 
 func (f *fakeExchangeRateCache) SetJSONWithTTL(ctx context.Context, key string, value any, ttl time.Duration) error {
 	if f.values == nil {
-		f.values = map[string]dto.ExchangeRateResponse{}
+		f.values = map[string]ExchangeRateResponse{}
 	}
-	f.values[key] = *(value.(*dto.ExchangeRateResponse))
+	f.values[key] = *(value.(*ExchangeRateResponse))
 	f.setTTL = ttl
 	return nil
 }
@@ -86,7 +84,7 @@ func TestExchangeRateService_GetRate_InverseFallback(t *testing.T) {
 }
 
 func TestExchangeRateService_GetRate_CacheHit(t *testing.T) {
-	cache := &fakeExchangeRateCache{values: map[string]dto.ExchangeRateResponse{
+	cache := &fakeExchangeRateCache{values: map[string]ExchangeRateResponse{
 		"exchange-rate:USD:IDR": {From: "USD", To: "IDR", Symbol: "USDIDR=X", Rate: 16000},
 	}}
 	svc := NewExchangeRateService(&stubQuoteClient{

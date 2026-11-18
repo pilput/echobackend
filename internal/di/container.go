@@ -5,10 +5,10 @@ import (
 	"echobackend/config"
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
+	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
 	"echobackend/internal/platform/database"
 	"echobackend/internal/platform/email"
-	"echobackend/internal/platform/market"
 	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/platform/realtime"
 	"echobackend/internal/platform/storage"
@@ -73,7 +73,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postLikeRepo := repository.NewPostLikeRepository(db)
 	userFollowRepo := repository.NewUserFollowRepository(db)
 	chatConversationRepo := repository.NewChatConversationRepository(db)
-	holdingRepo := repository.NewHoldingRepository(db)
 	bookmarkRepo := repository.NewBookmarkRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
 	authActivityLogRepo := repository.NewAuthActivityLogRepository(db)
@@ -83,7 +82,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postStatsRepo := repository.NewPostStatsRepository(db)
 	tagStatsRepo := repository.NewTagStatsRepository(db)
 	postReportRepo := repository.NewPostReportRepository(db)
-	corporateActionRepo := repository.NewCorporateActionRepository(db)
 	guildRepo := repository.NewGuildRepository(db)
 	guildChannelRepo := repository.NewGuildChannelRepository(db)
 
@@ -100,13 +98,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
 	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterClient, cfg)
 	articleGenerationService := service.NewArticleGenerationService(openRouterClient, cfg)
-
-	// Market quotes (RapidAPI with shared Redis caching decorator)
-	rawQuoteClient := market.NewRapidAPIQuoteClient(cfg.MarketData.RapidAPIKey, nil)
-	quoteClient := market.NewCachedQuoteClient(rawQuoteClient, redisCache)
-
-	holdingService := service.NewHoldingService(holdingRepo, quoteClient, redisCache)
-	exchangeRateService := service.NewExchangeRateService(quoteClient, redisCache)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	userStatsService := service.NewUserStatsService(userStatsRepo)
 	postStatsService := service.NewPostStatsService(postStatsRepo)
@@ -114,10 +105,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postReportService := service.NewPostReportService(postReportRepo, postRepo)
 	guildService := service.NewGuildService(guildRepo)
 	guildChannelService := service.NewGuildChannelService(guildChannelRepo, hub)
-
-	// Corporate actions: IDX
-	idxCorporateClient := market.NewRapidAPIIDXClient(cfg.MarketData.RapidAPIKey, nil)
-	corporateActionService := service.NewCorporateActionService(idxCorporateClient, corporateActionRepo)
 
 	userHandler := handler.NewUserHandler(userService, userFollowService)
 	postHandler := handler.NewPostHandler(postService, postViewService)
@@ -128,18 +115,21 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postLikeHandler := handler.NewPostLikeHandler(postLikeService)
 	userFollowHandler := handler.NewUserFollowHandler(userFollowService)
 	chatConversationHandler := handler.NewChatConversationHandler(chatConversationService)
-	holdingHandler := handler.NewHoldingHandler(holdingService)
-	exchangeRateHandler := handler.NewExchangeRateHandler(exchangeRateService)
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	userStatsHandler := handler.NewUserStatsHandler(userStatsService)
 	postStatsHandler := handler.NewPostStatsHandler(postStatsService)
 	tagStatsHandler := handler.NewTagStatsHandler(tagStatsService)
 	postReportHandler := handler.NewPostReportHandler(postReportService)
-	corporateActionHandler := handler.NewCorporateActionHandler(corporateActionService)
 	guildHandler := handler.NewGuildHandler(guildService)
 	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
 	aiHandler := handler.NewAIHandler(articleGenerationService)
+
+	portfolioModule := portfolio.New(portfolio.Deps{
+		DB:          db,
+		Cache:       redisCache,
+		RapidAPIKey: cfg.MarketData.RapidAPIKey,
+	})
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
@@ -155,18 +145,16 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		postLikeHandler,
 		userFollowHandler,
 		chatConversationHandler,
-		holdingHandler,
-		exchangeRateHandler,
 		bookmarkHandler,
 		notificationHandler,
 		userStatsHandler,
 		postStatsHandler,
 		tagStatsHandler,
 		postReportHandler,
-		corporateActionHandler,
 		guildHandler,
 		guildChannelHandler,
 		aiHandler,
+		portfolioModule,
 	)
 
 	return &Container{

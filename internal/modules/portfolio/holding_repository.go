@@ -1,12 +1,9 @@
-package repository
+package portfolio
 
 import (
 	"context"
 	"errors"
 	"fmt"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -17,16 +14,16 @@ type HoldingRepository interface {
 		Year      *int
 		SortBy    string
 		SortOrder string
-	}) ([]model.Holding, error)
-	FindByID(ctx context.Context, id int64, userID string) (*model.Holding, error)
-	Create(ctx context.Context, holding *model.Holding) error
-	Update(ctx context.Context, holding *model.Holding) error
+	}) ([]Holding, error)
+	FindByID(ctx context.Context, id int64, userID string) (*Holding, error)
+	Create(ctx context.Context, holding *Holding) error
+	Update(ctx context.Context, holding *Holding) error
 	Delete(ctx context.Context, id int64, userID string) error
-	FindHoldingTypes(ctx context.Context) ([]model.HoldingType, error)
-	FindHoldingTypeByID(ctx context.Context, id int) (*model.HoldingType, error)
-	FindForSync(ctx context.Context, userID string, month, year int) ([]model.Holding, error)
+	FindHoldingTypes(ctx context.Context) ([]HoldingType, error)
+	FindHoldingTypeByID(ctx context.Context, id int) (*HoldingType, error)
+	FindForSync(ctx context.Context, userID string, month, year int) ([]Holding, error)
 	UpdateFields(ctx context.Context, id int64, userID string, fields map[string]any) error
-	FindForDuplicate(ctx context.Context, userID string, month, year int) ([]model.Holding, error)
+	FindForDuplicate(ctx context.Context, userID string, month, year int) ([]Holding, error)
 	DeleteByUserMonthYear(ctx context.Context, userID string, month, year int) error
 	CountByUserMonthYear(ctx context.Context, userID string, month, year int) (int64, error)
 	GetSummary(ctx context.Context, userID string, month, year *int) (invested, currentValue float64, count int64, err error)
@@ -71,8 +68,8 @@ func (r *holdingRepository) FindAll(ctx context.Context, userID string, filter *
 	Year      *int
 	SortBy    string
 	SortOrder string
-}) ([]model.Holding, error) {
-	var holdings []model.Holding
+}) ([]Holding, error) {
+	var holdings []Holding
 	q := r.db.WithContext(ctx).Preload("HoldingType").Where("user_id = ?", userID)
 
 	if filter != nil {
@@ -109,27 +106,27 @@ func (r *holdingRepository) FindAll(ctx context.Context, userID string, filter *
 	return holdings, nil
 }
 
-func (r *holdingRepository) FindByID(ctx context.Context, id int64, userID string) (*model.Holding, error) {
-	var holding model.Holding
+func (r *holdingRepository) FindByID(ctx context.Context, id int64, userID string) (*Holding, error) {
+	var holding Holding
 	err := r.db.WithContext(ctx).Preload("HoldingType").Where("id = ? AND user_id = ?", id, userID).First(&holding).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrHoldingNotFound
+			return nil, ErrHoldingNotFound
 		}
 		return nil, fmt.Errorf("failed to find holding: %w", err)
 	}
 	return &holding, nil
 }
 
-func (r *holdingRepository) Create(ctx context.Context, holding *model.Holding) error {
+func (r *holdingRepository) Create(ctx context.Context, holding *Holding) error {
 	if err := r.db.WithContext(ctx).Create(holding).Error; err != nil {
 		return fmt.Errorf("failed to create holding: %w", err)
 	}
 	return nil
 }
 
-func (r *holdingRepository) Update(ctx context.Context, holding *model.Holding) error {
-	result := r.db.WithContext(ctx).Model(&model.Holding{}).
+func (r *holdingRepository) Update(ctx context.Context, holding *Holding) error {
+	result := r.db.WithContext(ctx).Model(&Holding{}).
 		Where("id = ? AND user_id = ?", holding.ID, holding.UserID).
 		Select("Name", "Symbol", "Platform", "HoldingTypeID", "Currency", "InvestedAmount", "CurrentValue", "Units", "AvgBuyPrice", "CurrentPrice", "Notes", "Month", "Year", "LastUpdated", "UpdatedAt").
 		Updates(holding)
@@ -137,44 +134,44 @@ func (r *holdingRepository) Update(ctx context.Context, holding *model.Holding) 
 		return fmt.Errorf("failed to update holding: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrHoldingNotFound
+		return ErrHoldingNotFound
 	}
 	return nil
 }
 
 func (r *holdingRepository) Delete(ctx context.Context, id int64, userID string) error {
-	result := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).Delete(&model.Holding{})
+	result := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).Delete(&Holding{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete holding: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrHoldingNotFound
+		return ErrHoldingNotFound
 	}
 	return nil
 }
 
-func (r *holdingRepository) FindHoldingTypes(ctx context.Context) ([]model.HoldingType, error) {
-	var types []model.HoldingType
+func (r *holdingRepository) FindHoldingTypes(ctx context.Context) ([]HoldingType, error) {
+	var types []HoldingType
 	if err := r.db.WithContext(ctx).Order("id ASC").Find(&types).Error; err != nil {
 		return nil, fmt.Errorf("failed to find holding types: %w", err)
 	}
 	return types, nil
 }
 
-func (r *holdingRepository) FindHoldingTypeByID(ctx context.Context, id int) (*model.HoldingType, error) {
-	var ht model.HoldingType
+func (r *holdingRepository) FindHoldingTypeByID(ctx context.Context, id int) (*HoldingType, error) {
+	var ht HoldingType
 	err := r.db.WithContext(ctx).First(&ht, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, apperrors.ErrHoldingTypeNotFound
+			return nil, ErrHoldingTypeNotFound
 		}
 		return nil, fmt.Errorf("failed to find holding type: %w", err)
 	}
 	return &ht, nil
 }
 
-func (r *holdingRepository) FindForSync(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
-	var holdings []model.Holding
+func (r *holdingRepository) FindForSync(ctx context.Context, userID string, month, year int) ([]Holding, error) {
+	var holdings []Holding
 	err := r.db.WithContext(ctx).
 		Where(
 			"user_id = ? AND month = ? AND year = ? AND symbol IS NOT NULL AND symbol != '' AND units IS NOT NULL AND units > 0",
@@ -188,18 +185,18 @@ func (r *holdingRepository) FindForSync(ctx context.Context, userID string, mont
 }
 
 func (r *holdingRepository) UpdateFields(ctx context.Context, id int64, userID string, fields map[string]any) error {
-	result := r.db.WithContext(ctx).Model(&model.Holding{}).Where("id = ? AND user_id = ?", id, userID).Updates(fields)
+	result := r.db.WithContext(ctx).Model(&Holding{}).Where("id = ? AND user_id = ?", id, userID).Updates(fields)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update holding fields: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return apperrors.ErrHoldingNotFound
+		return ErrHoldingNotFound
 	}
 	return nil
 }
 
-func (r *holdingRepository) FindForDuplicate(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
-	var holdings []model.Holding
+func (r *holdingRepository) FindForDuplicate(ctx context.Context, userID string, month, year int) ([]Holding, error) {
+	var holdings []Holding
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND month = ? AND year = ?", userID, month, year).
 		Find(&holdings).Error
@@ -212,19 +209,19 @@ func (r *holdingRepository) FindForDuplicate(ctx context.Context, userID string,
 func (r *holdingRepository) DeleteByUserMonthYear(ctx context.Context, userID string, month, year int) error {
 	return r.db.WithContext(ctx).
 		Where("user_id = ? AND month = ? AND year = ?", userID, month, year).
-		Delete(&model.Holding{}).Error
+		Delete(&Holding{}).Error
 }
 
 func (r *holdingRepository) CountByUserMonthYear(ctx context.Context, userID string, month, year int) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&model.Holding{}).
+	err := r.db.WithContext(ctx).Model(&Holding{}).
 		Where("user_id = ? AND month = ? AND year = ?", userID, month, year).
 		Count(&count).Error
 	return count, err
 }
 
 func (r *holdingRepository) GetSummary(ctx context.Context, userID string, month, year *int) (invested, currentValue float64, count int64, err error) {
-	q := r.db.WithContext(ctx).Model(&model.Holding{}).Where("user_id = ?", userID)
+	q := r.db.WithContext(ctx).Model(&Holding{}).Where("user_id = ?", userID)
 	if month != nil {
 		q = q.Where("month = ?", *month)
 	}

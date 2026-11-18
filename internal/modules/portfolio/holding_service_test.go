@@ -1,4 +1,4 @@
-package service
+package portfolio
 
 import (
 	"context"
@@ -7,10 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
 )
 
 // stubQuoteClient implements market.QuoteClient for SyncPrices tests.
@@ -35,16 +31,16 @@ func intPtr(v int) *int { return new(v) }
 
 func TestHoldingService_CreateHolding_TypeNotFound(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
-			return nil, apperrors.ErrHoldingTypeNotFound
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*HoldingType, error) {
+			return nil, ErrHoldingTypeNotFound
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	_, err := svc.CreateHolding(context.Background(), "user-1", &dto.CreateHoldingRequest{
+	_, err := svc.CreateHolding(context.Background(), "user-1", &CreateHoldingRequest{
 		Name: "BBCA", Platform: "Mandiri", HoldingTypeID: 1, Currency: "IDR",
 		InvestedAmount: "1000", CurrentValue: "1100", Month: 5, Year: 2026,
 	})
-	if !errors.Is(err, apperrors.ErrHoldingTypeNotFound) {
+	if !errors.Is(err, ErrHoldingTypeNotFound) {
 		t.Fatalf("expected ErrHoldingTypeNotFound, got %v", err)
 	}
 }
@@ -52,10 +48,10 @@ func TestHoldingService_CreateHolding_TypeNotFound(t *testing.T) {
 func TestHoldingService_CreateHolding_Success(t *testing.T) {
 	created := false
 	repo := &mockHoldingRepo{
-		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
-			return &model.HoldingType{ID: id, Name: "Stock"}, nil
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*HoldingType, error) {
+			return &HoldingType{ID: id, Name: "Stock"}, nil
 		},
-		createFn: func(ctx context.Context, h *model.Holding) error {
+		createFn: func(ctx context.Context, h *Holding) error {
 			created = true
 			h.ID = 99
 			if h.UserID != "user-1" {
@@ -63,15 +59,15 @@ func TestHoldingService_CreateHolding_Success(t *testing.T) {
 			}
 			return nil
 		},
-		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*Holding, error) {
 			if id != 99 || userID != "user-1" {
 				t.Errorf("unexpected (%d,%s)", id, userID)
 			}
-			return &model.Holding{ID: id, UserID: userID, Name: "BBCA"}, nil
+			return &Holding{ID: id, UserID: userID, Name: "BBCA"}, nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	got, err := svc.CreateHolding(context.Background(), "user-1", &dto.CreateHoldingRequest{
+	got, err := svc.CreateHolding(context.Background(), "user-1", &CreateHoldingRequest{
 		Name: "BBCA", Platform: "Mandiri", HoldingTypeID: 1, Currency: "IDR",
 		InvestedAmount: "1000", CurrentValue: "1100", Month: 5, Year: 2026,
 	})
@@ -123,7 +119,7 @@ func TestHoldingService_GetSummary_NoData(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	resp, err := svc.GetSummary(context.Background(), "u1", &dto.HoldingSummaryQuery{})
+	resp, err := svc.GetSummary(context.Background(), "u1", &HoldingSummaryQuery{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +144,7 @@ func TestHoldingService_GetSummary_WithData(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	resp, err := svc.GetSummary(context.Background(), "u1", &dto.HoldingSummaryQuery{})
+	resp, err := svc.GetSummary(context.Background(), "u1", &HoldingSummaryQuery{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +173,7 @@ func TestHoldingService_GetSummary_WithData(t *testing.T) {
 
 func TestHoldingService_SyncPrices_NoHoldings(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
+		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
 			return nil, nil
 		},
 	}
@@ -192,7 +188,7 @@ func TestHoldingService_SyncPrices_NoHoldings(t *testing.T) {
 }
 
 func TestHoldingService_SyncPrices_UpdatesQuotes(t *testing.T) {
-	holdings := []model.Holding{
+	holdings := []Holding{
 		{ID: 1, UserID: "u1", Symbol: new("BBCA.JK"), Units: new("10")},
 		{ID: 2, UserID: "u1", Symbol: new("AAPL"), Units: new("5")},
 		// Skipped: nil symbol
@@ -205,7 +201,7 @@ func TestHoldingService_SyncPrices_UpdatesQuotes(t *testing.T) {
 
 	updated := map[int64]map[string]any{}
 	repo := &mockHoldingRepo{
-		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
+		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
 			return holdings, nil
 		},
 		updateFieldsFn: func(ctx context.Context, id int64, userID string, fields map[string]any) error {
@@ -240,8 +236,8 @@ func TestHoldingService_SyncPrices_UpdatesQuotes(t *testing.T) {
 func TestHoldingService_SyncPrices_QuoteClientError(t *testing.T) {
 	wantErr := errors.New("quote client failure")
 	repo := &mockHoldingRepo{
-		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
-			return []model.Holding{{ID: 1, UserID: "u1", Symbol: new("AAPL"), Units: new("1")}}, nil
+		findForSyncFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
+			return []Holding{{ID: 1, UserID: "u1", Symbol: new("AAPL"), Units: new("1")}}, nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{err: wantErr})
@@ -255,25 +251,25 @@ func TestHoldingService_SyncPrices_QuoteClientError(t *testing.T) {
 
 func TestHoldingService_DuplicateHoldings_SameMonthYear(t *testing.T) {
 	svc := NewHoldingService(&mockHoldingRepo{}, &stubQuoteClient{})
-	_, err := svc.DuplicateHoldings(context.Background(), "u1", &dto.DuplicateHoldingRequest{
+	_, err := svc.DuplicateHoldings(context.Background(), "u1", &DuplicateHoldingRequest{
 		FromMonth: 5, FromYear: 2026, ToMonth: 5, ToYear: 2026,
 	})
-	if !errors.Is(err, apperrors.ErrHoldingDuplicateSame) {
+	if !errors.Is(err, ErrHoldingDuplicateSame) {
 		t.Fatalf("expected ErrHoldingDuplicateSame, got %v", err)
 	}
 }
 
 func TestHoldingService_DuplicateHoldings_NoSourceData(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
+		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
 			return nil, nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	_, err := svc.DuplicateHoldings(context.Background(), "u1", &dto.DuplicateHoldingRequest{
+	_, err := svc.DuplicateHoldings(context.Background(), "u1", &DuplicateHoldingRequest{
 		FromMonth: 4, FromYear: 2026, ToMonth: 5, ToYear: 2026,
 	})
-	if !errors.Is(err, apperrors.ErrHoldingNotFound) {
+	if !errors.Is(err, ErrHoldingNotFound) {
 		t.Fatalf("expected ErrHoldingNotFound, got %v", err)
 	}
 }
@@ -282,8 +278,8 @@ func TestHoldingService_DuplicateHoldings_OverwriteAndCopy(t *testing.T) {
 	deleted := false
 	createCount := 0
 	repo := &mockHoldingRepo{
-		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
-			return []model.Holding{
+		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
+			return []Holding{
 				{ID: 1, UserID: userID, Name: "BBCA", Platform: "Mandiri", HoldingTypeID: 1, Currency: "IDR", InvestedAmount: "1000", CurrentValue: "1100", Month: 4, Year: 2026},
 				{ID: 2, UserID: userID, Name: "AAPL", Platform: "IBKR", HoldingTypeID: 1, Currency: "USD", InvestedAmount: "500", CurrentValue: "600", Month: 4, Year: 2026},
 			}, nil
@@ -295,7 +291,7 @@ func TestHoldingService_DuplicateHoldings_OverwriteAndCopy(t *testing.T) {
 			}
 			return nil
 		},
-		createFn: func(ctx context.Context, h *model.Holding) error {
+		createFn: func(ctx context.Context, h *Holding) error {
 			createCount++
 			if h.Month != 5 || h.Year != 2026 {
 				t.Errorf("expected target month/year, got (%d,%d)", h.Month, h.Year)
@@ -305,7 +301,7 @@ func TestHoldingService_DuplicateHoldings_OverwriteAndCopy(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	results, err := svc.DuplicateHoldings(context.Background(), "u1", &dto.DuplicateHoldingRequest{
+	results, err := svc.DuplicateHoldings(context.Background(), "u1", &DuplicateHoldingRequest{
 		FromMonth: 4, FromYear: 2026, ToMonth: 5, ToYear: 2026, Overwrite: true,
 	})
 	if err != nil {
@@ -327,20 +323,20 @@ func TestHoldingService_DuplicateHoldings_OverwriteAndCopy(t *testing.T) {
 
 func TestHoldingService_DuplicateHoldings_NoOverwrite(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]model.Holding, error) {
-			return []model.Holding{{ID: 1, UserID: userID, Name: "BBCA", Month: 4, Year: 2026, Platform: "M", HoldingTypeID: 1, Currency: "IDR", InvestedAmount: "1", CurrentValue: "1"}}, nil
+		findForDuplicateFn: func(ctx context.Context, userID string, month, year int) ([]Holding, error) {
+			return []Holding{{ID: 1, UserID: userID, Name: "BBCA", Month: 4, Year: 2026, Platform: "M", HoldingTypeID: 1, Currency: "IDR", InvestedAmount: "1", CurrentValue: "1"}}, nil
 		},
 		deleteByMonthYearFn: func(ctx context.Context, userID string, month, year int) error {
 			t.Fatal("DeleteByUserMonthYear should not be called when Overwrite=false")
 			return nil
 		},
-		createFn: func(ctx context.Context, h *model.Holding) error {
+		createFn: func(ctx context.Context, h *Holding) error {
 			h.ID = 1
 			return nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	if _, err := svc.DuplicateHoldings(context.Background(), "u1", &dto.DuplicateHoldingRequest{
+	if _, err := svc.DuplicateHoldings(context.Background(), "u1", &DuplicateHoldingRequest{
 		FromMonth: 4, FromYear: 2026, ToMonth: 5, ToYear: 2026, Overwrite: false,
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -359,7 +355,7 @@ func TestHoldingService_GetTrends(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	got, err := svc.GetTrends(context.Background(), "u1", &dto.HoldingTrendsQuery{Years: []int{2026}})
+	got, err := svc.GetTrends(context.Background(), "u1", &HoldingTrendsQuery{Years: []int{2026}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -437,7 +433,7 @@ func TestHoldingService_GetMonthlyData_FillsGaps(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	got, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+	got, err := svc.GetMonthlyData(context.Background(), "u1", &HoldingMonthlyQuery{
 		StartMonth: 5, StartYear: 2026,
 		EndMonth: 3, EndYear: 2026,
 	})
@@ -472,15 +468,15 @@ func TestHoldingService_GetMonthlyData_InvertedRangeRejected(t *testing.T) {
 
 	cases := []struct {
 		name string
-		q    dto.HoldingMonthlyQuery
+		q    HoldingMonthlyQuery
 	}{
-		{"end month after start, same year", dto.HoldingMonthlyQuery{StartMonth: 3, StartYear: 2026, EndMonth: 5, EndYear: 2026}},
-		{"end year after start year", dto.HoldingMonthlyQuery{StartMonth: 1, StartYear: 2025, EndMonth: 1, EndYear: 2026}},
+		{"end month after start, same year", HoldingMonthlyQuery{StartMonth: 3, StartYear: 2026, EndMonth: 5, EndYear: 2026}},
+		{"end year after start year", HoldingMonthlyQuery{StartMonth: 1, StartYear: 2025, EndMonth: 1, EndYear: 2026}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := svc.GetMonthlyData(context.Background(), "u1", &tc.q)
-			if !errors.Is(err, apperrors.ErrHoldingInvalidRange) {
+			if !errors.Is(err, ErrHoldingInvalidRange) {
 				t.Fatalf("expected ErrHoldingInvalidRange, got %v", err)
 			}
 		})
@@ -495,7 +491,7 @@ func TestHoldingService_GetMonthlyData_EqualRange(t *testing.T) {
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	got, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+	got, err := svc.GetMonthlyData(context.Background(), "u1", &HoldingMonthlyQuery{
 		StartMonth: 5, StartYear: 2026, EndMonth: 5, EndYear: 2026,
 	})
 	if err != nil {
@@ -516,7 +512,7 @@ type fakeHoldingCache struct {
 
 	keyToReturn string
 	getOK       bool
-	getData     []model.HoldingType
+	getData     []HoldingType
 	getErr      error
 
 	setErr error
@@ -530,7 +526,7 @@ func (f *fakeHoldingCache) BuildKey(parts ...string) string {
 func (f *fakeHoldingCache) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
 	f.getJSONCalls = append(f.getJSONCalls, key)
 	if f.getOK && f.getErr == nil {
-		if d, ok := dest.(*[]model.HoldingType); ok {
+		if d, ok := dest.(*[]HoldingType); ok {
 			*d = f.getData
 		}
 	}
@@ -546,14 +542,14 @@ func TestHoldingService_GetHoldingTypes_CacheHit(t *testing.T) {
 	cache := &fakeHoldingCache{
 		keyToReturn: "holding-types",
 		getOK:       true,
-		getData: []model.HoldingType{
+		getData: []HoldingType{
 			{ID: 1, Name: "Stock"},
 			{ID: 2, Name: "Crypto"},
 		},
 	}
 	// Repository should not be called at all
 	repo := &mockHoldingRepo{
-		findHoldingTypesFn: func(ctx context.Context) ([]model.HoldingType, error) {
+		findHoldingTypesFn: func(ctx context.Context) ([]HoldingType, error) {
 			t.Fatal("repository findHoldingTypesFn should not have been called on cache hit")
 			return nil, nil
 		},
@@ -584,9 +580,9 @@ func TestHoldingService_GetHoldingTypes_CacheMiss(t *testing.T) {
 	}
 	repoCalled := false
 	repo := &mockHoldingRepo{
-		findHoldingTypesFn: func(ctx context.Context) ([]model.HoldingType, error) {
+		findHoldingTypesFn: func(ctx context.Context) ([]HoldingType, error) {
 			repoCalled = true
-			return []model.HoldingType{
+			return []HoldingType{
 				{ID: 3, Name: "Cash"},
 			}, nil
 		},
@@ -639,7 +635,7 @@ func TestHoldingService_CompareMonths_DeterministicSorting(t *testing.T) {
 	}
 
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	resp, err := svc.CompareMonths(context.Background(), "u1", &dto.HoldingCompareQuery{
+	resp, err := svc.CompareMonths(context.Background(), "u1", &HoldingCompareQuery{
 		FromMonth: &fromMonth,
 		FromYear:  &fromYear,
 		ToMonth:   toMonth,
@@ -674,22 +670,22 @@ func TestHoldingService_CompareMonths_DeterministicSorting(t *testing.T) {
 func TestHoldingService_CreateHolding_InvalidDecimal(t *testing.T) {
 	cases := []struct {
 		name  string
-		req   dto.CreateHoldingRequest
+		req   CreateHoldingRequest
 		field string
 	}{
-		{"invested", dto.CreateHoldingRequest{InvestedAmount: "abc", CurrentValue: "x"}, "invested_amount"},
-		{"current", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "1e5"}, "current_value"},
-		{"units", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", Units: new("NaN")}, "units"},
-		{"avg", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", AvgBuyPrice: new("")}, "avg_buy_price"},
-		{"price", dto.CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", CurrentPrice: new("Infinity")}, "current_price"},
+		{"invested", CreateHoldingRequest{InvestedAmount: "abc", CurrentValue: "x"}, "invested_amount"},
+		{"current", CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "1e5"}, "current_value"},
+		{"units", CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", Units: new("NaN")}, "units"},
+		{"avg", CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", AvgBuyPrice: new("")}, "avg_buy_price"},
+		{"price", CreateHoldingRequest{InvestedAmount: "10", CurrentValue: "10", CurrentPrice: new("Infinity")}, "current_price"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &mockHoldingRepo{
-				findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
-					return &model.HoldingType{ID: id}, nil
+				findHoldingTypeByIDFn: func(ctx context.Context, id int) (*HoldingType, error) {
+					return &HoldingType{ID: id}, nil
 				},
-				createFn: func(ctx context.Context, h *model.Holding) error {
+				createFn: func(ctx context.Context, h *Holding) error {
 					t.Fatal("Create must not be called for an invalid decimal")
 					return nil
 				},
@@ -698,7 +694,7 @@ func TestHoldingService_CreateHolding_InvalidDecimal(t *testing.T) {
 			req := tc.req
 			req.HoldingTypeID = 1
 			_, err := svc.CreateHolding(context.Background(), "u1", &req)
-			if !errors.Is(err, apperrors.ErrHoldingInvalidDecimal) {
+			if !errors.Is(err, ErrHoldingInvalidDecimal) {
 				t.Fatalf("expected ErrHoldingInvalidDecimal, got %v", err)
 			}
 			if want := "Invalid decimal value for " + tc.field; err.Error() != want {
@@ -710,35 +706,35 @@ func TestHoldingService_CreateHolding_InvalidDecimal(t *testing.T) {
 
 func TestHoldingService_CreateHolding_TypeCheckedBeforeDecimals(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
-			return nil, apperrors.ErrHoldingTypeNotFound
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*HoldingType, error) {
+			return nil, ErrHoldingTypeNotFound
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	_, err := svc.CreateHolding(context.Background(), "u1", &dto.CreateHoldingRequest{
+	_, err := svc.CreateHolding(context.Background(), "u1", &CreateHoldingRequest{
 		HoldingTypeID: 9, InvestedAmount: "abc", CurrentValue: "abc",
 	})
-	if !errors.Is(err, apperrors.ErrHoldingTypeNotFound) {
+	if !errors.Is(err, ErrHoldingTypeNotFound) {
 		t.Fatalf("expected ErrHoldingTypeNotFound, got %v", err)
 	}
 }
 
 func TestHoldingService_CreateHolding_TrimsDecimals(t *testing.T) {
-	var stored *model.Holding
+	var stored *Holding
 	repo := &mockHoldingRepo{
-		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*model.HoldingType, error) {
-			return &model.HoldingType{ID: id}, nil
+		findHoldingTypeByIDFn: func(ctx context.Context, id int) (*HoldingType, error) {
+			return &HoldingType{ID: id}, nil
 		},
-		createFn: func(ctx context.Context, h *model.Holding) error {
+		createFn: func(ctx context.Context, h *Holding) error {
 			stored = h
 			return nil
 		},
-		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
-			return &model.Holding{ID: id}, nil
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*Holding, error) {
+			return &Holding{ID: id}, nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	_, err := svc.CreateHolding(context.Background(), "u1", &dto.CreateHoldingRequest{
+	_, err := svc.CreateHolding(context.Background(), "u1", &CreateHoldingRequest{
 		HoldingTypeID: 1, InvestedAmount: " 1000.50 ", CurrentValue: "-.5",
 		Units: new("+3."), AvgBuyPrice: new(" 12 "),
 	})
@@ -755,37 +751,37 @@ func TestHoldingService_CreateHolding_TrimsDecimals(t *testing.T) {
 
 func TestHoldingService_UpdateHolding_InvalidDecimal(t *testing.T) {
 	repo := &mockHoldingRepo{
-		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
-			return &model.Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*Holding, error) {
+			return &Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
 		},
-		updateFn: func(ctx context.Context, h *model.Holding) error {
+		updateFn: func(ctx context.Context, h *Holding) error {
 			t.Fatal("Update must not be called for an invalid decimal")
 			return nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	_, err := svc.UpdateHolding(context.Background(), 1, "u1", &dto.UpdateHoldingRequest{
+	_, err := svc.UpdateHolding(context.Background(), 1, "u1", &UpdateHoldingRequest{
 		CurrentValue: new("12"),
 		CurrentPrice: new("1,000"),
 	})
-	if !errors.Is(err, apperrors.ErrHoldingInvalidDecimal) || err.Error() != "Invalid decimal value for current_price" {
+	if !errors.Is(err, ErrHoldingInvalidDecimal) || err.Error() != "Invalid decimal value for current_price" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestHoldingService_UpdateHolding_OnlyPresentDecimalsChecked(t *testing.T) {
-	var stored *model.Holding
+	var stored *Holding
 	repo := &mockHoldingRepo{
-		findByIDFn: func(ctx context.Context, id int64, userID string) (*model.Holding, error) {
-			return &model.Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
+		findByIDFn: func(ctx context.Context, id int64, userID string) (*Holding, error) {
+			return &Holding{ID: id, UserID: userID, InvestedAmount: "1", CurrentValue: "1"}, nil
 		},
-		updateFn: func(ctx context.Context, h *model.Holding) error {
+		updateFn: func(ctx context.Context, h *Holding) error {
 			stored = h
 			return nil
 		},
 	}
 	svc := NewHoldingService(repo, &stubQuoteClient{})
-	if _, err := svc.UpdateHolding(context.Background(), 1, "u1", &dto.UpdateHoldingRequest{
+	if _, err := svc.UpdateHolding(context.Background(), 1, "u1", &UpdateHoldingRequest{
 		InvestedAmount: new(" 250 "),
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -802,16 +798,16 @@ func TestHoldingService_EmptyAnalyticsSerializeAsArrays(t *testing.T) {
 	svc := NewHoldingService(repo, &stubQuoteClient{})
 	ctx := context.Background()
 
-	trends, err := svc.GetTrends(ctx, "u1", &dto.HoldingTrendsQuery{})
+	trends, err := svc.GetTrends(ctx, "u1", &HoldingTrendsQuery{})
 	if err != nil {
 		t.Fatalf("GetTrends: %v", err)
 	}
-	summary, err := svc.GetSummary(ctx, "u1", &dto.HoldingSummaryQuery{})
+	summary, err := svc.GetSummary(ctx, "u1", &HoldingSummaryQuery{})
 	if err != nil {
 		t.Fatalf("GetSummary: %v", err)
 	}
 	m, y := 1, 2026
-	compare, err := svc.CompareMonths(ctx, "u1", &dto.HoldingCompareQuery{FromMonth: &m, FromYear: &y, ToMonth: 2, ToYear: 2026})
+	compare, err := svc.CompareMonths(ctx, "u1", &HoldingCompareQuery{FromMonth: &m, FromYear: &y, ToMonth: 2, ToYear: 2026})
 	if err != nil {
 		t.Fatalf("CompareMonths: %v", err)
 	}
@@ -840,15 +836,15 @@ func TestHoldingService_GetMonthlyData_SpanCap(t *testing.T) {
 	svc := NewHoldingService(repo, &stubQuoteClient{})
 
 	// Exactly 240 months is allowed.
-	if _, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+	if _, err := svc.GetMonthlyData(context.Background(), "u1", &HoldingMonthlyQuery{
 		StartMonth: 1, StartYear: 2026, EndMonth: 1, EndYear: 2006,
 	}); err != nil {
 		t.Fatalf("240-month span: unexpected error %v", err)
 	}
-	_, err := svc.GetMonthlyData(context.Background(), "u1", &dto.HoldingMonthlyQuery{
+	_, err := svc.GetMonthlyData(context.Background(), "u1", &HoldingMonthlyQuery{
 		StartMonth: 2, StartYear: 2026, EndMonth: 1, EndYear: 2006,
 	})
-	if !errors.Is(err, apperrors.ErrHoldingRangeTooLarge) {
+	if !errors.Is(err, ErrHoldingRangeTooLarge) {
 		t.Fatalf("expected ErrHoldingRangeTooLarge, got %v", err)
 	}
 }

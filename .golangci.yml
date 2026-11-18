@@ -10,6 +10,7 @@ linters:
   enable:
     - bodyclose # HTTP response bodies must be closed
     - copyloopvar
+    - depguard # module boundaries (see settings below)
     - errorlint # proper errors.Is/As usage and %w wrapping
     - gocritic # opinionated bug/perf/style checks
     - misspell
@@ -20,6 +21,46 @@ linters:
     - rowserrcheck # *sql.Rows.Err must be checked
     - sqlclosecheck # sql.Rows/Stmt must be closed
     - usestdlibvars # stdlib constants instead of magic strings
+  settings:
+    depguard:
+      # Modular monolith boundaries: internal/modules/<name> is self-contained.
+      # Only internal/di and internal/routes may import a module.
+      rules:
+        modules-are-isolated:
+          list-mode: lax
+          files:
+            - "**/internal/modules/**"
+          deny:
+            - pkg: echobackend/internal/modules/
+              desc: modules must not import each other; share code via core packages (middleware, platform, pkg)
+            - pkg: echobackend/internal/handler
+              desc: modules own their handlers; move shared helpers to a core package
+            - pkg: echobackend/internal/service
+              desc: modules own their services
+            - pkg: echobackend/internal/repository
+              desc: modules own their repositories
+            - pkg: echobackend/internal/dto
+              desc: modules own their DTOs
+            - pkg: echobackend/internal/model
+              desc: modules own their models
+            - pkg: echobackend/internal/routes
+              desc: modules register their own routes
+            - pkg: echobackend/internal/di
+              desc: modules receive dependencies, they do not build the container
+        legacy-layers-skip-modules:
+          list-mode: lax
+          files:
+            - "**/internal/handler/**"
+            - "**/internal/service/**"
+            - "**/internal/repository/**"
+            - "**/internal/dto/**"
+            - "**/internal/model/**"
+            - "**/internal/middleware/**"
+            - "**/internal/platform/**"
+            - "**/pkg/**"
+          deny:
+            - pkg: echobackend/internal/modules/
+              desc: only internal/di and internal/routes may import a module
   exclusions:
     generated: lax
     presets:

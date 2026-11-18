@@ -1,41 +1,38 @@
-package handler
+package portfolio
 
 import (
+	"echobackend/internal/middleware"
+	"echobackend/pkg/response"
 	"errors"
 	"strconv"
 	"time"
-
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/service"
-	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
 )
 
 type HoldingHandler struct {
-	holdingService service.HoldingService
+	holdingService HoldingService
 }
 
-func NewHoldingHandler(holdingService service.HoldingService) *HoldingHandler {
+func NewHoldingHandler(holdingService HoldingService) *HoldingHandler {
 	return &HoldingHandler{holdingService: holdingService}
 }
 
 func (h *HoldingHandler) respondHoldingError(c *echo.Context, message string, err error) error {
 	switch {
-	case errors.Is(err, apperrors.ErrHoldingNotFound):
+	case errors.Is(err, ErrHoldingNotFound):
 		return response.NotFound(c, message, err)
-	case errors.Is(err, apperrors.ErrHoldingNotOwned):
+	case errors.Is(err, ErrHoldingNotOwned):
 		return response.Forbidden(c, message)
-	case errors.Is(err, apperrors.ErrHoldingTypeNotFound):
+	case errors.Is(err, ErrHoldingTypeNotFound):
 		return response.BadRequest(c, message, err)
-	case errors.Is(err, apperrors.ErrHoldingDuplicateSame):
+	case errors.Is(err, ErrHoldingDuplicateSame):
 		return response.BadRequest(c, message, err)
-	case errors.Is(err, apperrors.ErrHoldingInvalidRange):
+	case errors.Is(err, ErrHoldingInvalidRange):
 		return response.BadRequest(c, message, err)
-	case errors.Is(err, apperrors.ErrHoldingRangeTooLarge):
+	case errors.Is(err, ErrHoldingRangeTooLarge):
 		return response.BadRequest(c, message, err)
-	case errors.Is(err, apperrors.ErrHoldingInvalidDecimal):
+	case errors.Is(err, ErrHoldingInvalidDecimal):
 		return response.BadRequest(c, message, err)
 	default:
 		return response.InternalServerError(c, message, err)
@@ -43,12 +40,12 @@ func (h *HoldingHandler) respondHoldingError(c *echo.Context, message string, er
 }
 
 func (h *HoldingHandler) GetHoldings(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	filter := &dto.HoldingQueryFilter{
+	filter := &HoldingQueryFilter{
 		SortBy:    "created_at",
 		SortOrder: "desc",
 	}
@@ -85,7 +82,7 @@ func (h *HoldingHandler) GetHoldings(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) GetHoldingByID(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -104,12 +101,12 @@ func (h *HoldingHandler) GetHoldingByID(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) CreateHolding(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	var req dto.CreateHoldingRequest
+	var req CreateHoldingRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request format", err)
 	}
@@ -127,7 +124,7 @@ func (h *HoldingHandler) CreateHolding(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) UpdateHolding(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -137,7 +134,7 @@ func (h *HoldingHandler) UpdateHolding(c *echo.Context) error {
 		return response.BadRequest(c, "Invalid holding ID", err)
 	}
 
-	var req dto.UpdateHoldingRequest
+	var req UpdateHoldingRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request format", err)
 	}
@@ -151,7 +148,7 @@ func (h *HoldingHandler) UpdateHolding(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) DeleteHolding(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -178,12 +175,12 @@ func (h *HoldingHandler) GetHoldingTypes(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) GetSummary(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	q := &dto.HoldingSummaryQuery{}
+	q := &HoldingSummaryQuery{}
 	if m := c.QueryParam("month"); m != "" {
 		if v, err := strconv.Atoi(m); err == nil && v >= 1 && v <= 12 {
 			q.Month = &v
@@ -204,12 +201,12 @@ func (h *HoldingHandler) GetSummary(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) GetTrends(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	q := &dto.HoldingTrendsQuery{}
+	q := &HoldingTrendsQuery{}
 	if y := c.QueryParam("years"); y != "" {
 		for _, ys := range splitComma(y) {
 			if v, err := strconv.Atoi(ys); err == nil {
@@ -227,13 +224,13 @@ func (h *HoldingHandler) GetTrends(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) CompareMonths(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
 	now := time.Now()
-	q := &dto.HoldingCompareQuery{
+	q := &HoldingCompareQuery{
 		ToMonth: int(now.Month()),
 		ToYear:  now.Year(),
 	}
@@ -279,7 +276,7 @@ func (h *HoldingHandler) CompareMonths(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) GetMonthlyData(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -302,7 +299,7 @@ func (h *HoldingHandler) GetMonthlyData(c *echo.Context) error {
 // millions of iterations with a value like startYear=2147483647.
 const minHoldingYear = 1990
 
-func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
+func parseMonthlyQuery(c *echo.Context) (*HoldingMonthlyQuery, error) {
 	now := time.Now()
 	startMonth, startYear := int(now.Month()), now.Year()
 	endMonth, endYear := int(now.Month()), now.Year()
@@ -319,7 +316,7 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 	if sy := c.QueryParam("startYear"); sy != "" {
 		v, err := strconv.Atoi(sy)
 		if err != nil || v < minHoldingYear || v > maxHoldingYear {
-			return nil, apperrors.ErrHoldingInvalidRange
+			return nil, ErrHoldingInvalidRange
 		}
 		startYear = v
 		hasStartYear = true
@@ -333,7 +330,7 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 	if ey := c.QueryParam("endYear"); ey != "" {
 		v, err := strconv.Atoi(ey)
 		if err != nil || v < minHoldingYear || v > maxHoldingYear {
-			return nil, apperrors.ErrHoldingInvalidRange
+			return nil, ErrHoldingInvalidRange
 		}
 		endYear = v
 		hasEndYear = true
@@ -360,7 +357,7 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 		}
 	}
 
-	q := &dto.HoldingMonthlyQuery{
+	q := &HoldingMonthlyQuery{
 		StartMonth: startMonth,
 		StartYear:  startYear,
 		EndMonth:   endMonth,
@@ -378,7 +375,7 @@ func parseMonthlyQuery(c *echo.Context) (*dto.HoldingMonthlyQuery, error) {
 }
 
 func (h *HoldingHandler) SyncPrices(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -392,12 +389,12 @@ func (h *HoldingHandler) SyncPrices(c *echo.Context) error {
 }
 
 func (h *HoldingHandler) DuplicateHoldings(c *echo.Context) error {
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	var req dto.DuplicateHoldingRequest
+	var req DuplicateHoldingRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Invalid request format", err)
 	}
