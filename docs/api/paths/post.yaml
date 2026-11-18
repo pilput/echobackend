@@ -188,6 +188,12 @@ postsMe:
         Omit (or send anything other than `true`/`false`) to include both published and
         draft posts.
       schema: {type: boolean}
+    - name: hidden
+      in: query
+      description: |
+        `true` keeps only posts a moderator hid, `false` drops them. Omit (or send
+        anything other than `true`/`false`) to include both.
+      schema: {type: boolean}
     responses:
       '200':
         description: Posts with pagination meta.
@@ -650,9 +656,17 @@ postsByIdCommentsByCommentId:
 postsByIdView:
   post:
     tags: [Post views]
-    summary: Record a view for the current user
+    summary: Record a view (logged-in or anonymous)
+    description: |
+      Open to anonymous visitors: a missing or invalid token counts as anonymous
+      instead of 401. Repeat views are accepted but not stored — a logged-in user
+      counts once per post, an anonymous visitor (client IP + User-Agent) once per
+      post per 24h. Automated clients (crawlers, link previews, headless browsers,
+      CLI tools, or no User-Agent) are answered 200 but never stored. Rate limited
+      to 60 requests per minute per client.
     operationId: recordPostView
     security:
+    - {}
     - bearerAuth: []
     parameters:
     - {$ref: ../parameters.yaml#/PostIdPath}
@@ -667,7 +681,7 @@ postsByIdView:
         content:
           application/json:
             schema: {$ref: ../schemas/envelope.yaml#/ErrorEnvelope}
-      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '429': {$ref: ../responses.yaml#/RateLimited}
       '500': {$ref: ../responses.yaml#/ServerError}
 postsByIdViews:
   get:
@@ -1105,6 +1119,27 @@ postsByIdModeration:
                     type: array
                     items: {$ref: ../schemas/post.yaml#/ModerationActionResponse}
       '400': {$ref: ../responses.yaml#/BadRequest}
+      '401': {$ref: ../responses.yaml#/Unauthorized}
+      '403': {$ref: ../responses.yaml#/Forbidden}
+      '500': {$ref: ../responses.yaml#/ServerError}
+postsReportsStats:
+  get:
+    tags: [Post reports]
+    summary: Moderation queue totals (admin)
+    operationId: getReportStats
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Report stats.
+        content:
+          application/json:
+            schema:
+              allOf:
+              - {$ref: ../schemas/envelope.yaml#/SuccessEnvelope}
+              - type: object
+                properties:
+                  data: {$ref: ../schemas/post.yaml#/ReportStatsResponse}
       '401': {$ref: ../responses.yaml#/Unauthorized}
       '403': {$ref: ../responses.yaml#/Forbidden}
       '500': {$ref: ../responses.yaml#/ServerError}

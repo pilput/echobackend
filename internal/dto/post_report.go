@@ -33,6 +33,23 @@ type PostReportGroup struct {
 	LastReportedAt time.Time  `json:"last_reported_at"`
 }
 
+// ReportStatsResponse is GET /posts/reports/stats: moderation queue totals
+// for the admin dashboard.
+type ReportStatsResponse struct {
+	// Distinct posts with at least one report in each status (same unit as
+	// the GET /posts/reports meta total).
+	Pending   int64 `json:"pending"`
+	Resolved  int64 `json:"resolved"`
+	Dismissed int64 `json:"dismissed"`
+	// HiddenPosts counts posts currently hidden by a moderator whose author
+	// is not deleted.
+	HiddenPosts int64 `json:"hidden_posts"`
+	// AvgResponseHours is the mean time from a report to the moderation
+	// action that closed it, over actions taken in the last 30 days; null
+	// when there were none.
+	AvgResponseHours *float64 `json:"avg_response_hours"`
+}
+
 type ModerationActionResponse struct {
 	ID        string     `json:"id"`
 	PostID    *string    `json:"post_id"`

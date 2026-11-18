@@ -17,6 +17,7 @@ type PostReportService interface {
 	ListPostReports(ctx context.Context, postID, status string, limit, offset int) ([]*dto.PostReportResponse, int64, error)
 	ModeratePost(ctx context.Context, postID, adminID string, req dto.ModeratePostRequest) error
 	ListModerationActions(ctx context.Context, postID string, limit, offset int) ([]*dto.ModerationActionResponse, int64, error)
+	ReportStats(ctx context.Context) (*dto.ReportStatsResponse, error)
 }
 
 type postReportService struct {
@@ -121,4 +122,8 @@ func (s *postReportService) ListModerationActions(ctx context.Context, postID st
 		out = append(out, dto.ModerationActionToResponse(a))
 	}
 	return out, total, nil
+}
+
+func (s *postReportService) ReportStats(ctx context.Context) (*dto.ReportStatsResponse, error) {
+	return s.reportRepo.Stats(ctx)
 }

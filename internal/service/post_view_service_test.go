@@ -177,7 +177,7 @@ func TestPostViewService_RecordView_CachesViewedMarker(t *testing.T) {
 	}
 	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
 
-	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
 		t.Fatalf("first RecordView: %v", err)
 	}
 	if creates != 1 {
@@ -187,7 +187,7 @@ func TestPostViewService_RecordView_CachesViewedMarker(t *testing.T) {
 	// Second view must be answered from the cache without touching the DB.
 	viewRepo.hasUserViewedPostFn = nil
 	viewRepo.createViewFn = nil
-	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
 		t.Fatalf("second RecordView: %v", err)
 	}
 }
@@ -200,11 +200,90 @@ func TestPostViewService_RecordView_MarksAlreadyViewedFromDB(t *testing.T) {
 	}
 	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
 
-	if err := svc.RecordView(ctx, "post-1", "user-1", nil, nil); err != nil {
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
 		t.Fatalf("RecordView: %v", err)
 	}
 	if _, ok := cache.store[cache.BuildKey("post_view", "post-1", "user-1")]; !ok {
 		t.Fatal("expected viewed marker to be cached after DB hit")
+	}
+}
+
+const browserUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+
+func strPtr(s string) *string { return &s }
+
+func TestPostViewService_RecordView_IgnoresBots(t *testing.T) {
+	ctx := context.Background()
+	// Nothing is stubbed: any repo access would panic.
+	svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{}, &mockPostLikeRepo{}, &fakePostViewCache{store: map[string]any{}})
+	for _, ua := range []*string{nil, strPtr(""), strPtr("curl/8.5.0"), strPtr("Googlebot/2.1")} {
+		if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), ua); err != nil {
+			t.Fatalf("RecordView(bot): %v", err)
+		}
+	}
+}
+
+func TestPostViewService_RecordView_AnonymousDedup(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	var created *model.PostView
+	var gotIP, gotUA string
+	viewRepo := &mockPostViewRepo{
+		hasAnonymousViewedSinceFn: func(ctx context.Context, postID, ip, ua string, since time.Time) (bool, error) {
+			gotIP, gotUA = ip, ua
+			if time.Since(since) < 23*time.Hour {
+				t.Errorf("dedup window too short: since=%v", since)
+			}
+			return false, nil
+		},
+		createViewFn: func(ctx context.Context, view *model.PostView) error {
+			created = view
+			return nil
+		},
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), strPtr(browserUA)); err != nil {
+		t.Fatalf("RecordView: %v", err)
+	}
+	if created == nil || created.UserID != nil || *created.IPAddress != "203.0.113.5" || *created.UserAgent != browserUA {
+		t.Fatalf("unexpected view: %+v", created)
+	}
+	if gotIP != "203.0.113.5" || gotUA != browserUA {
+		t.Fatalf("dedup lookup got ip=%q ua=%q", gotIP, gotUA)
+	}
+
+	// The marker key is hashed: no raw IP in cache keys.
+	if len(cache.store) != 1 {
+		t.Fatalf("expected one marker, got %v", cache.store)
+	}
+	for key := range cache.store {
+		if strings.Contains(key, "203.0.113.5") || !strings.Contains(key, "post_view:post-1:anon:") {
+			t.Fatalf("unexpected marker key %q", key)
+		}
+	}
+
+	// A repeat view is answered from the marker without touching the DB.
+	viewRepo.hasAnonymousViewedSinceFn = nil
+	viewRepo.createViewFn = nil
+	if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), strPtr(browserUA)); err != nil {
+		t.Fatalf("repeat RecordView: %v", err)
+	}
+}
+
+func TestViewerMarkerID(t *testing.T) {
+	a := viewerMarkerID("", "203.0.113.5", "UA")
+	if a != viewerMarkerID("", "203.0.113.5", "UA") {
+		t.Fatal("marker must be stable")
+	}
+	if a == viewerMarkerID("", "203.0.113.6", "UA") || a == viewerMarkerID("", "203.0.113.5", "UA2") {
+		t.Fatal("marker must differ per IP and User-Agent")
+	}
+	if got := viewerMarkerID("user-1", "203.0.113.5", "UA"); got != "user-1" {
+		t.Fatalf("user marker = %q, want user-1", got)
+	}
+	if got := viewerMarkerID("", "", "UA"); got != "" {
+		t.Fatalf("unidentified marker = %q, want empty", got)
 	}
 }
 

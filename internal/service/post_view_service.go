@@ -2,13 +2,17 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
 	"echobackend/internal/repository"
+	"echobackend/pkg/useragent"
 )
 
 type PostViewService interface {
@@ -20,10 +24,15 @@ type PostViewService interface {
 	GetMyPostsLikesByMonth(ctx context.Context, userID string, q *dto.MyPostsLikesByMonthQuery) (*dto.MyPostsLikesByMonthResponse, error)
 }
 
-// viewedMarkerTTL is how long a "user already viewed this post" marker lives in
+// anonymousDedupWindow is how long an anonymous visitor's view blocks another
+// one of the same post.
+const anonymousDedupWindow = 24 * time.Hour
+
+// viewedMarkerTTL is how long an "already viewed this post" marker lives in
 // the cache. It only short-circuits repeat RecordView calls; the database stays
 // authoritative, so an expired or missing marker just falls back to the query.
-const viewedMarkerTTL = 24 * time.Hour
+// It must not outlive anonymousDedupWindow.
+const viewedMarkerTTL = anonymousDedupWindow
 
 type postViewCache interface {
 	BuildKey(parts ...string) string
@@ -59,12 +68,27 @@ func NewPostViewService(
 	}
 }
 
+// RecordView records a view of postID. Every reader counts, logged in or
+// not; what differs is how repeat views are deduplicated:
+//
+//	viewer        identity              counted
+//	logged in     user id               once per post
+//	anonymous     IP + User-Agent       once per post per anonymousDedupWindow
+//	unidentified  none (no IP)          every request
+//
+// A cache marker short-circuits repeat views without a DB lookup; the DB stays
+// the source of truth when the marker is missing. Automated clients
+// (useragent.IsLikelyBot) are accepted but never stored.
 func (s *postViewService) RecordView(ctx context.Context, postID, userID string, ipAddress, userAgent *string) error {
 	if postID == "" {
 		return apperrors.ErrEmptyPostID
 	}
+	ip, ua := derefTrimmed(ipAddress), derefTrimmed(userAgent)
+	if useragent.IsLikelyBot(ua) {
+		return nil
+	}
 
-	markerKey := s.viewedMarkerKey(postID, userID)
+	markerKey := s.viewedMarkerKey(postID, viewerMarkerID(userID, ip, ua))
 	if markerKey != "" {
 		var viewed bool
 		if found, err := s.cache.GetJSON(ctx, markerKey, &viewed); err == nil && found && viewed {
@@ -80,15 +104,13 @@ func (s *postViewService) RecordView(ctx context.Context, postID, userID string,
 		return err
 	}
 
-	if userID != "" {
-		hasViewed, err := s.postViewRepo.HasUserViewedPost(ctx, postID, userID)
-		if err != nil {
-			return fmt.Errorf("failed to check if user viewed post: %w", err)
-		}
-		if hasViewed {
-			s.setViewedMarker(ctx, markerKey)
-			return nil
-		}
+	hasViewed, err := s.hasViewed(ctx, postID, userID, ip, ua)
+	if err != nil {
+		return err
+	}
+	if hasViewed {
+		s.setViewedMarker(ctx, markerKey)
+		return nil
 	}
 
 	now := time.Now()
@@ -97,39 +119,75 @@ func (s *postViewService) RecordView(ctx context.Context, postID, userID string,
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
-
 	if userID != "" {
 		view.UserID = &userID
 	}
-	if ipAddress != nil && *ipAddress != "" {
-		view.IPAddress = ipAddress
+	if ip != "" {
+		view.IPAddress = &ip
 	}
-	if userAgent != nil && *userAgent != "" {
-		view.UserAgent = userAgent
+	if ua != "" {
+		view.UserAgent = &ua
 	}
 
+	// view_count is maintained by the trigger_update_view_count_insert
+	// trigger on post_views; no app-level increment.
 	if err := s.postViewRepo.CreateView(ctx, view); err != nil {
 		return fmt.Errorf("failed to create view record: %w", err)
 	}
 	s.setViewedMarker(ctx, markerKey)
-
-	// view_count is maintained automatically by the database trigger
-	// (trigger_update_view_count_insert on post_views), so no app-level
-	// increment is needed here. The previous r.db.Raw("view_count + 1") call
-	// was a no-op bug: *gorm.DB does not implement clause.Expression, so the
-	// UPDATE errored and RecordView returned a false 500 even though the
-	// trigger had already counted the view.
 	return nil
 }
 
-// GetViewsByPostID lists the raw view records of a post. Only the post's author
-// (or a super admin) may see who viewed it.
-// viewedMarkerKey returns "" when there is no cache or no user to dedupe on.
-func (s *postViewService) viewedMarkerKey(postID, userID string) string {
-	if s.cache == nil || userID == "" {
+// hasViewed reports whether the viewer already has a stored view that counts
+// against a new one. An anonymous viewer without an IP cannot be identified,
+// so every request counts.
+func (s *postViewService) hasViewed(ctx context.Context, postID, userID, ip, ua string) (bool, error) {
+	switch {
+	case userID != "":
+		viewed, err := s.postViewRepo.HasUserViewedPost(ctx, postID, userID)
+		if err != nil {
+			return false, fmt.Errorf("failed to check if user viewed post: %w", err)
+		}
+		return viewed, nil
+	case ip != "":
+		viewed, err := s.postViewRepo.HasAnonymousViewedSince(ctx, postID, ip, ua, time.Now().Add(-anonymousDedupWindow))
+		if err != nil {
+			return false, fmt.Errorf("failed to check if visitor viewed post: %w", err)
+		}
+		return viewed, nil
+	default:
+		return false, nil
+	}
+}
+
+// viewerMarkerID is the viewer identity in the cache marker key: the user ID
+// (compatible with the old post_view:<post>:<user> key), or a SHA-256 of
+// IP + User-Agent so raw IPs never end up in cache keys. "" when the viewer
+// cannot be identified.
+func viewerMarkerID(userID, ip, ua string) string {
+	if userID != "" {
+		return userID
+	}
+	if ip == "" {
 		return ""
 	}
-	return s.cache.BuildKey("post_view", postID, userID)
+	sum := sha256.Sum256([]byte(ip + "|" + ua))
+	return "anon:" + hex.EncodeToString(sum[:])
+}
+
+func derefTrimmed(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(*v)
+}
+
+// viewedMarkerKey returns "" when there is no cache or no viewer to dedupe on.
+func (s *postViewService) viewedMarkerKey(postID, viewerID string) string {
+	if s.cache == nil || viewerID == "" {
+		return ""
+	}
+	return s.cache.BuildKey("post_view", postID, viewerID)
 }
 
 func (s *postViewService) setViewedMarker(ctx context.Context, key string) {
@@ -138,6 +196,8 @@ func (s *postViewService) setViewedMarker(ctx context.Context, key string) {
 	}
 }
 
+// GetViewsByPostID lists the raw view records of a post. Only the post's author
+// (or a super admin) may see who viewed it.
 func (s *postViewService) GetViewsByPostID(ctx context.Context, postID, requesterID string, isAdmin bool, limit, offset int) ([]*dto.PostViewResponse, int64, error) {
 	if postID == "" {
 		return nil, 0, apperrors.ErrEmptyPostID

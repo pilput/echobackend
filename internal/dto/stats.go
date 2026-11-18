@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type DateRangeQuery struct {
 	StartDate string
 	EndDate   string
@@ -27,6 +29,8 @@ type UserStatsResponse struct {
 	ActiveUsers         int64            `json:"activeUsers"`
 	NewUsersToday       int64            `json:"newUsersToday"`
 	ActiveUsersThisWeek int64            `json:"activeUsersThisWeek"`
+	// AdminUsers counts non-deleted super admins.
+	AdminUsers int64 `json:"adminUsers"`
 	TopContributors     []TopContributor `json:"topContributors"`
 	GrowthTrend         []UserGrowthData `json:"growthTrend"`
 }
@@ -56,6 +60,8 @@ type TagPerformance struct {
 	PostCount  int64  `json:"postCount"`
 	TotalViews int64  `json:"totalViews"`
 	TotalLikes int64  `json:"totalLikes"`
+	// LastUsedAt is the publish time of the newest published post with this tag.
+	LastUsedAt *time.Time `json:"lastUsedAt"`
 }
 
 type PostStatsResponse struct {

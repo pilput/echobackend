@@ -189,7 +189,10 @@ PostViewStats:
   properties:
     post_id: {type: string, format: uuid}
     total_views: {type: integer, format: int64}
-    unique_views: {type: integer, format: int64}
+    unique_views:
+      type: integer
+      format: int64
+      description: Distinct viewers — one per user, or per anonymous IP + User-Agent.
     anonymous_views: {type: integer, format: int64}
     authenticated_views: {type: integer, format: int64}
 PostLikeResponse:
@@ -269,6 +272,25 @@ CreatePostReportRequest:
     details:
       type: [string, 'null']
       maxLength: 1000
+ReportStatsResponse:
+  type: object
+  properties:
+    pending:
+      type: integer
+      format: int64
+      description: Distinct posts with at least one pending report.
+    resolved: {type: integer, format: int64}
+    dismissed: {type: integer, format: int64}
+    hidden_posts:
+      type: integer
+      format: int64
+      description: Posts currently hidden by a moderator whose author is not deleted.
+    avg_response_hours:
+      type: [number, 'null']
+      format: double
+      description: |
+        Mean hours from a report to the moderation action that closed it, over actions
+        taken in the last 30 days; `null` when there were none.
 PostReportGroup:
   type: object
   properties:

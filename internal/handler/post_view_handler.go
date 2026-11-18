@@ -17,6 +17,8 @@ func NewPostViewHandler(postViewService service.PostViewService, userService ser
 	return &PostViewHandler{postViewService: postViewService, userService: userService}
 }
 
+// RecordView records a view for logged-in users and anonymous visitors alike
+// (the route uses OptionalAuth, so a missing or invalid token is anonymous).
 func (h *PostViewHandler) RecordView(c *echo.Context) error {
 	postID := c.Param("id")
 	if !validator.IsValidUUID(postID) {
@@ -28,6 +30,7 @@ func (h *PostViewHandler) RecordView(c *echo.Context) error {
 		userID = uid
 	}
 
+	// RealIP honours HTTP_TRUST_PROXY; never read X-Forwarded-For directly.
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 

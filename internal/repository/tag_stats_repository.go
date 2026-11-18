@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"echobackend/internal/dto"
 
@@ -27,11 +28,12 @@ func (r *tagStatsRepository) GetTagPerformance(ctx context.Context, limit int) (
 		PostCount  int64
 		TotalViews int64
 		TotalLikes int64
+		LastUsedAt *time.Time
 	}
 	var tagRows []tagRow
 	if err := r.db.WithContext(ctx).
 		Table("tags").
-		Select("tags.id, tags.name, COUNT(posts_to_tags.post_id) AS post_count, COALESCE(SUM(posts.view_count), 0) AS total_views, COALESCE(SUM(posts.like_count), 0) AS total_likes").
+		Select("tags.id, tags.name, COUNT(posts_to_tags.post_id) AS post_count, COALESCE(SUM(posts.view_count), 0) AS total_views, COALESCE(SUM(posts.like_count), 0) AS total_likes, MAX(COALESCE(posts.published_at, posts.created_at)) AS last_used_at").
 		Joins("INNER JOIN posts_to_tags ON tags.id = posts_to_tags.tag_id").
 		Joins("INNER JOIN posts ON posts_to_tags.post_id = posts.id").
 		Where("posts.published = ?", true).

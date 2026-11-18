@@ -37,3 +37,7 @@ TagPerformance:
     postCount: {type: integer, format: int64}
     totalViews: {type: integer, format: int64}
     totalLikes: {type: integer, format: int64}
+    lastUsedAt:
+      type: [string, 'null']
+      format: date-time
+      description: Publish time of the newest published post with this tag.

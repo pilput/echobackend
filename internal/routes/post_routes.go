@@ -15,11 +15,15 @@ func (r *Routes) setupPostRoutes(api *echo.Group) {
 	// Creating posts is capped at the same 10/hour budget as reporting: cheap
 	// enough for legitimate authors, expensive enough to stop spam floods.
 	createPostRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "posts:create", 10, time.Hour)
+	// Views are open to anonymous visitors, so cap how many a single client
+	// can send (dedup already makes repeats no-ops; this limits DB lookups).
+	viewRateLimit := appmiddleware.FixedWindowRateLimiterWithCache(r.cache, "posts:view", 60, time.Minute)
 	{
 		posts.POST("", r.postHandler.CreatePost, r.authMiddleware.Auth(), createPostRateLimit)
 		posts.GET("/stats", r.postStatsHandler.GetStats, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/stats/engagement", r.postStatsHandler.GetEngagement, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/reports", r.postReportHandler.ListReportedPosts, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
+		posts.GET("/reports/stats", r.postReportHandler.GetReportStats, r.authMiddleware.Auth(), r.authMiddleware.AuthAdmin())
 		posts.GET("/random", r.postHandler.GetPostsRandom)
 		posts.GET("/trending", r.postHandler.GetPostsTrending)
 		posts.GET("/me", r.postHandler.GetMyPosts, r.authMiddleware.Auth())
@@ -52,7 +56,7 @@ func (r *Routes) setupPostRoutes(api *echo.Group) {
 		posts.DELETE("/:id/comments/:comment_id", r.commentHandler.DeleteComment, r.authMiddleware.Auth())
 
 		// View routes
-		posts.POST("/:id/view", r.postViewHandler.RecordView, r.authMiddleware.Auth()) // Only authenticated users
+		posts.POST("/:id/view", r.postViewHandler.RecordView, r.authMiddleware.OptionalAuth(), viewRateLimit)
 		posts.GET("/:id/views", r.postViewHandler.GetPostViews, r.authMiddleware.Auth())
 		posts.GET("/:id/view-stats", r.postViewHandler.GetPostViewStats)
 		posts.GET("/:id/viewed", r.postViewHandler.CheckUserViewed, r.authMiddleware.Auth())

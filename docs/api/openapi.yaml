@@ -178,6 +178,7 @@ paths:
   /api/posts/stats: {$ref: ./paths/post.yaml#/postsStats}
   /api/posts/stats/engagement: {$ref: ./paths/post.yaml#/postsStatsEngagement}
   /api/posts/reports: {$ref: ./paths/post.yaml#/postsReports}
+  /api/posts/reports/stats: {$ref: ./paths/post.yaml#/postsReportsStats}
   /api/posts/random: {$ref: ./paths/post.yaml#/postsRandom}
   /api/posts/trending: {$ref: ./paths/post.yaml#/postsTrending}
   /api/posts/me: {$ref: ./paths/post.yaml#/postsMe}

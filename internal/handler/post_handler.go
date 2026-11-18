@@ -299,14 +299,10 @@ func (h *PostHandler) GetMyPosts(c *echo.Context) error {
 
 	search := c.QueryParam("search")
 
-	var published *bool
-	if pub := c.QueryParam("published"); pub != "" {
-		if pubBool, err := strconv.ParseBool(pub); err == nil {
-			published = &pubBool
-		}
-	}
+	published := parseOptionalBool(c.QueryParam("published"))
+	hidden := parseOptionalBool(c.QueryParam("hidden"))
 
-	posts, total, err := h.postService.GetPostsByCreatedBy(c.Request().Context(), userID, offset, limit, search, published)
+	posts, total, err := h.postService.GetPostsByCreatedBy(c.Request().Context(), userID, offset, limit, search, published, hidden)
 	if err != nil {
 		return response.InternalServerError(c, "Failed to get posts", err)
 	}
@@ -453,4 +449,17 @@ func (h *PostHandler) GetPostsForSitemap(c *echo.Context) error {
 	}
 
 	return response.Success(c, "Successfully retrieved posts for sitemap", posts)
+}
+
+// parseOptionalBool parses a strconv.ParseBool query value; empty or invalid
+// values mean "no filter" (nil).
+func parseOptionalBool(raw string) *bool {
+	if raw == "" {
+		return nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil
+	}
+	return &v
 }

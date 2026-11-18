@@ -24,7 +24,7 @@ type PostRepository interface {
 	GetPostsTrending(ctx context.Context, limit int) ([]*model.Post, error)
 	GetPostByID(ctx context.Context, id string) (*model.Post, error)
 	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*model.Post, error)
-	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error)
+	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*model.Post, int64, error)
 	DeletePostByID(ctx context.Context, id string) error
 	DeletePostByOwner(ctx context.Context, id string, userID string) error
 	UpdatePost(ctx context.Context, id string, updates map[string]any) (*model.Post, error)
@@ -301,7 +301,7 @@ func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*mo
 	return posts, nil
 }
 
-func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error) {
+func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*model.Post, int64, error) {
 	var posts []*model.Post
 	var count int64
 
@@ -314,6 +314,14 @@ func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy stri
 		}
 		if published != nil {
 			q = q.Where("posts.published = ?", *published)
+		}
+		// hidden=true keeps only posts a moderator hid, hidden=false drops them.
+		if hidden != nil {
+			if *hidden {
+				q = q.Where("posts.hidden_at IS NOT NULL")
+			} else {
+				q = q.Where("posts.hidden_at IS NULL")
+			}
 		}
 		return q
 	}

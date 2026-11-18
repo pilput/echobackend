@@ -66,6 +66,14 @@ func (h *PostReportHandler) ListReportedPosts(c *echo.Context) error {
 	return response.SuccessWithMeta(c, "Reported posts fetched successfully", groups, meta)
 }
 
+func (h *PostReportHandler) GetReportStats(c *echo.Context) error {
+	stats, err := h.reportService.ReportStats(c.Request().Context())
+	if err != nil {
+		return response.InternalServerError(c, "Failed to fetch report stats", err)
+	}
+	return response.Success(c, "Report stats fetched successfully", stats)
+}
+
 func (h *PostReportHandler) ListPostReports(c *echo.Context) error {
 	limit, offset := ParsePaginationParams(c, 20)
 	reports, total, err := h.reportService.ListPostReports(c.Request().Context(), c.Param("id"), c.QueryParam("status"), limit, offset)

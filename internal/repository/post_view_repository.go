@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"time"
+
 	"echobackend/internal/dto"
 	"echobackend/internal/model"
 
@@ -13,6 +15,9 @@ type PostViewRepository interface {
 	GetViewsByPostID(ctx context.Context, postID string, limit, offset int) ([]*model.PostView, int64, error)
 	GetViewStats(ctx context.Context, postID string) (*dto.PostViewStats, error)
 	HasUserViewedPost(ctx context.Context, postID, userID string) (bool, error)
+	// HasAnonymousViewedSince reports whether an anonymous visitor with this
+	// IP + User-Agent viewed the post after since.
+	HasAnonymousViewedSince(ctx context.Context, postID, ipAddress, userAgent string, since time.Time) (bool, error)
 	GetViewByUserAndPost(ctx context.Context, postID, userID string) (*model.PostView, error)
 	GetViewTrendByAuthor(ctx context.Context, userID, startDate, endDate string) ([]struct {
 		Date  string
@@ -61,11 +66,13 @@ func (r *postViewRepository) GetViewStats(ctx context.Context, postID string) (*
 		return nil, err
 	}
 
-	// Unique views (distinct user_id where user_id is not null)
+	// Unique views: one viewer per user, or per anonymous IP + User-Agent
+	// (the identity RecordView deduplicates anonymous visitors on).
 	if err := r.db.WithContext(ctx).Model(&model.PostView{}).
-		Where("post_id = ? AND user_id IS NOT NULL", postID).
-		Distinct("user_id").
-		Count(&stats.UniqueViews).Error; err != nil {
+		Select(`COUNT(DISTINCT COALESCE(user_id::text,
+			'anon:' || COALESCE(ip_address, '') || '|' || COALESCE(user_agent, '')))`).
+		Where("post_id = ?", postID).
+		Scan(&stats.UniqueViews).Error; err != nil {
 		return nil, err
 	}
 
@@ -90,6 +97,16 @@ func (r *postViewRepository) HasUserViewedPost(ctx context.Context, postID, user
 	var count int64
 	err := r.db.WithContext(ctx).Model(&model.PostView{}).
 		Where("post_id = ? AND user_id = ?", postID, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *postViewRepository) HasAnonymousViewedSince(ctx context.Context, postID, ipAddress, userAgent string, since time.Time) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.PostView{}).
+		Where("post_id = ? AND user_id IS NULL AND ip_address = ? AND user_agent = ? AND created_at > ?",
+			postID, ipAddress, userAgent, since).
+		Limit(1).
 		Count(&count).Error
 	return count > 0, err
 }

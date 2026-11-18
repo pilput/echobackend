@@ -25,6 +25,7 @@ type PostReportRepository interface {
 	// reports for hide/dismiss.
 	Moderate(ctx context.Context, postID, adminID, action string, note *string) error
 	ListActionsByPost(ctx context.Context, postID string, limit, offset int) ([]*model.PostModerationAction, int64, error)
+	Stats(ctx context.Context) (*dto.ReportStatsResponse, error)
 }
 
 type postReportRepository struct {
@@ -212,4 +213,22 @@ func (r *postReportRepository) ListActionsByPost(ctx context.Context, postID str
 		return nil, 0, fmt.Errorf("failed to list moderation actions: %w", err)
 	}
 	return actions, total, nil
+}
+
+func (r *postReportRepository) Stats(ctx context.Context) (*dto.ReportStatsResponse, error) {
+	var stats dto.ReportStatsResponse
+	err := r.db.WithContext(ctx).Raw(`SELECT
+		(SELECT COUNT(DISTINCT post_id) FROM post_reports WHERE status = 'pending') AS pending,
+		(SELECT COUNT(DISTINCT post_id) FROM post_reports WHERE status = 'resolved') AS resolved,
+		(SELECT COUNT(DISTINCT post_id) FROM post_reports WHERE status = 'dismissed') AS dismissed,
+		(SELECT COUNT(*) FROM posts JOIN users ON users.id = posts.created_by
+			WHERE posts.hidden_at IS NOT NULL AND users.deleted_at IS NULL) AS hidden_posts,
+		(SELECT (AVG(EXTRACT(EPOCH FROM (a.created_at - r.created_at))) / 3600)::float8
+			FROM post_reports r JOIN post_moderation_actions a ON a.id = r.action_id
+			WHERE a.created_at >= NOW() - INTERVAL '30 days') AS avg_response_hours`).
+		Scan(&stats).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch report stats: %w", err)
+	}
+	return &stats, nil
 }

@@ -201,6 +201,10 @@ UserStatsResponse:
     activeUsers: {type: integer, format: int64}
     newUsersToday: {type: integer, format: int64}
     activeUsersThisWeek: {type: integer, format: int64}
+    adminUsers:
+      type: integer
+      format: int64
+      description: Non-deleted super admins.
     topContributors:
       type: array
       items: {$ref: '#/TopContributor'}

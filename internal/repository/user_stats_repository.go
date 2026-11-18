@@ -13,6 +13,7 @@ import (
 type UserStatsRepository interface {
 	GetUserCounts(ctx context.Context, startDate, endDate string) (totalUsers, newUsers, activeUsers int64, err error)
 	GetSnapshotCounts(ctx context.Context) (newUsersToday, activeUsersThisWeek int64, err error)
+	CountAdminUsers(ctx context.Context) (int64, error)
 	GetTopContributors(ctx context.Context, limit int) ([]dto.TopContributor, error)
 	GetUserGrowthTrendData(ctx context.Context, start, end time.Time) (cumulativeBefore int64, dailyCounts map[string]int64, err error)
 }
@@ -60,6 +61,14 @@ func (r *userStatsRepository) GetUserCounts(ctx context.Context, startDate, endD
 	}
 
 	return
+}
+
+// CountAdminUsers counts non-deleted super admins (Model() applies the
+// soft-delete scope).
+func (r *userStatsRepository) CountAdminUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).Where("is_super_admin = ?", true).Count(&count).Error
+	return count, err
 }
 
 func (r *userStatsRepository) GetTopContributors(ctx context.Context, limit int) ([]dto.TopContributor, error) {

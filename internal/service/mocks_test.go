@@ -107,7 +107,7 @@ type mockPostRepo struct {
 	getPostsRandomFn            func(ctx context.Context, limit int) ([]*model.Post, error)
 	getPostsTrendingFn          func(ctx context.Context, limit int) ([]*model.Post, error)
 	getPostBySlugAndUsernameFn  func(ctx context.Context, slug string, username string) (*model.Post, error)
-	getPostsByCreatedByFn       func(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error)
+	getPostsByCreatedByFn       func(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*model.Post, int64, error)
 	deletePostByIDFn            func(ctx context.Context, id string) error
 	deletePostByOwnerFn         func(ctx context.Context, id string, userID string) error
 	updatePostWithTagsByOwnerFn func(ctx context.Context, id string, userID string, updates map[string]any, tags []model.Tag) (*model.Post, error)
@@ -173,9 +173,9 @@ func (m *mockPostRepo) GetPostBySlugAndUsername(ctx context.Context, slug string
 	}
 	panic("GetPostBySlugAndUsername not stubbed")
 }
-func (m *mockPostRepo) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published *bool) ([]*model.Post, int64, error) {
+func (m *mockPostRepo) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*model.Post, int64, error) {
 	if m.getPostsByCreatedByFn != nil {
-		return m.getPostsByCreatedByFn(ctx, createdBy, offset, limit, search, published)
+		return m.getPostsByCreatedByFn(ctx, createdBy, offset, limit, search, published, hidden)
 	}
 	panic("GetPostsByCreatedBy not stubbed")
 }
@@ -277,6 +277,7 @@ type mockPostViewRepo struct {
 	countViewsByAuthorBeforeFn func(ctx context.Context, userID, beforeDate string) (int64, error)
 	createViewFn               func(ctx context.Context, view *model.PostView) error
 	hasUserViewedPostFn        func(ctx context.Context, postID, userID string) (bool, error)
+	hasAnonymousViewedSinceFn  func(ctx context.Context, postID, ipAddress, userAgent string, since time.Time) (bool, error)
 	getViewStatsFn             func(ctx context.Context, postID string) (*dto.PostViewStats, error)
 }
 
@@ -300,6 +301,12 @@ func (m *mockPostViewRepo) HasUserViewedPost(ctx context.Context, postID, userID
 		return m.hasUserViewedPostFn(ctx, postID, userID)
 	}
 	panic("HasUserViewedPost not stubbed")
+}
+func (m *mockPostViewRepo) HasAnonymousViewedSince(ctx context.Context, postID, ipAddress, userAgent string, since time.Time) (bool, error) {
+	if m.hasAnonymousViewedSinceFn != nil {
+		return m.hasAnonymousViewedSinceFn(ctx, postID, ipAddress, userAgent, since)
+	}
+	panic("HasAnonymousViewedSince not stubbed")
 }
 func (m *mockPostViewRepo) GetViewByUserAndPost(ctx context.Context, postID, userID string) (*model.PostView, error) {
 	panic("GetViewByUserAndPost not stubbed")
@@ -667,4 +674,8 @@ func (m *mockPostReportRepo) ListActionsByPost(ctx context.Context, postID strin
 		return m.listActionsByPostFn(ctx, postID, limit, offset)
 	}
 	panic("ListActionsByPost not stubbed")
+}
+
+func (m *mockPostReportRepo) Stats(ctx context.Context) (*dto.ReportStatsResponse, error) {
+	panic("Stats not stubbed")
 }

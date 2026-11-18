@@ -31,6 +31,11 @@ func (s *userStatsService) GetUserStats(ctx context.Context, q dto.DateRangeQuer
 		return nil, err
 	}
 
+	adminUsers, err := s.repo.CountAdminUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	topContributors, err := s.repo.GetTopContributors(ctx, limit)
 	if err != nil {
 		return nil, err
@@ -47,6 +52,7 @@ func (s *userStatsService) GetUserStats(ctx context.Context, q dto.DateRangeQuer
 		ActiveUsers:         activeUsers,
 		NewUsersToday:       newUsersToday,
 		ActiveUsersThisWeek: activeUsersThisWeek,
+		AdminUsers:          adminUsers,
 		TopContributors:     topContributors,
 		GrowthTrend:         growthTrend,
 	}, nil
