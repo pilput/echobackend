@@ -1,4 +1,4 @@
-package service
+package aichat
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"echobackend/config"
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
 	"echobackend/internal/platform/openrouter"
 )
 
@@ -21,9 +19,9 @@ type ArticleGenerationService interface {
 	// GenerateArticleStream streams the article. The chunk channel delivers
 	// text deltas; afterwards exactly one of complete or errCh carries a value,
 	// then all three channels close. When the service is not Available it
-	// returns apperrors.ErrAIArticleGenerationUnavailable and nil channels without
+	// returns ErrAIArticleGenerationUnavailable and nil channels without
 	// calling OpenRouter.
-	GenerateArticleStream(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error)
+	GenerateArticleStream(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error)
 }
 
 // articleTemperature is fixed: the endpoint exposes no temperature control.
@@ -80,15 +78,15 @@ func (s *articleGenerationService) defaultModel() string {
 	return strings.TrimSpace(s.config.OpenRouter.DefaultModel)
 }
 
-func (s *articleGenerationService) GenerateArticleStream(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error) {
+func (s *articleGenerationService) GenerateArticleStream(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error) {
 	if !s.Available() {
-		return nil, nil, nil, apperrors.ErrAIArticleGenerationUnavailable
+		return nil, nil, nil, ErrAIArticleGenerationUnavailable
 	}
 
 	model := s.defaultModel()
 	upstreamChunks, usageCh, upstreamErrCh := s.openRouter.GenerateStream(ctx, buildArticleMessages(req), &model, articleTemperature)
 	outChunks := make(chan string)
-	complete := make(chan dto.GeneratedArticle, 1)
+	complete := make(chan GeneratedArticle, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -121,17 +119,17 @@ func (s *articleGenerationService) GenerateArticleStream(ctx context.Context, re
 			<-usageCh
 		}
 		if content.Len() == 0 {
-			errCh <- apperrors.ErrAIEmptyResponse
+			errCh <- ErrAIEmptyResponse
 			return
 		}
-		complete <- dto.GeneratedArticle{Content: content.String(), Model: model}
+		complete <- GeneratedArticle{Content: content.String(), Model: model}
 	}()
 
 	return outChunks, complete, errCh, nil
 }
 
 // buildArticleMessages returns the system + user messages sent to OpenRouter.
-func buildArticleMessages(req *dto.GenerateArticleRequest) []openrouter.Message {
+func buildArticleMessages(req *GenerateArticleRequest) []openrouter.Message {
 	return []openrouter.Message{
 		{Role: "system", Content: articleSystemPrompt},
 		{Role: "user", Content: buildArticleUserPrompt(req)},
@@ -140,7 +138,7 @@ func buildArticleMessages(req *dto.GenerateArticleRequest) []openrouter.Message 
 
 // buildArticleUserPrompt renders the user message; unknown or blank tone and
 // length fall back to the defaults, and a blank title is left out.
-func buildArticleUserPrompt(req *dto.GenerateArticleRequest) string {
+func buildArticleUserPrompt(req *GenerateArticleRequest) string {
 	tone, ok := articleToneDescriptions[strings.TrimSpace(req.Tone)]
 	if !ok {
 		tone = articleToneDescriptions[defaultArticleTone]

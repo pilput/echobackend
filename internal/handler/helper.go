@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/middleware"
@@ -51,13 +50,6 @@ const MsgInvalidUserID = "Invalid user ID"
 // segment that is not a UUID.
 const MsgInvalidNotificationID = "Invalid notification ID"
 
-// MsgInvalidConversationID / MsgInvalidMessageID are the 400 messages for chat
-// path segments (:id, :conversationId, :messageId) that are not UUIDs.
-const (
-	MsgInvalidConversationID = "Invalid conversation ID"
-	MsgInvalidMessageID      = "Invalid message ID"
-)
-
 // respondInvalidUserID answers a malformed user :id path parameter with 400.
 func respondInvalidUserID(c *echo.Context) error {
 	return response.BadRequest(c, MsgInvalidUserID, apperrors.ErrInvalidUserID)
@@ -92,24 +84,7 @@ func respondError(c *echo.Context, message string, err error) error {
 	}
 }
 
+// ParsePaginationParams delegates to response.ParsePaginationParams.
 func ParsePaginationParams(c *echo.Context, defaultLimit int) (limit, offset int) {
-	limit = defaultLimit
-	offset = 0
-
-	if l := c.QueryParam("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-	if limit > 100 {
-		limit = 100
-	}
-
-	if o := c.QueryParam("offset"); o != "" {
-		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
-
-	return limit, offset
+	return response.ParsePaginationParams(c, defaultLimit)
 }

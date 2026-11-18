@@ -1,4 +1,4 @@
-package service
+package aichat
 
 import (
 	"context"
@@ -8,74 +8,71 @@ import (
 	"testing"
 
 	"echobackend/config"
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
 	"echobackend/internal/platform/openrouter"
 )
 
 type mockChatConversationRepo struct {
-	getConversationByIDFn            func(ctx context.Context, id string) (*model.ChatConversation, error)
-	createMessageFn                  func(ctx context.Context, message *model.ChatMessage) (*model.ChatMessage, error)
-	updateConversationFn             func(ctx context.Context, id string, updates map[string]any) (*model.ChatConversation, error)
-	getMessagesByConversationIDAscFn func(ctx context.Context, conversationID, userID string) ([]*model.ChatMessage, error)
-	getUserConversationsFn           func(ctx context.Context, userID string, offset int, limit int) ([]*model.ChatConversation, int64, error)
-	getMessageByIDFn                 func(ctx context.Context, id, userID string) (*model.ChatMessage, error)
+	getConversationByIDFn            func(ctx context.Context, id string) (*ChatConversation, error)
+	createMessageFn                  func(ctx context.Context, message *ChatMessage) (*ChatMessage, error)
+	updateConversationFn             func(ctx context.Context, id string, updates map[string]any) (*ChatConversation, error)
+	getMessagesByConversationIDAscFn func(ctx context.Context, conversationID, userID string) ([]*ChatMessage, error)
+	getUserConversationsFn           func(ctx context.Context, userID string, offset int, limit int) ([]*ChatConversation, int64, error)
+	getMessageByIDFn                 func(ctx context.Context, id, userID string) (*ChatMessage, error)
 	deleteMessageFn                  func(ctx context.Context, id, userID string) error
 }
 
-func (m *mockChatConversationRepo) CreateConversation(ctx context.Context, conversation *model.ChatConversation) (*model.ChatConversation, error) {
+func (m *mockChatConversationRepo) CreateConversation(ctx context.Context, conversation *ChatConversation) (*ChatConversation, error) {
 	return conversation, nil
 }
 
-func (m *mockChatConversationRepo) GetConversationByID(ctx context.Context, id string) (*model.ChatConversation, error) {
+func (m *mockChatConversationRepo) GetConversationByID(ctx context.Context, id string) (*ChatConversation, error) {
 	if m.getConversationByIDFn != nil {
 		return m.getConversationByIDFn(ctx, id)
 	}
 	return nil, nil
 }
 
-func (m *mockChatConversationRepo) GetConversationsByUserID(ctx context.Context, userID string, offset int, limit int) ([]*model.ChatConversation, int64, error) {
+func (m *mockChatConversationRepo) GetConversationsByUserID(ctx context.Context, userID string, offset int, limit int) ([]*ChatConversation, int64, error) {
 	return nil, 0, nil
 }
 
-func (m *mockChatConversationRepo) UpdateConversation(ctx context.Context, id string, updates map[string]any) (*model.ChatConversation, error) {
+func (m *mockChatConversationRepo) UpdateConversation(ctx context.Context, id string, updates map[string]any) (*ChatConversation, error) {
 	if m.updateConversationFn != nil {
 		return m.updateConversationFn(ctx, id, updates)
 	}
-	return &model.ChatConversation{ID: id}, nil
+	return &ChatConversation{ID: id}, nil
 }
 
 func (m *mockChatConversationRepo) DeleteConversation(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockChatConversationRepo) GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*model.ChatConversation, int64, error) {
+func (m *mockChatConversationRepo) GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*ChatConversation, int64, error) {
 	if m.getUserConversationsFn != nil {
 		return m.getUserConversationsFn(ctx, userID, offset, limit)
 	}
 	return nil, 0, nil
 }
 
-func (m *mockChatConversationRepo) CreateMessage(ctx context.Context, message *model.ChatMessage) (*model.ChatMessage, error) {
+func (m *mockChatConversationRepo) CreateMessage(ctx context.Context, message *ChatMessage) (*ChatMessage, error) {
 	if m.createMessageFn != nil {
 		return m.createMessageFn(ctx, message)
 	}
 	return message, nil
 }
 
-func (m *mockChatConversationRepo) GetMessagesByConversationID(ctx context.Context, conversationID, userID string) ([]*model.ChatMessage, error) {
+func (m *mockChatConversationRepo) GetMessagesByConversationID(ctx context.Context, conversationID, userID string) ([]*ChatMessage, error) {
 	return nil, nil
 }
 
-func (m *mockChatConversationRepo) GetMessagesByConversationIDAsc(ctx context.Context, conversationID, userID string) ([]*model.ChatMessage, error) {
+func (m *mockChatConversationRepo) GetMessagesByConversationIDAsc(ctx context.Context, conversationID, userID string) ([]*ChatMessage, error) {
 	if m.getMessagesByConversationIDAscFn != nil {
 		return m.getMessagesByConversationIDAscFn(ctx, conversationID, userID)
 	}
 	return nil, nil
 }
 
-func (m *mockChatConversationRepo) GetMessageByID(ctx context.Context, id, userID string) (*model.ChatMessage, error) {
+func (m *mockChatConversationRepo) GetMessageByID(ctx context.Context, id, userID string) (*ChatMessage, error) {
 	if m.getMessageByIDFn != nil {
 		return m.getMessageByIDFn(ctx, id, userID)
 	}
@@ -198,14 +195,14 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 	)
 
 	repo := &mockChatConversationRepo{
-		getConversationByIDFn: func(ctx context.Context, id string) (*model.ChatConversation, error) {
-			return &model.ChatConversation{
+		getConversationByIDFn: func(ctx context.Context, id string) (*ChatConversation, error) {
+			return &ChatConversation{
 				ID:     conversationID,
 				UserID: userID,
 				Title:  "Existing conversation",
 			}, nil
 		},
-		createMessageFn: func(ctx context.Context, message *model.ChatMessage) (*model.ChatMessage, error) {
+		createMessageFn: func(ctx context.Context, message *ChatMessage) (*ChatMessage, error) {
 			if message.Role == "assistant" {
 				message.ID = "assistant-1"
 				return message, nil
@@ -213,8 +210,8 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 			message.ID = "user-1"
 			return message, nil
 		},
-		getMessagesByConversationIDAscFn: func(ctx context.Context, conversationID, userID string) ([]*model.ChatMessage, error) {
-			return []*model.ChatMessage{{
+		getMessagesByConversationIDAscFn: func(ctx context.Context, conversationID, userID string) ([]*ChatMessage, error) {
+			return []*ChatMessage{{
 				ID:             "user-1",
 				ConversationID: conversationID,
 				UserID:         userID,
@@ -244,7 +241,7 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 
 	svc := NewChatConversationService(repo, openRouter, aiTestConfig())
 
-	result, chunks, complete, errCh, err := svc.CreateStreamingMessage(context.Background(), userID, conversationID, &dto.CreateChatMessageRequest{
+	result, chunks, complete, errCh, err := svc.CreateStreamingMessage(context.Background(), userID, conversationID, &CreateChatMessageRequest{
 		Content: "Hello",
 	})
 	if err != nil {
@@ -286,11 +283,11 @@ func aiTestConfig() *config.Config {
 
 func ownedConversationRepo(userID, conversationID, title string) *mockChatConversationRepo {
 	return &mockChatConversationRepo{
-		getConversationByIDFn: func(ctx context.Context, id string) (*model.ChatConversation, error) {
-			return &model.ChatConversation{ID: conversationID, UserID: userID, Title: title}, nil
+		getConversationByIDFn: func(ctx context.Context, id string) (*ChatConversation, error) {
+			return &ChatConversation{ID: conversationID, UserID: userID, Title: title}, nil
 		},
-		getMessagesByConversationIDAscFn: func(ctx context.Context, conversationID, userID string) ([]*model.ChatMessage, error) {
-			return []*model.ChatMessage{{ID: "m-1", ConversationID: conversationID, UserID: userID, Role: "user", Content: "Hello"}}, nil
+		getMessagesByConversationIDAscFn: func(ctx context.Context, conversationID, userID string) ([]*ChatMessage, error) {
+			return []*ChatMessage{{ID: "m-1", ConversationID: conversationID, UserID: userID, Role: "user", Content: "Hello"}}, nil
 		},
 	}
 }
@@ -335,9 +332,9 @@ func TestCreateMessage_AIUnavailableStoresUserMessageOnly(t *testing.T) {
 
 	repo := ownedConversationRepo("user-1", "conv-1", "New conversation")
 	var updates []map[string]any
-	repo.updateConversationFn = func(ctx context.Context, id string, u map[string]any) (*model.ChatConversation, error) {
+	repo.updateConversationFn = func(ctx context.Context, id string, u map[string]any) (*ChatConversation, error) {
 		updates = append(updates, u)
-		return &model.ChatConversation{ID: id}, nil
+		return &ChatConversation{ID: id}, nil
 	}
 	openRouter := &mockOpenRouterService{
 		generateResponseFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (*openrouter.Response, error) {
@@ -349,7 +346,7 @@ func TestCreateMessage_AIUnavailableStoresUserMessageOnly(t *testing.T) {
 		OpenRouter: config.OpenRouterConfig{APIKey: "  ", DefaultModel: "openrouter/free"},
 	})
 
-	got, err := svc.CreateMessage(context.Background(), "user-1", "conv-1", &dto.CreateChatMessageRequest{Content: "Hello"})
+	got, err := svc.CreateMessage(context.Background(), "user-1", "conv-1", &CreateChatMessageRequest{Content: "Hello"})
 	if err != nil {
 		t.Fatalf("CreateMessage() error = %v", err)
 	}
@@ -378,7 +375,7 @@ func TestCreateStreamingMessage_AIUnavailableReturnsFallback(t *testing.T) {
 		OpenRouter: config.OpenRouterConfig{DefaultModel: "openrouter/free"},
 	})
 
-	result, chunks, _, _, err := svc.CreateStreamingMessage(context.Background(), "user-1", "conv-1", &dto.CreateChatMessageRequest{Content: "Hello"})
+	result, chunks, _, _, err := svc.CreateStreamingMessage(context.Background(), "user-1", "conv-1", &CreateChatMessageRequest{Content: "Hello"})
 	if err != nil {
 		t.Fatalf("CreateStreamingMessage() error = %v", err)
 	}
@@ -394,7 +391,7 @@ func TestCreateStreamingMessage_SaveFailureSendsGenericError(t *testing.T) {
 	t.Parallel()
 
 	repo := ownedConversationRepo("user-1", "conv-1", "Existing conversation")
-	repo.createMessageFn = func(ctx context.Context, message *model.ChatMessage) (*model.ChatMessage, error) {
+	repo.createMessageFn = func(ctx context.Context, message *ChatMessage) (*ChatMessage, error) {
 		if message.Role == "assistant" {
 			return nil, errors.New(`pq: relation "custom.chat_messages" does not exist`)
 		}
@@ -414,7 +411,7 @@ func TestCreateStreamingMessage_SaveFailureSendsGenericError(t *testing.T) {
 	}
 	svc := NewChatConversationService(repo, openRouter, aiTestConfig())
 
-	_, chunks, complete, errCh, err := svc.CreateStreamingMessage(context.Background(), "user-1", "conv-1", &dto.CreateChatMessageRequest{Content: "Hello"})
+	_, chunks, complete, errCh, err := svc.CreateStreamingMessage(context.Background(), "user-1", "conv-1", &CreateChatMessageRequest{Content: "Hello"})
 	if err != nil {
 		t.Fatalf("CreateStreamingMessage() error = %v", err)
 	}
@@ -426,7 +423,7 @@ func TestCreateStreamingMessage_SaveFailureSendsGenericError(t *testing.T) {
 		t.Fatalf("chunks = %d, want 1", drained)
 	}
 	streamErr := <-errCh
-	if !errors.Is(streamErr, apperrors.ErrChatAIResponseSaveFailed) {
+	if !errors.Is(streamErr, ErrChatAIResponseSaveFailed) {
 		t.Fatalf("stream error = %v, want ErrChatAIResponseSaveFailed", streamErr)
 	}
 	if _, ok := <-complete; ok {
@@ -452,20 +449,20 @@ func TestUpdateConversation_WhitespaceTitleIsIgnored(t *testing.T) {
 
 	repo := ownedConversationRepo("user-1", "conv-1", "Old title")
 	var got map[string]any
-	repo.updateConversationFn = func(ctx context.Context, id string, u map[string]any) (*model.ChatConversation, error) {
+	repo.updateConversationFn = func(ctx context.Context, id string, u map[string]any) (*ChatConversation, error) {
 		got = u
-		return &model.ChatConversation{ID: id, Title: "Old title"}, nil
+		return &ChatConversation{ID: id, Title: "Old title"}, nil
 	}
 	svc := NewChatConversationService(repo, nil, nil)
 
-	if _, err := svc.UpdateConversation(context.Background(), "conv-1", "user-1", &dto.UpdateChatConversationRequest{Title: "   "}); err != nil {
+	if _, err := svc.UpdateConversation(context.Background(), "conv-1", "user-1", &UpdateChatConversationRequest{Title: "   "}); err != nil {
 		t.Fatalf("UpdateConversation() error = %v", err)
 	}
 	if _, ok := got["title"]; ok {
 		t.Fatalf("whitespace-only title must not be stored: %#v", got)
 	}
 
-	if _, err := svc.UpdateConversation(context.Background(), "conv-1", "user-1", &dto.UpdateChatConversationRequest{Title: " New "}); err != nil {
+	if _, err := svc.UpdateConversation(context.Background(), "conv-1", "user-1", &UpdateChatConversationRequest{Title: " New "}); err != nil {
 		t.Fatalf("UpdateConversation() error = %v", err)
 	}
 	if got["title"] != " New " {
@@ -476,32 +473,32 @@ func TestUpdateConversation_WhitespaceTitleIsIgnored(t *testing.T) {
 func TestGetMessage_ChecksParentConversation(t *testing.T) {
 	t.Parallel()
 
-	message := &model.ChatMessage{ID: "m-1", ConversationID: "conv-1", UserID: "user-1"}
+	message := &ChatMessage{ID: "m-1", ConversationID: "conv-1", UserID: "user-1"}
 	tests := []struct {
 		name    string
 		convErr error
 		owner   string
 		wantErr error
 	}{
-		{name: "soft-deleted conversation", convErr: apperrors.ErrChatConversationNotFound, wantErr: apperrors.ErrChatConversationNotFound},
-		{name: "other owner", owner: "user-2", wantErr: apperrors.ErrConversationNotOwned},
+		{name: "soft-deleted conversation", convErr: ErrChatConversationNotFound, wantErr: ErrChatConversationNotFound},
+		{name: "other owner", owner: "user-2", wantErr: ErrConversationNotOwned},
 		{name: "owned", owner: "user-1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &mockChatConversationRepo{
-				getMessageByIDFn: func(ctx context.Context, id, userID string) (*model.ChatMessage, error) {
+				getMessageByIDFn: func(ctx context.Context, id, userID string) (*ChatMessage, error) {
 					return message, nil
 				},
-				getConversationByIDFn: func(ctx context.Context, id string) (*model.ChatConversation, error) {
+				getConversationByIDFn: func(ctx context.Context, id string) (*ChatConversation, error) {
 					if id != "conv-1" {
 						t.Fatalf("conversation lookup id = %q, want conv-1", id)
 					}
 					if tt.convErr != nil {
 						return nil, tt.convErr
 					}
-					return &model.ChatConversation{ID: id, UserID: tt.owner}, nil
+					return &ChatConversation{ID: id, UserID: tt.owner}, nil
 				},
 			}
 			svc := NewChatConversationService(repo, nil, nil)
@@ -516,26 +513,26 @@ func TestGetMessage_ChecksParentConversation(t *testing.T) {
 func TestDeleteMessage_ChecksConversationAndBumpsUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	message := &model.ChatMessage{ID: "m-1", ConversationID: "conv-1", UserID: "user-1"}
+	message := &ChatMessage{ID: "m-1", ConversationID: "conv-1", UserID: "user-1"}
 	deleted := false
 	var touched map[string]any
 	repo := &mockChatConversationRepo{
-		getMessageByIDFn: func(ctx context.Context, id, userID string) (*model.ChatMessage, error) {
+		getMessageByIDFn: func(ctx context.Context, id, userID string) (*ChatMessage, error) {
 			return message, nil
 		},
-		getConversationByIDFn: func(ctx context.Context, id string) (*model.ChatConversation, error) {
-			return &model.ChatConversation{ID: id, UserID: "user-1"}, nil
+		getConversationByIDFn: func(ctx context.Context, id string) (*ChatConversation, error) {
+			return &ChatConversation{ID: id, UserID: "user-1"}, nil
 		},
 		deleteMessageFn: func(ctx context.Context, id, userID string) error {
 			deleted = true
 			return nil
 		},
-		updateConversationFn: func(ctx context.Context, id string, u map[string]any) (*model.ChatConversation, error) {
+		updateConversationFn: func(ctx context.Context, id string, u map[string]any) (*ChatConversation, error) {
 			if id != "conv-1" {
 				t.Fatalf("touched conversation %q, want conv-1", id)
 			}
 			touched = u
-			return &model.ChatConversation{ID: id}, nil
+			return &ChatConversation{ID: id}, nil
 		},
 	}
 	svc := NewChatConversationService(repo, nil, nil)
@@ -552,11 +549,11 @@ func TestDeleteMessage_ChecksConversationAndBumpsUpdatedAt(t *testing.T) {
 	}
 
 	// A message in a soft-deleted conversation is not deletable.
-	repo.getConversationByIDFn = func(ctx context.Context, id string) (*model.ChatConversation, error) {
-		return nil, apperrors.ErrChatConversationNotFound
+	repo.getConversationByIDFn = func(ctx context.Context, id string) (*ChatConversation, error) {
+		return nil, ErrChatConversationNotFound
 	}
 	deleted = false
-	if _, err := svc.DeleteMessage(context.Background(), "m-1", "user-1"); !errors.Is(err, apperrors.ErrChatConversationNotFound) {
+	if _, err := svc.DeleteMessage(context.Background(), "m-1", "user-1"); !errors.Is(err, ErrChatConversationNotFound) {
 		t.Fatalf("DeleteMessage() error = %v, want ErrChatConversationNotFound", err)
 	}
 	if deleted {

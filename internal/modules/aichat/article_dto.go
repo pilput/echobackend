@@ -1,4 +1,4 @@
-package dto
+package aichat
 
 // GenerateArticleRequest is the body of POST /api/ai/generate-article. The
 // handler trims Prompt and Title before validation. There is deliberately no

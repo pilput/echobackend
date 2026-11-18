@@ -1,15 +1,13 @@
-package dto
+package aichat
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"echobackend/internal/model"
 )
 
 func TestChatConversationDetailAlwaysHasChatMessagesArray(t *testing.T) {
-	conv := &model.ChatConversation{ID: "c-1", UserID: "u-1", Title: "Empty"}
+	conv := &ChatConversation{ID: "c-1", UserID: "u-1", Title: "Empty"}
 
 	raw, err := json.Marshal(ChatConversationToDetailResponse(conv))
 	if err != nil {

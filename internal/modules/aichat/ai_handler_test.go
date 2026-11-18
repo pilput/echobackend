@@ -1,15 +1,13 @@
-package handler
+package aichat
 
 import (
 	"context"
+	"echobackend/pkg/response"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"testing"
-
-	"echobackend/internal/dto"
-	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
 )
@@ -18,22 +16,22 @@ import (
 // "service must not be called" assertion.
 type mockArticleService struct {
 	available  bool
-	generateFn func(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error)
+	generateFn func(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error)
 }
 
 func (m *mockArticleService) Available() bool { return m.available }
 
-func (m *mockArticleService) GenerateArticleStream(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error) {
+func (m *mockArticleService) GenerateArticleStream(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error) {
 	return m.generateFn(ctx, req)
 }
 
-func articleStreamWith(chunks []string, streamErr error, done *dto.GeneratedArticle) (<-chan string, <-chan dto.GeneratedArticle, <-chan error) {
+func articleStreamWith(chunks []string, streamErr error, done *GeneratedArticle) (<-chan string, <-chan GeneratedArticle, <-chan error) {
 	chunkCh := make(chan string, len(chunks))
 	for _, c := range chunks {
 		chunkCh <- c
 	}
 	close(chunkCh)
-	complete := make(chan dto.GeneratedArticle, 1)
+	complete := make(chan GeneratedArticle, 1)
 	errCh := make(chan error, 1)
 	if streamErr != nil {
 		errCh <- streamErr
@@ -50,9 +48,9 @@ const generateArticlePath = "/api/ai/generate-article"
 func serveAIRoute(t *testing.T, svc *mockArticleService, body, actorID string) (int, string, response.APIResponse) {
 	t.Helper()
 	h := NewAIHandler(svc)
-	rec := serveAuthRoute(t, func(e *echo.Echo, _ *AuthHandler) {
+	rec := serveRoute(t, func(e *echo.Echo) {
 		e.POST(generateArticlePath, h.GenerateArticle)
-	}, nil, http.MethodPost, generateArticlePath, body, actorID)
+	}, http.MethodPost, generateArticlePath, body, actorID)
 	raw := rec.Body.String()
 	var out response.APIResponse
 	_ = json.Unmarshal([]byte(raw), &out)
@@ -72,12 +70,12 @@ func assertInOrder(t *testing.T, raw string, want []string) {
 }
 
 func TestGenerateArticleStreamsChunksThenComplete(t *testing.T) {
-	var gotReq dto.GenerateArticleRequest
+	var gotReq GenerateArticleRequest
 	svc := &mockArticleService{
 		available: true,
-		generateFn: func(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error) {
+		generateFn: func(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error) {
 			gotReq = *req
-			chunks, complete, errCh := articleStreamWith([]string{"<h1>A</h1>", "<p>b</p>"}, nil, &dto.GeneratedArticle{Content: "<h1>A</h1><p>b</p>", Model: "test-model"})
+			chunks, complete, errCh := articleStreamWith([]string{"<h1>A</h1>", "<p>b</p>"}, nil, &GeneratedArticle{Content: "<h1>A</h1><p>b</p>", Model: "test-model"})
 			return chunks, complete, errCh, nil
 		},
 	}
@@ -100,7 +98,7 @@ func TestGenerateArticleStreamsChunksThenComplete(t *testing.T) {
 func TestGenerateArticleStreamEndsWithDoneAfterError(t *testing.T) {
 	svc := &mockArticleService{
 		available: true,
-		generateFn: func(ctx context.Context, req *dto.GenerateArticleRequest) (<-chan string, <-chan dto.GeneratedArticle, <-chan error, error) {
+		generateFn: func(ctx context.Context, req *GenerateArticleRequest) (<-chan string, <-chan GeneratedArticle, <-chan error, error) {
 			chunks, complete, errCh := articleStreamWith([]string{"x"}, errors.New(`OpenRouter API error: 429 {"error":{"message":"Rate limited"}}`), nil)
 			return chunks, complete, errCh, nil
 		},

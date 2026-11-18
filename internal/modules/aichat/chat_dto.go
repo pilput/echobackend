@@ -1,7 +1,6 @@
-package dto
+package aichat
 
 import (
-	"echobackend/internal/model"
 	"time"
 )
 
@@ -42,7 +41,7 @@ type ChatMessageResponse struct {
 	TotalTokens      int       `json:"total_tokens"`
 }
 
-func ChatMessageToResponse(m *model.ChatMessage) *ChatMessageResponse {
+func ChatMessageToResponse(m *ChatMessage) *ChatMessageResponse {
 	if m == nil {
 		return nil
 	}
@@ -76,7 +75,7 @@ type ChatConversationResponse struct {
 	ChatMessages *[]*ChatMessageResponse `json:"chat_messages,omitempty"`
 }
 
-func ChatConversationToResponse(c *model.ChatConversation) *ChatConversationResponse {
+func ChatConversationToResponse(c *ChatConversation) *ChatConversationResponse {
 	if c == nil {
 		return nil
 	}
@@ -92,7 +91,7 @@ func ChatConversationToResponse(c *model.ChatConversation) *ChatConversationResp
 	}
 }
 
-func ChatConversationToDetailResponse(c *model.ChatConversation) *ChatConversationResponse {
+func ChatConversationToDetailResponse(c *ChatConversation) *ChatConversationResponse {
 	resp := ChatConversationToResponse(c)
 	if resp == nil {
 		return nil
@@ -102,7 +101,7 @@ func ChatConversationToDetailResponse(c *model.ChatConversation) *ChatConversati
 	return resp
 }
 
-func chatMessagesToResponses(messages []model.ChatMessage) []*ChatMessageResponse {
+func chatMessagesToResponses(messages []ChatMessage) []*ChatMessageResponse {
 	if len(messages) == 0 {
 		return []*ChatMessageResponse{}
 	}

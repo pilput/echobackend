@@ -1,4 +1,4 @@
-package service
+package aichat
 
 import (
 	"context"
@@ -8,35 +8,31 @@ import (
 	"unicode/utf8"
 
 	"echobackend/config"
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/model"
 	"echobackend/internal/platform/openrouter"
-	"echobackend/internal/repository"
 )
 
 type ChatConversationService interface {
-	CreateConversation(ctx context.Context, userID string, conversation *dto.CreateChatConversationRequest) (*dto.ChatConversationResponse, error)
-	CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
-	GetConversationByID(ctx context.Context, id string, userID string) (*dto.ChatConversationResponse, error)
-	GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*dto.ChatConversationResponse, int64, error)
-	UpdateConversation(ctx context.Context, id string, userID string, conversation *dto.UpdateChatConversationRequest) (*dto.ChatConversationResponse, error)
+	CreateConversation(ctx context.Context, userID string, conversation *CreateChatConversationRequest) (*ChatConversationResponse, error)
+	CreateConversationStream(ctx context.Context, userID string, req *CreateChatConversationStreamRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error)
+	GetConversationByID(ctx context.Context, id string, userID string) (*ChatConversationResponse, error)
+	GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*ChatConversationResponse, int64, error)
+	UpdateConversation(ctx context.Context, id string, userID string, conversation *UpdateChatConversationRequest) (*ChatConversationResponse, error)
 	DeleteConversation(ctx context.Context, id string, userID string) error
-	CreateMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) ([]*dto.ChatMessageResponse, error)
-	CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
-	SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, model *string, usage openrouter.Usage) (*dto.ChatMessageResponse, error)
-	GetMessages(ctx context.Context, conversationID, userID string) ([]*dto.ChatMessageResponse, error)
-	GetMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error)
-	DeleteMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error)
+	CreateMessage(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) ([]*ChatMessageResponse, error)
+	CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error)
+	SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, model *string, usage openrouter.Usage) (*ChatMessageResponse, error)
+	GetMessages(ctx context.Context, conversationID, userID string) ([]*ChatMessageResponse, error)
+	GetMessage(ctx context.Context, id, userID string) (*ChatMessageResponse, error)
+	DeleteMessage(ctx context.Context, id, userID string) (*ChatMessageResponse, error)
 }
 
 type chatConversationService struct {
-	conversationRepo repository.ChatConversationRepository
+	conversationRepo ChatConversationRepository
 	openRouter       openrouter.Client
 	config           *config.Config
 }
 
-func NewChatConversationService(conversationRepo repository.ChatConversationRepository, openRouter openrouter.Client, cfg *config.Config) ChatConversationService {
+func NewChatConversationService(conversationRepo ChatConversationRepository, openRouter openrouter.Client, cfg *config.Config) ChatConversationService {
 	return &chatConversationService{
 		conversationRepo: conversationRepo,
 		openRouter:       openRouter,
@@ -44,8 +40,8 @@ func NewChatConversationService(conversationRepo repository.ChatConversationRepo
 	}
 }
 
-func (s *chatConversationService) CreateConversation(ctx context.Context, userID string, conversation *dto.CreateChatConversationRequest) (*dto.ChatConversationResponse, error) {
-	chatConversation := &model.ChatConversation{
+func (s *chatConversationService) CreateConversation(ctx context.Context, userID string, conversation *CreateChatConversationRequest) (*ChatConversationResponse, error) {
+	chatConversation := &ChatConversation{
 		Title:  conversation.Title,
 		UserID: userID,
 	}
@@ -55,11 +51,11 @@ func (s *chatConversationService) CreateConversation(ctx context.Context, userID
 		return nil, err
 	}
 
-	return dto.ChatConversationToResponse(createdConversation), nil
+	return ChatConversationToResponse(createdConversation), nil
 }
 
-func (s *chatConversationService) CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
-	chatConversation := &model.ChatConversation{
+func (s *chatConversationService) CreateConversationStream(ctx context.Context, userID string, req *CreateChatConversationStreamRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
+	chatConversation := &ChatConversation{
 		Title:  buildConversationTitle(req.Title, req.Content),
 		UserID: userID,
 	}
@@ -68,7 +64,7 @@ func (s *chatConversationService) CreateConversationStream(ctx context.Context, 
 		return nil, nil, nil, nil, err
 	}
 
-	msgReq := &dto.CreateChatMessageRequest{
+	msgReq := &CreateChatMessageRequest{
 		Content:     req.Content,
 		Role:        "user",
 		Model:       req.Model,
@@ -82,42 +78,42 @@ func (s *chatConversationService) CreateConversationStream(ctx context.Context, 
 	return result, chunks, complete, errCh, nil
 }
 
-func (s *chatConversationService) GetConversationByID(ctx context.Context, id string, userID string) (*dto.ChatConversationResponse, error) {
+func (s *chatConversationService) GetConversationByID(ctx context.Context, id string, userID string) (*ChatConversationResponse, error) {
 	conversation, err := s.conversationRepo.GetConversationByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	if conversation.UserID != userID {
-		return nil, apperrors.ErrConversationNotOwned
+		return nil, ErrConversationNotOwned
 	}
 
-	return dto.ChatConversationToDetailResponse(conversation), nil
+	return ChatConversationToDetailResponse(conversation), nil
 }
 
-func (s *chatConversationService) GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*dto.ChatConversationResponse, int64, error) {
+func (s *chatConversationService) GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*ChatConversationResponse, int64, error) {
 	conversations, total, err := s.conversationRepo.GetUserConversations(ctx, userID, offset, limit)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Always a JSON array, even when empty: `data: []`, never `data: null`.
-	responses := make([]*dto.ChatConversationResponse, 0, len(conversations))
+	responses := make([]*ChatConversationResponse, 0, len(conversations))
 	for _, conversation := range conversations {
-		responses = append(responses, dto.ChatConversationToResponse(conversation))
+		responses = append(responses, ChatConversationToResponse(conversation))
 	}
 
 	return responses, total, nil
 }
 
-func (s *chatConversationService) UpdateConversation(ctx context.Context, id string, userID string, conversation *dto.UpdateChatConversationRequest) (*dto.ChatConversationResponse, error) {
+func (s *chatConversationService) UpdateConversation(ctx context.Context, id string, userID string, conversation *UpdateChatConversationRequest) (*ChatConversationResponse, error) {
 	existingConversation, err := s.conversationRepo.GetConversationByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	if existingConversation.UserID != userID {
-		return nil, apperrors.ErrConversationNotOwned
+		return nil, ErrConversationNotOwned
 	}
 
 	updates := make(map[string]any)
@@ -141,7 +137,7 @@ func (s *chatConversationService) UpdateConversation(ctx context.Context, id str
 		return nil, err
 	}
 
-	return dto.ChatConversationToResponse(updatedConversation), nil
+	return ChatConversationToResponse(updatedConversation), nil
 }
 
 func (s *chatConversationService) DeleteConversation(ctx context.Context, id string, userID string) error {
@@ -151,20 +147,20 @@ func (s *chatConversationService) DeleteConversation(ctx context.Context, id str
 	}
 
 	if existingConversation.UserID != userID {
-		return apperrors.ErrConversationNotOwned
+		return ErrConversationNotOwned
 	}
 
 	return s.conversationRepo.DeleteConversation(ctx, id)
 }
 
-func (s *chatConversationService) CreateMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) ([]*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) CreateMessage(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) ([]*ChatMessageResponse, error) {
 	conversation, err := s.getOwnedConversation(ctx, conversationID, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now()
-	message := &model.ChatMessage{
+	message := &ChatMessage{
 		ConversationID: conversationID,
 		UserID:         userID,
 		Role:           normalizedRole(req.Role),
@@ -181,7 +177,7 @@ func (s *chatConversationService) CreateMessage(ctx context.Context, userID, con
 		return nil, err
 	}
 
-	responses := []*dto.ChatMessageResponse{dto.ChatMessageToResponse(userMessage)}
+	responses := []*ChatMessageResponse{ChatMessageToResponse(userMessage)}
 	if userMessage.Role != "user" || !s.aiAvailable(req.Model) {
 		return responses, nil
 	}
@@ -209,7 +205,7 @@ func (s *chatConversationService) CreateMessage(ctx context.Context, userID, con
 		return responses, nil
 	}
 
-	assistant := &model.ChatMessage{
+	assistant := &ChatMessage{
 		ConversationID:   conversationID,
 		UserID:           userID,
 		Role:             reply.Choices[0].Message.Role,
@@ -228,22 +224,22 @@ func (s *chatConversationService) CreateMessage(ctx context.Context, userID, con
 	if _, err := s.conversationRepo.UpdateConversation(ctx, conversationID, map[string]any{"updated_at": createdAssistant.UpdatedAt}); err != nil {
 		return nil, err
 	}
-	responses = append(responses, dto.ChatMessageToResponse(createdAssistant))
+	responses = append(responses, ChatMessageToResponse(createdAssistant))
 	return responses, nil
 }
 
-func (s *chatConversationService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (s *chatConversationService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
 	return s.createStreamingMessageInternal(ctx, userID, conversationID, req)
 }
 
-func (s *chatConversationService) createStreamingMessageInternal(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (s *chatConversationService) createStreamingMessageInternal(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
 	conversation, err := s.getOwnedConversation(ctx, conversationID, userID)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	now := time.Now()
-	message := &model.ChatMessage{
+	message := &ChatMessage{
 		ConversationID: conversationID,
 		UserID:         userID,
 		Role:           normalizedRole(req.Role),
@@ -260,11 +256,11 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 		return nil, nil, nil, nil, err
 	}
 
-	result := &dto.ChatStreamResult{
-		UserMessage: dto.ChatMessageToResponse(userMessage),
+	result := &ChatStreamResult{
+		UserMessage: ChatMessageToResponse(userMessage),
 	}
 	if userMessage.Role != "user" || !s.aiAvailable(req.Model) {
-		complete := make(chan dto.ChatMessageResponse)
+		complete := make(chan ChatMessageResponse)
 		close(complete)
 		errCh := make(chan error)
 		close(errCh)
@@ -286,7 +282,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 
 	upstreamChunks, usageCh, upstreamErrCh := s.openRouter.GenerateStream(ctx, toOpenRouterMessages(contextMessages), req.Model, normalizedTemperature(req.Temperature))
 	outChunks := make(chan openrouter.Delta)
-	complete := make(chan dto.ChatMessageResponse, 1)
+	complete := make(chan ChatMessageResponse, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -329,7 +325,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 			// Never surface the raw DB error to the client: log it and send
 			// the sentinel the handler maps to "Failed to save AI response".
 			chatLog.Error("save streamed AI message failed", "conversation_id", conversationID, "error", err)
-			errCh <- apperrors.ErrChatAIResponseSaveFailed
+			errCh <- ErrChatAIResponseSaveFailed
 			return
 		}
 		complete <- *saved
@@ -338,9 +334,9 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 	return result, outChunks, complete, errCh, nil
 }
 
-func (s *chatConversationService) SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, modelID *string, usage openrouter.Usage) (*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, modelID *string, usage openrouter.Usage) (*ChatMessageResponse, error) {
 	now := time.Now()
-	message := &model.ChatMessage{
+	message := &ChatMessage{
 		ConversationID:   conversationID,
 		UserID:           userID,
 		Role:             "assistant",
@@ -359,10 +355,10 @@ func (s *chatConversationService) SaveStreamingMessage(ctx context.Context, conv
 	if _, err := s.conversationRepo.UpdateConversation(ctx, conversationID, map[string]any{"updated_at": now}); err != nil {
 		return nil, err
 	}
-	return dto.ChatMessageToResponse(created), nil
+	return ChatMessageToResponse(created), nil
 }
 
-func (s *chatConversationService) GetMessages(ctx context.Context, conversationID, userID string) ([]*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) GetMessages(ctx context.Context, conversationID, userID string) ([]*ChatMessageResponse, error) {
 	if _, err := s.getOwnedConversation(ctx, conversationID, userID); err != nil {
 		return nil, err
 	}
@@ -370,9 +366,9 @@ func (s *chatConversationService) GetMessages(ctx context.Context, conversationI
 	if err != nil {
 		return nil, err
 	}
-	responses := make([]*dto.ChatMessageResponse, 0, len(messages))
+	responses := make([]*ChatMessageResponse, 0, len(messages))
 	for _, message := range messages {
-		responses = append(responses, dto.ChatMessageToResponse(message))
+		responses = append(responses, ChatMessageToResponse(message))
 	}
 	return responses, nil
 }
@@ -380,7 +376,7 @@ func (s *chatConversationService) GetMessages(ctx context.Context, conversationI
 // GetMessage returns one of the user's messages. A message whose parent
 // conversation is soft-deleted is treated as gone (404), and one in another
 // user's conversation as 403, matching getOwnedConversation.
-func (s *chatConversationService) GetMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) GetMessage(ctx context.Context, id, userID string) (*ChatMessageResponse, error) {
 	message, err := s.conversationRepo.GetMessageByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
@@ -388,10 +384,10 @@ func (s *chatConversationService) GetMessage(ctx context.Context, id, userID str
 	if _, err := s.getOwnedConversation(ctx, message.ConversationID, userID); err != nil {
 		return nil, err
 	}
-	return dto.ChatMessageToResponse(message), nil
+	return ChatMessageToResponse(message), nil
 }
 
-func (s *chatConversationService) DeleteMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error) {
+func (s *chatConversationService) DeleteMessage(ctx context.Context, id, userID string) (*ChatMessageResponse, error) {
 	message, err := s.conversationRepo.GetMessageByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
@@ -406,16 +402,16 @@ func (s *chatConversationService) DeleteMessage(ctx context.Context, id, userID 
 	if _, err := s.conversationRepo.UpdateConversation(ctx, message.ConversationID, map[string]any{"updated_at": time.Now()}); err != nil {
 		return nil, err
 	}
-	return dto.ChatMessageToResponse(message), nil
+	return ChatMessageToResponse(message), nil
 }
 
-func (s *chatConversationService) getOwnedConversation(ctx context.Context, id, userID string) (*model.ChatConversation, error) {
+func (s *chatConversationService) getOwnedConversation(ctx context.Context, id, userID string) (*ChatConversation, error) {
 	conversation, err := s.conversationRepo.GetConversationByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if conversation.UserID != userID {
-		return nil, apperrors.ErrConversationNotOwned
+		return nil, ErrConversationNotOwned
 	}
 	return conversation, nil
 }
@@ -598,7 +594,7 @@ func normalizedTemperature(v *float64) float64 {
 	return *v
 }
 
-func toOpenRouterMessages(messages []*model.ChatMessage) []openrouter.Message {
+func toOpenRouterMessages(messages []*ChatMessage) []openrouter.Message {
 	result := make([]openrouter.Message, 0, len(messages))
 	for _, message := range messages {
 		result = append(result, openrouter.Message{

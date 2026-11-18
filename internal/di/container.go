@@ -5,11 +5,11 @@ import (
 	"echobackend/config"
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
+	"echobackend/internal/modules/aichat"
 	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
 	"echobackend/internal/platform/database"
 	"echobackend/internal/platform/email"
-	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/platform/realtime"
 	"echobackend/internal/platform/storage"
 	"echobackend/internal/repository"
@@ -72,7 +72,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postViewRepo := repository.NewPostViewRepository(db)
 	postLikeRepo := repository.NewPostLikeRepository(db)
 	userFollowRepo := repository.NewUserFollowRepository(db)
-	chatConversationRepo := repository.NewChatConversationRepository(db)
 	bookmarkRepo := repository.NewBookmarkRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
 	authActivityLogRepo := repository.NewAuthActivityLogRepository(db)
@@ -86,7 +85,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	guildChannelRepo := repository.NewGuildChannelRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
-	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
 	userService := service.NewUserService(userRepo, s3Storage)
 	tagService := service.NewTagService(tagRepo, redisCache)
 	postService := service.NewPostService(postRepo, tagService, s3Storage, redisCache)
@@ -96,8 +94,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postViewService := service.NewPostViewService(postViewRepo, postRepo, postLikeRepo, redisCache)
 	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
-	chatConversationService := service.NewChatConversationService(chatConversationRepo, openRouterClient, cfg)
-	articleGenerationService := service.NewArticleGenerationService(openRouterClient, cfg)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	userStatsService := service.NewUserStatsService(userStatsRepo)
 	postStatsService := service.NewPostStatsService(postStatsRepo)
@@ -114,7 +110,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postViewHandler := handler.NewPostViewHandler(postViewService, userService)
 	postLikeHandler := handler.NewPostLikeHandler(postLikeService)
 	userFollowHandler := handler.NewUserFollowHandler(userFollowService)
-	chatConversationHandler := handler.NewChatConversationHandler(chatConversationService)
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	userStatsHandler := handler.NewUserStatsHandler(userStatsService)
@@ -123,12 +118,17 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	postReportHandler := handler.NewPostReportHandler(postReportService)
 	guildHandler := handler.NewGuildHandler(guildService)
 	guildChannelHandler := handler.NewGuildChannelHandler(guildChannelService)
-	aiHandler := handler.NewAIHandler(articleGenerationService)
 
 	portfolioModule := portfolio.New(portfolio.Deps{
 		DB:          db,
 		Cache:       redisCache,
 		RapidAPIKey: cfg.MarketData.RapidAPIKey,
+	})
+
+	aichatModule := aichat.New(aichat.Deps{
+		Config: cfg,
+		DB:     db,
+		Cache:  redisCache,
 	})
 
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
@@ -144,7 +144,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		postViewHandler,
 		postLikeHandler,
 		userFollowHandler,
-		chatConversationHandler,
 		bookmarkHandler,
 		notificationHandler,
 		userStatsHandler,
@@ -153,8 +152,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		postReportHandler,
 		guildHandler,
 		guildChannelHandler,
-		aiHandler,
 		portfolioModule,
+		aichatModule,
 	)
 
 	return &Container{

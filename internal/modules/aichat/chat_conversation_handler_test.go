@@ -1,7 +1,10 @@
-package handler
+package aichat
 
 import (
 	"context"
+	"echobackend/internal/platform/openrouter"
+	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,13 +14,6 @@ import (
 	"testing"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/platform/openrouter"
-	"echobackend/internal/service"
-	"echobackend/pkg/response"
-	"echobackend/pkg/validator"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 )
@@ -25,11 +21,11 @@ import (
 // mockChatService embeds the interface so any method a test does not stub
 // panics, which doubles as a "service must not be called" assertion.
 type mockChatService struct {
-	service.ChatConversationService
-	createStreamingMessageFn func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
+	ChatConversationService
+	createStreamingMessageFn func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error)
 }
 
-func (m *mockChatService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (m *mockChatService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
 	return m.createStreamingMessageFn(ctx, userID, conversationID, req)
 }
 
@@ -44,10 +40,10 @@ func registerChatRoutes(e *echo.Echo, h *ChatConversationHandler) {
 	e.DELETE("/api/chat/messages/:messageId", h.DeleteMessage)
 }
 
-func serveChatRoute(t *testing.T, svc service.ChatConversationService, method, target, body string) (int, string, response.APIResponse) {
+func serveChatRoute(t *testing.T, svc ChatConversationService, method, target, body string) (int, string, response.APIResponse) {
 	t.Helper()
 	h := NewChatConversationHandler(svc)
-	rec := serveAuthRoute(t, func(e *echo.Echo, _ *AuthHandler) { registerChatRoutes(e, h) }, nil, method, target, body, "user-1")
+	rec := serveRoute(t, func(e *echo.Echo) { registerChatRoutes(e, h) }, method, target, body, "user-1")
 	raw := rec.Body.String()
 	var out response.APIResponse
 	_ = json.Unmarshal([]byte(raw), &out) // SSE bodies are not JSON; callers check raw then
@@ -81,7 +77,7 @@ func TestChatHandlerRejectsMalformedIDs(t *testing.T) {
 
 // streamWith returns service channels that deliver chunks, then err (if any)
 // or the completed message, then close — like the real producer goroutine.
-func streamWith(chunks []string, streamErr error, done *dto.ChatMessageResponse) (<-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error) {
+func streamWith(chunks []string, streamErr error, done *ChatMessageResponse) (<-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error) {
 	return streamDeltas(contentDeltas(chunks), streamErr, done)
 }
 
@@ -93,13 +89,13 @@ func contentDeltas(chunks []string) []openrouter.Delta {
 	return out
 }
 
-func streamDeltas(deltas []openrouter.Delta, streamErr error, done *dto.ChatMessageResponse) (<-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error) {
+func streamDeltas(deltas []openrouter.Delta, streamErr error, done *ChatMessageResponse) (<-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error) {
 	chunkCh := make(chan openrouter.Delta, len(deltas))
 	for _, d := range deltas {
 		chunkCh <- d
 	}
 	close(chunkCh)
-	complete := make(chan dto.ChatMessageResponse, 1)
+	complete := make(chan ChatMessageResponse, 1)
 	errCh := make(chan error, 1)
 	if streamErr != nil {
 		errCh <- streamErr
@@ -113,9 +109,9 @@ func streamDeltas(deltas []openrouter.Delta, streamErr error, done *dto.ChatMess
 
 func TestChatMessageStreamEndsWithDoneAfterError(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
-			chunks, complete, errCh := streamWith([]string{"Hel"}, apperrors.ErrChatAIResponseSaveFailed, nil)
-			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
+			chunks, complete, errCh := streamWith([]string{"Hel"}, ErrChatAIResponseSaveFailed, nil)
+			return &ChatStreamResult{UserMessage: &ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
 	}
 	status, raw, _ := serveChatRoute(t, svc, http.MethodPost, "/api/chat/conversations/"+validChatID+"/messages/stream", `{"content":"hi"}`)
@@ -138,9 +134,9 @@ func TestChatMessageStreamEndsWithDoneAfterError(t *testing.T) {
 
 func TestChatMessageStreamEndsWithDoneAfterComplete(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
-			chunks, complete, errCh := streamWith([]string{"Hi"}, nil, &dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
-			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
+			chunks, complete, errCh := streamWith([]string{"Hi"}, nil, &ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
+			return &ChatStreamResult{UserMessage: &ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
 	}
 	status, raw, _ := serveChatRoute(t, svc, http.MethodPost, "/api/chat/conversations/"+validChatID+"/messages/stream", `{"content":"hi"}`)
@@ -151,8 +147,8 @@ func TestChatMessageStreamEndsWithDoneAfterComplete(t *testing.T) {
 
 func TestChatMessageStreamFallbackIs201(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
-			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, nil, nil, nil, nil
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
+			return &ChatStreamResult{UserMessage: &ChatMessageResponse{ID: "m-1", Role: "user"}}, nil, nil, nil, nil
 		},
 	}
 	status, _, out := serveChatRoute(t, svc, http.MethodPost, "/api/chat/conversations/"+validChatID+"/messages/stream", `{"content":"hi"}`)
@@ -166,7 +162,7 @@ func TestStreamErrorMessage(t *testing.T) {
 		err  error
 		want string
 	}{
-		{apperrors.ErrChatAIResponseSaveFailed, "Failed to save AI response"},
+		{ErrChatAIResponseSaveFailed, "Failed to save AI response"},
 		{errors.New(`OpenRouter API error: 429 {"error":{"message":"Rate limited"}}`), "Rate limited"},
 		{errors.New("OpenRouter returned an empty response"), "OpenRouter returned an empty response"},
 	}
@@ -191,9 +187,9 @@ func TestChatMessageStreamRejectsInvalidBody(t *testing.T) {
 func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 	const serverTimeout = 150 * time.Millisecond
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
 			chunks := make(chan openrouter.Delta)
-			complete := make(chan dto.ChatMessageResponse, 1)
+			complete := make(chan ChatMessageResponse, 1)
 			errCh := make(chan error, 1)
 			go func() {
 				defer close(chunks)
@@ -213,9 +209,9 @@ func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 					case chunks <- openrouter.Delta{Content: c}:
 					}
 				}
-				complete <- dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "abc"}
+				complete <- ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "abc"}
 			}()
-			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
+			return &ChatStreamResult{UserMessage: &ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
 	}
 
@@ -255,10 +251,10 @@ func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 
 func TestChatMessageStreamSendsReasoningEvents(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *CreateChatMessageRequest) (*ChatStreamResult, <-chan openrouter.Delta, <-chan ChatMessageResponse, <-chan error, error) {
 			chunks, complete, errCh := streamDeltas([]openrouter.Delta{{Reasoning: "hmm"}, {Content: "Hi"}}, nil,
-				&dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
-			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
+				&ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
+			return &ChatStreamResult{UserMessage: &ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
 	}
 	status, raw, _ := serveChatRoute(t, svc, http.MethodPost, "/api/chat/conversations/"+validChatID+"/messages/stream", `{"content":"hi"}`)

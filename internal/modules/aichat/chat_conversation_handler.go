@@ -1,37 +1,31 @@
-package handler
+package aichat
 
 import (
+	"echobackend/internal/middleware"
+	"echobackend/internal/platform/openrouter"
+	"echobackend/pkg/response"
+	"echobackend/pkg/validator"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	apperrors "echobackend/internal/apperror"
-	"echobackend/internal/dto"
-	"echobackend/internal/platform/openrouter"
-	"echobackend/internal/service"
-	"echobackend/pkg/applog"
-	"echobackend/pkg/response"
-	"echobackend/pkg/validator"
-
 	"github.com/labstack/echo/v5"
 )
 
-var chatLog = applog.Component("chat")
-
 type ChatConversationHandler struct {
-	chatConversationService service.ChatConversationService
+	chatConversationService ChatConversationService
 }
 
-func NewChatConversationHandler(chatConversationService service.ChatConversationService) *ChatConversationHandler {
+func NewChatConversationHandler(chatConversationService ChatConversationService) *ChatConversationHandler {
 	return &ChatConversationHandler{
 		chatConversationService: chatConversationService,
 	}
 }
 
 func (h *ChatConversationHandler) CreateConversation(c *echo.Context) error {
-	var conversationReq dto.CreateChatConversationRequest
+	var conversationReq CreateChatConversationRequest
 	if err := c.Bind(&conversationReq); err != nil {
 		return response.BadRequest(c, "Failed to create conversation", err)
 	}
@@ -40,7 +34,7 @@ func (h *ChatConversationHandler) CreateConversation(c *echo.Context) error {
 		return response.FromValidateError(c, err)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -54,7 +48,7 @@ func (h *ChatConversationHandler) CreateConversation(c *echo.Context) error {
 }
 
 func (h *ChatConversationHandler) CreateConversationStream(c *echo.Context) error {
-	var req dto.CreateChatConversationStreamRequest
+	var req CreateChatConversationStreamRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Failed to create conversation stream", err)
 	}
@@ -62,7 +56,7 @@ func (h *ChatConversationHandler) CreateConversationStream(c *echo.Context) erro
 		return response.FromValidateError(c, err)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -89,7 +83,7 @@ func (h *ChatConversationHandler) GetConversation(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -103,9 +97,9 @@ func (h *ChatConversationHandler) GetConversation(c *echo.Context) error {
 }
 
 func (h *ChatConversationHandler) GetConversations(c *echo.Context) error {
-	limit, offset := ParsePaginationParams(c, 10)
+	limit, offset := response.ParsePaginationParams(c, 10)
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -124,7 +118,7 @@ func (h *ChatConversationHandler) UpdateConversation(c *echo.Context) error {
 	if !validator.IsValidUUID(id) {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
-	var updateDTO dto.UpdateChatConversationRequest
+	var updateDTO UpdateChatConversationRequest
 	if err := c.Bind(&updateDTO); err != nil {
 		return response.BadRequest(c, "Failed to update conversation", err)
 	}
@@ -133,7 +127,7 @@ func (h *ChatConversationHandler) UpdateConversation(c *echo.Context) error {
 		return response.FromValidateError(c, err)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -152,7 +146,7 @@ func (h *ChatConversationHandler) DeleteConversation(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -171,12 +165,12 @@ func (h *ChatConversationHandler) CreateMessage(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	var req dto.CreateChatMessageRequest
+	var req CreateChatMessageRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Failed to create message", err)
 	}
@@ -197,12 +191,12 @@ func (h *ChatConversationHandler) CreateMessageStream(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
 
-	var req dto.CreateChatMessageRequest
+	var req CreateChatMessageRequest
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "Failed to create message stream", err)
 	}
@@ -229,7 +223,7 @@ func (h *ChatConversationHandler) GetMessages(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidConversationID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -247,7 +241,7 @@ func (h *ChatConversationHandler) GetMessage(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidMessageID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -265,7 +259,7 @@ func (h *ChatConversationHandler) DeleteMessage(c *echo.Context) error {
 		return response.BadRequest(c, MsgInvalidMessageID, nil)
 	}
 
-	userID, ok := GetUserIDFromClaims(c)
+	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		return response.Unauthorized(c, "User not authenticated")
 	}
@@ -279,9 +273,9 @@ func (h *ChatConversationHandler) DeleteMessage(c *echo.Context) error {
 
 func (h *ChatConversationHandler) respondChatError(c *echo.Context, message string, err error) error {
 	switch {
-	case errors.Is(err, apperrors.ErrChatConversationNotFound), errors.Is(err, apperrors.ErrChatMessageNotFound):
+	case errors.Is(err, ErrChatConversationNotFound), errors.Is(err, ErrChatMessageNotFound):
 		return response.NotFound(c, message, err)
-	case errors.Is(err, apperrors.ErrConversationNotOwned):
+	case errors.Is(err, ErrConversationNotOwned):
 		return response.Forbidden(c, err.Error())
 	default:
 		return response.InternalServerError(c, message, err)
@@ -298,7 +292,7 @@ const chatStreamWriteTimeout = 10 * time.Second
 // `ai_reasoning` / `ai_chunk`, then exactly one of `ai_complete` or `error`, and always a final
 // `data: [DONE]`. A failed write means the client is gone; the handler then
 // returns, which cancels the request context and stops the producer.
-func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan openrouter.Delta, complete <-chan dto.ChatMessageResponse, errCh <-chan error) error {
+func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan openrouter.Delta, complete <-chan ChatMessageResponse, errCh <-chan error) error {
 	write := openAIStream(c)
 
 	if initialEvent != nil {
@@ -377,7 +371,7 @@ func streamErrorMessage(err error) string {
 	if err == nil {
 		return "Failed to generate AI response"
 	}
-	if errors.Is(err, apperrors.ErrChatAIResponseSaveFailed) {
+	if errors.Is(err, ErrChatAIResponseSaveFailed) {
 		return "Failed to save AI response"
 	}
 	msg := err.Error()

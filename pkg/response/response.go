@@ -3,6 +3,7 @@ package response
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"echobackend/pkg/applog"
 	"echobackend/pkg/validator"
@@ -230,6 +231,30 @@ func Conflict(c *echo.Context, message string, conflictError string) error {
 		Message: message,
 		Error:   conflictError,
 	})
+}
+
+// ParsePaginationParams reads ?limit= and ?offset=. Invalid or missing values
+// fall back to defaultLimit and 0; limit is hard-capped at 100.
+func ParsePaginationParams(c *echo.Context, defaultLimit int) (limit, offset int) {
+	limit = defaultLimit
+	offset = 0
+
+	if l := c.QueryParam("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	if o := c.QueryParam("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	return limit, offset
 }
 
 // CalculatePaginationMeta calculates pagination metadata.
