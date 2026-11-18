@@ -6,6 +6,7 @@ import (
 	"echobackend/internal/handler"
 	"echobackend/internal/middleware"
 	"echobackend/internal/modules/aichat"
+	"echobackend/internal/modules/blog"
 	"echobackend/internal/modules/guilds"
 	"echobackend/internal/modules/portfolio"
 	"echobackend/internal/platform/cache"
@@ -65,54 +66,27 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	})
 
 	userRepo := repository.NewUserRepository(db)
-	postRepo := repository.NewPostRepository(db)
 	authRepo := repository.NewAuthRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
-	tagRepo := repository.NewTagRepository(db)
-	commentRepo := repository.NewCommentRepository(db)
-	postViewRepo := repository.NewPostViewRepository(db)
-	postLikeRepo := repository.NewPostLikeRepository(db)
 	userFollowRepo := repository.NewUserFollowRepository(db)
-	bookmarkRepo := repository.NewBookmarkRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
 	authActivityLogRepo := repository.NewAuthActivityLogRepository(db)
 	passwordResetTokenRepo := repository.NewPasswordResetTokenRepository(db)
 	accountDeletionTokenRepo := repository.NewAccountDeletionTokenRepository(db)
 	userStatsRepo := repository.NewUserStatsRepository(db)
-	postStatsRepo := repository.NewPostStatsRepository(db)
-	tagStatsRepo := repository.NewTagStatsRepository(db)
-	postReportRepo := repository.NewPostReportRepository(db)
 
 	authActivityService := service.NewAuthActivityService(authActivityLogRepo)
 	userService := service.NewUserService(userRepo, s3Storage)
-	tagService := service.NewTagService(tagRepo, redisCache)
-	postService := service.NewPostService(postRepo, tagService, s3Storage, redisCache)
 	authService := service.NewAuthService(authRepo, userRepo, sessionRepo, passwordResetTokenRepo, accountDeletionTokenRepo, authActivityService, cfg, redisCache, emailService)
 	notificationService := service.NewNotificationService(notificationRepo)
-	commentService := service.NewCommentService(commentRepo, postRepo, notificationService)
-	postViewService := service.NewPostViewService(postViewRepo, postRepo, postLikeRepo, redisCache)
-	postLikeService := service.NewPostLikeService(postLikeRepo, postRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo, userRepo, notificationService)
-	bookmarkService := service.NewBookmarkService(bookmarkRepo, postRepo)
 	userStatsService := service.NewUserStatsService(userStatsRepo)
-	postStatsService := service.NewPostStatsService(postStatsRepo)
-	tagStatsService := service.NewTagStatsService(tagStatsRepo)
-	postReportService := service.NewPostReportService(postReportRepo, postRepo)
 
 	userHandler := handler.NewUserHandler(userService, userFollowService)
-	postHandler := handler.NewPostHandler(postService, postViewService)
 	authHandler := handler.NewAuthHandler(authService, authActivityService, cfg.Frontend)
-	tagHandler := handler.NewTagHandler(tagService)
-	commentHandler := handler.NewCommentHandler(commentService, userService)
-	postViewHandler := handler.NewPostViewHandler(postViewService, userService)
-	postLikeHandler := handler.NewPostLikeHandler(postLikeService)
 	userFollowHandler := handler.NewUserFollowHandler(userFollowService)
-	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	userStatsHandler := handler.NewUserStatsHandler(userStatsService)
-	postStatsHandler := handler.NewPostStatsHandler(postStatsService)
-	tagStatsHandler := handler.NewTagStatsHandler(tagStatsService)
-	postReportHandler := handler.NewPostReportHandler(postReportService)
 
 	portfolioModule := portfolio.New(portfolio.Deps{
 		DB:          db,
@@ -128,28 +102,28 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	guildModule := guilds.New(guilds.Deps{DB: db, Hub: hub})
 
+	blogModule := blog.New(blog.Deps{
+		DB:       db,
+		Cache:    redisCache,
+		Storage:  s3Storage,
+		Admins:   adminChecker{users: userService},
+		Notifier: notifier{notifications: notificationService},
+	})
+
 	authMiddleware := middleware.NewAuthMiddleware(cfg, userService)
 	appRoutes := routes.NewRoutes(
 		cfg,
 		redisCache,
 		userHandler,
-		postHandler,
 		authHandler,
 		authMiddleware,
-		tagHandler,
-		commentHandler,
-		postViewHandler,
-		postLikeHandler,
 		userFollowHandler,
-		bookmarkHandler,
 		notificationHandler,
 		userStatsHandler,
-		postStatsHandler,
-		tagStatsHandler,
-		postReportHandler,
 		portfolioModule,
 		aichatModule,
 		guildModule,
+		blogModule,
 	)
 
 	return &Container{

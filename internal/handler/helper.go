@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"context"
 	"errors"
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/middleware"
-	"echobackend/internal/service"
 	"echobackend/pkg/response"
 
 	"github.com/labstack/echo/v5"
@@ -16,20 +14,6 @@ import (
 // context. It delegates to middleware.UserIDFromContext.
 func GetUserIDFromClaims(c *echo.Context) (string, bool) {
 	return middleware.UserIDFromContext(c)
-}
-
-// isSuperAdmin reports whether userID is currently a super admin. It always
-// reads the database: the is_super_admin JWT claim stays in the token until it
-// expires, so trusting it would keep a demoted admin privileged.
-func isSuperAdmin(ctx context.Context, userService service.UserService, userID string) bool {
-	if userService == nil || userID == "" {
-		return false
-	}
-	user, err := userService.GetAdminByID(ctx, userID, false)
-	if err != nil || user.IsSuperAdmin == nil {
-		return false
-	}
-	return *user.IsSuperAdmin
 }
 
 // respondSpamRejected answers an anti-spam rejection with the shared 422
@@ -60,14 +44,9 @@ func respondInvalidUserID(c *echo.Context) error {
 func respondError(c *echo.Context, message string, err error) error {
 	switch {
 	case errors.Is(err, apperrors.ErrUserNotFound),
-		errors.Is(err, apperrors.ErrPostNotFound),
-		errors.Is(err, apperrors.ErrCommentNotFound),
-		errors.Is(err, apperrors.ErrTagNotFound),
 		errors.Is(err, apperrors.ErrNotificationNotFound):
 		return response.NotFound(c, message, err)
-	case errors.Is(err, apperrors.ErrNotAuthor),
-		errors.Is(err, apperrors.ErrCommentNotOwned),
-		errors.Is(err, apperrors.ErrPostNotOwned):
+	case errors.Is(err, apperrors.ErrNotAuthor):
 		return response.Forbidden(c, message)
 	case errors.Is(err, apperrors.ErrContentSpamRejected):
 		return respondSpamRejected(c, "Content rejected by anti-spam policy", "text", err)
@@ -76,7 +55,6 @@ func respondError(c *echo.Context, message string, err error) error {
 		return response.Conflict(c, message, err.Error())
 	case errors.Is(err, apperrors.ErrCannotFollowSelf),
 		errors.Is(err, apperrors.ErrNotFollowing),
-		errors.Is(err, apperrors.ErrEmptyPostID),
 		errors.Is(err, apperrors.ErrDateRangeTooLarge):
 		return response.BadRequest(c, message, err)
 	default:

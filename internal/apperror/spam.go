@@ -1,7 +1,7 @@
 package apperror
 
 // SpamRejection carries the user-facing reason an anti-spam rule rejected
-// content. It unwraps to Kind (ErrPostSpamRejected or ErrContentSpamRejected),
+// content. It unwraps to Kind (blog.ErrPostSpamRejected or ErrContentSpamRejected),
 // so errors.Is keeps working while handlers can still read Reason directly.
 type SpamRejection struct {
 	Kind   error

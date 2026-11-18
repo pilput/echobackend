@@ -23,17 +23,11 @@ type User struct {
 	FollowingCount int64          `json:"following_count" gorm:"type:bigint;default:0"`
 	LastLoggedAt   *time.Time     `json:"last_logged_at"`
 
-	Files           []File           `gorm:"foreignKey:CreatedBy"`
-	PostComments    []PostComment    `gorm:"foreignKey:CreatedBy"`
-	PostLikes       []PostLike       `gorm:"foreignKey:UserID"`
-	PostViews       []PostView       `gorm:"foreignKey:UserID"`
-	PostBookmarks   []PostBookmark   `gorm:"foreignKey:UserID"`
-	BookmarkFolders []BookmarkFolder `gorm:"foreignKey:UserID"`
-	Posts           []Post           `gorm:"foreignKey:CreatedBy"`
-	Profile         *Profile         `gorm:"foreignKey:UserID"`
-	Sessions        []Session        `gorm:"foreignKey:UserID"`
-	Followers       []UserFollow     `gorm:"foreignKey:FollowingID"`
-	Following       []UserFollow     `gorm:"foreignKey:FollowerID"`
+	Files     []File       `gorm:"foreignKey:CreatedBy"`
+	Profile   *Profile     `gorm:"foreignKey:UserID"`
+	Sessions  []Session    `gorm:"foreignKey:UserID"`
+	Followers []UserFollow `gorm:"foreignKey:FollowingID"`
+	Following []UserFollow `gorm:"foreignKey:FollowerID"`
 }
 
 func (User) TableName() string {

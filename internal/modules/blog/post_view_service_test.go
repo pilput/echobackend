@@ -1,0 +1,334 @@
+package blog
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	apperrors "echobackend/internal/apperror"
+)
+
+func TestPostViewService_GetMyPostsAnalytics(t *testing.T) {
+	postRepo := &mockPostRepo{
+		getAuthorPostStatsFn: func(ctx context.Context, userID string) (*MyPostsAnalyticsSummary, error) {
+			return &MyPostsAnalyticsSummary{
+				TotalPosts:     3,
+				PublishedPosts: 2,
+				TotalViews:     100,
+				TotalLikes:     15,
+			}, nil
+		},
+		getTopPostsByAuthorFn: func(ctx context.Context, userID string, limit int) ([]MyPostPerformance, error) {
+			title := "Top post"
+			slug := "top-post"
+			return []MyPostPerformance{{
+				ID:        validPostID,
+				Title:     &title,
+				Slug:      &slug,
+				ViewCount: 50,
+				LikeCount: 10,
+			}}, nil
+		},
+	}
+	viewRepo := &mockPostViewRepo{
+		countViewsByAuthorBeforeFn: func(ctx context.Context, userID, beforeDate string) (int64, error) {
+			return 20, nil
+		},
+		getViewTrendByAuthorFn: func(ctx context.Context, userID, startDate, endDate string) ([]struct {
+			Date  string
+			Count int64
+		}, error) {
+			return []struct {
+				Date  string
+				Count int64
+			}{
+				{Date: startDate, Count: 5},
+				{Date: endDate, Count: 3},
+			}, nil
+		},
+	}
+
+	svc := NewPostViewService(viewRepo, postRepo, &mockPostLikeRepo{})
+	got, err := svc.GetMyPostsAnalytics(context.Background(), validUserID, &MyPostsAnalyticsQuery{
+		StartDate: "2026-05-01",
+		EndDate:   "2026-05-03",
+	})
+	if err != nil {
+		t.Fatalf("GetMyPostsAnalytics returned error: %v", err)
+	}
+
+	if got.Summary.TotalPosts != 3 || got.Summary.TotalViews != 100 {
+		t.Fatalf("unexpected summary: %+v", got.Summary)
+	}
+	if len(got.TopPosts) != 1 || got.TopPosts[0].ViewCount != 50 {
+		t.Fatalf("unexpected top posts: %+v", got.TopPosts)
+	}
+	if len(got.ViewTrend) != 3 {
+		t.Fatalf("expected 3 trend points, got %d", len(got.ViewTrend))
+	}
+	if got.ViewTrend[0].Views != 5 || got.ViewTrend[0].CumulativeViews != 25 {
+		t.Fatalf("unexpected first trend point: %+v", got.ViewTrend[0])
+	}
+	if got.ViewTrend[2].Views != 3 || got.ViewTrend[2].CumulativeViews != 28 {
+		t.Fatalf("unexpected last trend point: %+v", got.ViewTrend[2])
+	}
+}
+
+func TestPostViewService_GetMyPostsAnalytics_RejectsLargeRange(t *testing.T) {
+	svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{}, &mockPostLikeRepo{})
+	_, err := svc.GetMyPostsAnalytics(context.Background(), validUserID, &MyPostsAnalyticsQuery{
+		StartDate: "0001-01-01",
+		EndDate:   "2026-05-03",
+	})
+	if !errors.Is(err, apperrors.ErrDateRangeTooLarge) {
+		t.Fatalf("expected ErrDateRangeTooLarge, got %v", err)
+	}
+}
+
+func TestPostViewService_GetViewsByPostID_RejectsNonAuthor(t *testing.T) {
+	postRepo := &mockPostRepo{
+		getPostByIDFn: func(ctx context.Context, id string) (*Post, error) {
+			author := "author-id"
+			return &Post{ID: id, CreatedBy: &author}, nil
+		},
+	}
+
+	svc := NewPostViewService(&mockPostViewRepo{}, postRepo, &mockPostLikeRepo{})
+	_, _, err := svc.GetViewsByPostID(context.Background(), validPostID, "someone-else", false, 10, 0)
+	if !errors.Is(err, apperrors.ErrNotAuthor) {
+		t.Fatalf("expected ErrNotAuthor, got %v", err)
+	}
+}
+
+func TestPostViewService_GetMyPostsLikesByMonth(t *testing.T) {
+	likeRepo := &mockPostLikeRepo{
+		getLikesByMonthByAuthorFn: func(ctx context.Context, userID string, start, endExclusive time.Time) ([]struct {
+			Month string
+			Count int64
+		}, error) {
+			return []struct {
+				Month string
+				Count int64
+			}{
+				{Month: start.AddDate(0, 1, 0).Format("2006-01"), Count: 5},
+				{Month: start.AddDate(0, 2, 0).Format("2006-01"), Count: 3},
+			}, nil
+		},
+	}
+
+	svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{}, likeRepo)
+	got, err := svc.GetMyPostsLikesByMonth(context.Background(), validUserID, &MyPostsLikesByMonthQuery{
+		Months: 3,
+	})
+	if err != nil {
+		t.Fatalf("GetMyPostsLikesByMonth returned error: %v", err)
+	}
+
+	if got.Months != 3 {
+		t.Fatalf("expected months=3, got %d", got.Months)
+	}
+	if len(got.Series) != 3 {
+		t.Fatalf("expected 3 series points, got %d", len(got.Series))
+	}
+	if got.Total != 8 {
+		t.Fatalf("expected total=8, got %d", got.Total)
+	}
+	if got.Series[1].Likes != 5 || got.Series[2].Likes != 3 {
+		t.Fatalf("unexpected series: %+v", got.Series)
+	}
+}
+
+type fakePostViewCache struct {
+	store map[string]any
+}
+
+func (f *fakePostViewCache) BuildKey(parts ...string) string {
+	return strings.Join(parts, ":")
+}
+
+func (f *fakePostViewCache) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
+	v, ok := f.store[key]
+	if !ok {
+		return false, nil
+	}
+	*dest.(*bool) = v.(bool)
+	return true, nil
+}
+
+func (f *fakePostViewCache) SetJSONWithTTL(ctx context.Context, key string, value any, ttl time.Duration) error {
+	f.store[key] = value
+	return nil
+}
+
+func TestPostViewService_RecordView_CachesViewedMarker(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	creates := 0
+	viewRepo := &mockPostViewRepo{
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return false, nil },
+		createViewFn: func(ctx context.Context, view *PostView) error {
+			creates++
+			return nil
+		},
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
+		t.Fatalf("first RecordView: %v", err)
+	}
+	if creates != 1 {
+		t.Fatalf("expected 1 view created, got %d", creates)
+	}
+
+	// Second view must be answered from the cache without touching the DB.
+	viewRepo.hasUserViewedPostFn = nil
+	viewRepo.createViewFn = nil
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
+		t.Fatalf("second RecordView: %v", err)
+	}
+}
+
+func TestPostViewService_RecordView_MarksAlreadyViewedFromDB(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	viewRepo := &mockPostViewRepo{
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return true, nil },
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "user-1", nil, strPtr(browserUA)); err != nil {
+		t.Fatalf("RecordView: %v", err)
+	}
+	if _, ok := cache.store[cache.BuildKey("post_view", "post-1", "user-1")]; !ok {
+		t.Fatal("expected viewed marker to be cached after DB hit")
+	}
+}
+
+const browserUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+
+func strPtr(s string) *string { return &s }
+
+func TestPostViewService_RecordView_IgnoresBots(t *testing.T) {
+	ctx := context.Background()
+	// Nothing is stubbed: any repo access would panic.
+	svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{}, &mockPostLikeRepo{}, &fakePostViewCache{store: map[string]any{}})
+	for _, ua := range []*string{nil, strPtr(""), strPtr("curl/8.5.0"), strPtr("Googlebot/2.1")} {
+		if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), ua); err != nil {
+			t.Fatalf("RecordView(bot): %v", err)
+		}
+	}
+}
+
+func TestPostViewService_RecordView_AnonymousDedup(t *testing.T) {
+	ctx := context.Background()
+	cache := &fakePostViewCache{store: map[string]any{}}
+	var created *PostView
+	var gotIP, gotUA string
+	viewRepo := &mockPostViewRepo{
+		hasAnonymousViewedSinceFn: func(ctx context.Context, postID, ip, ua string, since time.Time) (bool, error) {
+			gotIP, gotUA = ip, ua
+			if time.Since(since) < 23*time.Hour {
+				t.Errorf("dedup window too short: since=%v", since)
+			}
+			return false, nil
+		},
+		createViewFn: func(ctx context.Context, view *PostView) error {
+			created = view
+			return nil
+		},
+	}
+	svc := NewPostViewService(viewRepo, &mockPostRepo{}, &mockPostLikeRepo{}, cache)
+
+	if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), strPtr(browserUA)); err != nil {
+		t.Fatalf("RecordView: %v", err)
+	}
+	if created == nil || created.UserID != nil || *created.IPAddress != "203.0.113.5" || *created.UserAgent != browserUA {
+		t.Fatalf("unexpected view: %+v", created)
+	}
+	if gotIP != "203.0.113.5" || gotUA != browserUA {
+		t.Fatalf("dedup lookup got ip=%q ua=%q", gotIP, gotUA)
+	}
+
+	// The marker key is hashed: no raw IP in cache keys.
+	if len(cache.store) != 1 {
+		t.Fatalf("expected one marker, got %v", cache.store)
+	}
+	for key := range cache.store {
+		if strings.Contains(key, "203.0.113.5") || !strings.Contains(key, "post_view:post-1:anon:") {
+			t.Fatalf("unexpected marker key %q", key)
+		}
+	}
+
+	// A repeat view is answered from the marker without touching the DB.
+	viewRepo.hasAnonymousViewedSinceFn = nil
+	viewRepo.createViewFn = nil
+	if err := svc.RecordView(ctx, "post-1", "", strPtr("203.0.113.5"), strPtr(browserUA)); err != nil {
+		t.Fatalf("repeat RecordView: %v", err)
+	}
+}
+
+func TestViewerMarkerID(t *testing.T) {
+	a := viewerMarkerID("", "203.0.113.5", "UA")
+	if a != viewerMarkerID("", "203.0.113.5", "UA") {
+		t.Fatal("marker must be stable")
+	}
+	if a == viewerMarkerID("", "203.0.113.6", "UA") || a == viewerMarkerID("", "203.0.113.5", "UA2") {
+		t.Fatal("marker must differ per IP and User-Agent")
+	}
+	if got := viewerMarkerID("user-1", "203.0.113.5", "UA"); got != "user-1" {
+		t.Fatalf("user marker = %q, want user-1", got)
+	}
+	if got := viewerMarkerID("", "", "UA"); got != "" {
+		t.Fatalf("unidentified marker = %q, want empty", got)
+	}
+}
+
+func TestPostViewService_GetViewStats_MissingOrHiddenPost(t *testing.T) {
+	ctx := context.Background()
+	hiddenAt := time.Now()
+	cases := map[string]func(ctx context.Context, id string) (*Post, error){
+		"missing": func(ctx context.Context, id string) (*Post, error) { return nil, ErrPostNotFound },
+		"hidden": func(ctx context.Context, id string) (*Post, error) {
+			return &Post{ID: id, HiddenAt: &hiddenAt}, nil
+		},
+	}
+	for name, getPost := range cases {
+		t.Run(name, func(t *testing.T) {
+			// The view repo is left unstubbed: reaching it would panic.
+			svc := NewPostViewService(&mockPostViewRepo{}, &mockPostRepo{getPostByIDFn: getPost}, &mockPostLikeRepo{})
+			if _, err := svc.GetViewStats(ctx, validPostID); !errors.Is(err, ErrPostNotFound) {
+				t.Fatalf("GetViewStats err = %v, want ErrPostNotFound", err)
+			}
+			if _, err := svc.HasUserViewedPost(ctx, validPostID, "user-1"); !errors.Is(err, ErrPostNotFound) {
+				t.Fatalf("HasUserViewedPost err = %v, want ErrPostNotFound", err)
+			}
+			if _, err := svc.HasUserViewedPost(ctx, validPostID, ""); !errors.Is(err, ErrPostNotFound) {
+				t.Fatalf("HasUserViewedPost (anonymous) err = %v, want ErrPostNotFound", err)
+			}
+		})
+	}
+}
+
+func TestPostViewService_GetViewStats_VisiblePost(t *testing.T) {
+	ctx := context.Background()
+	postRepo := &mockPostRepo{getPostByIDFn: func(ctx context.Context, id string) (*Post, error) {
+		return &Post{ID: id}, nil
+	}}
+	viewRepo := &mockPostViewRepo{
+		getViewStatsFn: func(ctx context.Context, postID string) (*PostViewStats, error) {
+			return &PostViewStats{PostID: postID, TotalViews: 3}, nil
+		},
+		hasUserViewedPostFn: func(ctx context.Context, postID, userID string) (bool, error) { return true, nil },
+	}
+	svc := NewPostViewService(viewRepo, postRepo, &mockPostLikeRepo{})
+	stats, err := svc.GetViewStats(ctx, validPostID)
+	if err != nil || stats.TotalViews != 3 {
+		t.Fatalf("GetViewStats = %+v, %v", stats, err)
+	}
+	viewed, err := svc.HasUserViewedPost(ctx, validPostID, "user-1")
+	if err != nil || !viewed {
+		t.Fatalf("HasUserViewedPost = %v, %v", viewed, err)
+	}
+}

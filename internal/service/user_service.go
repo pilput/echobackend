@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"echobackend/internal/platform/storage"
 	"errors"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ type UserService interface {
 
 type userService struct {
 	userRepo  UserRepository
-	s3storage FileUploader
+	s3storage storage.FileUploader
 }
 
 // maxAvatarImageSize caps profile picture uploads to 5 MB, matching the
@@ -49,7 +50,7 @@ type userService struct {
 const maxAvatarImageSize = 5 * 1024 * 1024
 const avatarUploadPrefix = "users/avatars"
 
-func NewUserService(userRepo UserRepository, s3storage FileUploader) UserService {
+func NewUserService(userRepo UserRepository, s3storage storage.FileUploader) UserService {
 	return &userService{userRepo: userRepo, s3storage: s3storage}
 }
 
@@ -148,12 +149,12 @@ func (s *userService) UploadAvatar(ctx context.Context, userID string, file *mul
 		return "", apperrors.ErrAvatarFileTooLarge
 	}
 
-	contentType, ext, ok := detectAllowedImage(data)
+	contentType, ext, ok := storage.DetectAllowedImage(data)
 	if !ok {
 		return "", apperrors.ErrInvalidFileType
 	}
 
-	objectKey, err := randomImageObjectKey(avatarUploadPrefix, ext)
+	objectKey, err := storage.RandomImageObjectKey(avatarUploadPrefix, ext)
 	if err != nil {
 		return "", err
 	}

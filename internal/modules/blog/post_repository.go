@@ -1,0 +1,572 @@
+package blog
+
+import (
+	"context"
+	"echobackend/internal/core/userref"
+	"errors"
+	"fmt"
+	"strings"
+
+	"echobackend/pkg/antispam"
+
+	"gorm.io/gorm"
+)
+
+type PostRepository interface {
+	CreatePost(ctx context.Context, post *Post) error
+	CreatePostWithTags(ctx context.Context, post *Post, tags []Tag) (*Post, error)
+	GetPosts(ctx context.Context, limit int, offset int) ([]*Post, int64, error)
+	GetPostsFiltered(ctx context.Context, filter *PostQueryFilter) ([]*Post, int64, error)
+	GetPostByUsername(ctx context.Context, username string, offset int, limit int) ([]*Post, int64, error)
+	GetPostsRandom(ctx context.Context, limit int) ([]*Post, error)
+	GetPostsTrending(ctx context.Context, limit int) ([]*Post, error)
+	GetPostByID(ctx context.Context, id string) (*Post, error)
+	GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*Post, error)
+	GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*Post, int64, error)
+	DeletePostByID(ctx context.Context, id string) error
+	DeletePostByOwner(ctx context.Context, id string, userID string) error
+	UpdatePost(ctx context.Context, id string, updates map[string]any) (*Post, error)
+	UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []Tag) (*Post, error)
+	UpdatePostByOwner(ctx context.Context, id string, userID string, updates map[string]any) (*Post, error)
+	UpdatePostWithTagsByOwner(ctx context.Context, id string, userID string, updates map[string]any, tags []Tag) (*Post, error)
+	GetPostsForSitemap(ctx context.Context, limit int) ([]*SitemapPost, error)
+	SearchPosts(ctx context.Context, keyword string, limit int, offset int) ([]*Post, int64, error)
+	GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*Post, int64, error)
+	GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*Post, int64, error)
+	ExistsByID(ctx context.Context, id string) (bool, error)
+	GetAuthorPostStats(ctx context.Context, userID string) (*MyPostsAnalyticsSummary, error)
+	GetTopPostsByAuthor(ctx context.Context, userID string, limit int) ([]MyPostPerformance, error)
+}
+
+type postRepository struct {
+	db *gorm.DB
+}
+
+func NewPostRepository(db *gorm.DB) PostRepository {
+	return &postRepository{db: db}
+}
+
+func (r *postRepository) CreatePost(ctx context.Context, post *Post) error {
+	return r.db.WithContext(ctx).Create(post).Error
+}
+
+func (r *postRepository) CreatePostWithTags(ctx context.Context, post *Post, tags []Tag) (*Post, error) {
+	post.Tags = tags
+
+	err := r.db.WithContext(ctx).Create(post).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to create post with tags: %w", err)
+	}
+
+	err = r.db.WithContext(ctx).Preload("User", userref.PreloadBrief).Preload("Tags").First(post, "id = ?", post.ID).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to load created post with associations: %w", err)
+	}
+
+	return post, nil
+}
+
+func (r *postRepository) UpdatePost(ctx context.Context, id string, updates map[string]any) (*Post, error) {
+	return r.UpdatePostWithTags(ctx, id, updates, nil)
+}
+
+func (r *postRepository) UpdatePostWithTags(ctx context.Context, id string, updates map[string]any, tags []Tag) (*Post, error) {
+	if len(updates) > 0 {
+		result := r.db.WithContext(ctx).Model(&Post{}).Where("id = ?", id).Updates(updates)
+		if result.Error != nil {
+			return nil, fmt.Errorf("failed to update post: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return nil, ErrPostNotFound
+		}
+	}
+
+	var updatedPost Post
+	err := r.db.WithContext(ctx).Preload("User", userref.PreloadBrief).Preload("Tags").First(&updatedPost, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve post for update: %w", err)
+	}
+
+	if tags != nil {
+		if err := r.db.WithContext(ctx).Model(&updatedPost).Association("Tags").Replace(tags); err != nil {
+			return nil, fmt.Errorf("failed to update post tags association: %w", err)
+		}
+		updatedPost.Tags = tags
+	}
+
+	return &updatedPost, nil
+}
+
+func (r *postRepository) UpdatePostByOwner(ctx context.Context, id string, userID string, updates map[string]any) (*Post, error) {
+	return r.UpdatePostWithTagsByOwner(ctx, id, userID, updates, nil)
+}
+
+func (r *postRepository) UpdatePostWithTagsByOwner(ctx context.Context, id string, userID string, updates map[string]any, tags []Tag) (*Post, error) {
+	if len(updates) > 0 {
+		result := r.db.WithContext(ctx).Model(&Post{}).
+			Where("id = ? AND created_by = ?", id, userID).Updates(updates)
+		if result.Error != nil {
+			return nil, fmt.Errorf("failed to update post: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return nil, ErrPostNotFound
+		}
+	}
+
+	var updatedPost Post
+	err := r.db.WithContext(ctx).Preload("User", userref.PreloadBrief).Preload("Tags").
+		First(&updatedPost, "id = ? AND created_by = ?", id, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve post for update: %w", err)
+	}
+
+	if tags != nil {
+		if err := r.db.WithContext(ctx).Model(&updatedPost).Association("Tags").Replace(tags); err != nil {
+			return nil, fmt.Errorf("failed to update post tags association: %w", err)
+		}
+		updatedPost.Tags = tags
+	}
+
+	return &updatedPost, nil
+}
+
+func (r *postRepository) GetPostByUsername(ctx context.Context, username string, offset int, limit int) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	query := r.db.WithContext(ctx).Model(&Post{}).
+		Joins("JOIN users ON users.id = posts.created_by").
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ? AND posts.hidden_at IS NULL", username, true)
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts for username %s: %w", username, err)
+	}
+
+	err = r.db.WithContext(ctx).Model(&Post{}).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Joins("JOIN users ON users.id = posts.created_by").
+		Where("users.username = ? AND users.deleted_at IS NULL AND posts.published = ? AND posts.hidden_at IS NULL", username, true).
+		Order("posts.created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&posts).Error
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get posts for username %s: %w", username, err)
+	}
+
+	return posts, count, nil
+}
+
+func (r *postRepository) DeletePostByID(ctx context.Context, id string) error {
+	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&Post{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete post: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrPostNotFound
+	}
+	return nil
+}
+
+func (r *postRepository) DeletePostByOwner(ctx context.Context, id string, userID string) error {
+	result := r.db.WithContext(ctx).Where("id = ? AND created_by = ?", id, userID).Delete(&Post{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete post: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrPostNotFound
+	}
+	return nil
+}
+
+func (r *postRepository) GetPosts(ctx context.Context, limit int, offset int) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Count(&count).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
+	}
+
+	err = activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Order("posts.created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get posts: %w", err)
+	}
+
+	return posts, count, nil
+}
+
+func (r *postRepository) GetPostBySlugAndUsername(ctx context.Context, slug string, username string) (*Post, error) {
+	var post Post
+	err := r.db.WithContext(ctx).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Joins("JOIN users ON users.id = posts.created_by").
+		Where("posts.slug = ? AND posts.published = ? AND posts.hidden_at IS NULL AND users.username = ? AND users.deleted_at IS NULL", slug, true, username).
+		First(&post).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to get post by slug '%s' and username '%s': %w", slug, username, err)
+	}
+	return &post, nil
+}
+
+func (r *postRepository) GetPostByID(ctx context.Context, id string) (*Post, error) {
+	var post Post
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("posts.id = ?", id).
+		First(&post).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to get post by ID: %w", err)
+	}
+	return &post, nil
+}
+
+func (r *postRepository) GetPostsRandom(ctx context.Context, limit int) ([]*Post, error) {
+	var randomPosts []*Post
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Order("RANDOM()").
+		Limit(limit).
+		Find(&randomPosts).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get random posts: %w", err)
+	}
+	return randomPosts, nil
+}
+
+func (r *postRepository) GetPostsTrending(ctx context.Context, limit int) ([]*Post, error) {
+	var posts []*Post
+
+	// Promotional posts stay published and discoverable via search, tags and
+	// profiles — they just never trend. Comparison is case-insensitive so
+	// "Promo" and "PROMO" are treated the same as "promo".
+	lowerPromoTags := make([]string, 0, len(antispam.PromoTagNames))
+	for _, name := range antispam.PromoTagNames {
+		lowerPromoTags = append(lowerPromoTags, strings.ToLower(name))
+	}
+	promoPosts := r.db.Table("posts_to_tags").
+		Select("1").
+		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+		Where("posts_to_tags.post_id = posts.id").
+		Where("LOWER(tags.name) IN ?", lowerPromoTags)
+
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Where("NOT EXISTS (?)", promoPosts).
+		// The counters are nullable; without COALESCE a single NULL makes the
+		// whole score NULL, and Postgres sorts NULLs first under DESC.
+		Order("COALESCE(posts.like_count, 0) * 2 + COALESCE(posts.bookmark_count, 0) * 2 + COALESCE(posts.view_count, 0) DESC").
+		Order("posts.created_at DESC").
+		Limit(limit).
+		Find(&posts).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trending posts: %w", err)
+	}
+
+	return posts, nil
+}
+
+func (r *postRepository) GetPostsByCreatedBy(ctx context.Context, createdBy string, offset int, limit int, search string, published, hidden *bool) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	buildQuery := func() *gorm.DB {
+		q := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+			Where("posts.created_by = ?", createdBy)
+		if search != "" {
+			likePattern := "%" + search + "%"
+			q = q.Where("posts.title ILIKE ?", likePattern)
+		}
+		if published != nil {
+			q = q.Where("posts.published = ?", *published)
+		}
+		// hidden=true keeps only posts a moderator hid, hidden=false drops them.
+		if hidden != nil {
+			if *hidden {
+				q = q.Where("posts.hidden_at IS NOT NULL")
+			} else {
+				q = q.Where("posts.hidden_at IS NULL")
+			}
+		}
+		return q
+	}
+
+	err := buildQuery().Count(&count).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts by creator ID %s: %w", createdBy, err)
+	}
+
+	err = buildQuery().
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Order("posts.created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get posts by creator ID %s: %w", createdBy, err)
+	}
+	return posts, count, nil
+}
+
+func (r *postRepository) GetPostsForYou(ctx context.Context, userID string, offset int, limit int) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	if userID == "" {
+		return []*Post{}, 0, nil
+	}
+
+	// user_follows is soft-deleted; Table() skips GORM's scope, so filter by hand.
+	followingIDs := r.db.WithContext(ctx).Table("user_follows").
+		Select("following_id").
+		Where("follower_id = ? AND deleted_at IS NULL", userID)
+
+	base := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Where("posts.created_by = ? OR posts.created_by IN (?)", userID, followingIDs)
+
+	if err := base.Count(&count).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count for-you posts: %w", err)
+	}
+
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("posts.published = ? AND posts.hidden_at IS NULL", true).
+		Where("posts.created_by = ? OR posts.created_by IN (?)", userID, followingIDs).
+		Order("posts.created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get for-you posts: %w", err)
+	}
+
+	return posts, count, nil
+}
+
+func (r *postRepository) SearchPosts(ctx context.Context, keyword string, limit int, offset int) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+	likePattern := "%" + keyword + "%"
+
+	err := activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ? AND posts.hidden_at IS NULL", likePattern, likePattern, true).
+		Count(&count).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts for search: %w", err)
+	}
+
+	err = activePostUserJoin(r.db.WithContext(ctx).Model(&Post{})).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Where("(posts.title ILIKE ? OR posts.body ILIKE ?) AND posts.published = ? AND posts.hidden_at IS NULL", likePattern, likePattern, true).
+		Order("posts.created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search posts: %w", err)
+	}
+	return posts, count, nil
+}
+
+func (r *postRepository) GetPostsByTag(ctx context.Context, tag string, limit int, offset int, sortBy string, sortOrder string) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	query := r.db.WithContext(ctx).Model(&Post{}).
+		Joins("JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
+		Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
+		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+		Where("tags.name = ? AND posts.published = ? AND posts.hidden_at IS NULL", tag, true)
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts by tag: %w", err)
+	}
+
+	// Whitelisted sort column/direction; unknown values fall back to
+	// posts.created_at DESC (same lenient rules as GET /api/posts).
+	sortFilter := PostQueryFilter{SortBy: sortBy, SortOrder: sortOrder}
+
+	err = r.db.WithContext(ctx).Model(&Post{}).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags").
+		Joins("JOIN users ON users.id = posts.created_by AND users.deleted_at IS NULL").
+		Joins("JOIN posts_to_tags ON posts_to_tags.post_id = posts.id").
+		Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+		Where("tags.name = ? AND posts.published = ? AND posts.hidden_at IS NULL", tag, true).
+		Order(fmt.Sprintf("%s %s", sortFilter.GetSortField(), sortFilter.GetSortOrder())).
+		Limit(limit).
+		Offset(offset).
+		Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get posts by tag: %w", err)
+	}
+	return posts, count, nil
+}
+
+func (r *postRepository) ExistsByID(ctx context.Context, id string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&Post{}).Where("id = ?", id).Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("failed to check post existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *postRepository) applyPostFilters(db *gorm.DB, filter *PostQueryFilter) *gorm.DB {
+	q := activePostUserJoin(db.Model(&Post{}))
+
+	if filter.Search != "" {
+		likePattern := "%" + filter.Search + "%"
+		q = q.Where("posts.title ILIKE ?", likePattern)
+	}
+
+	// GetPostsFiltered backs a public endpoint, so drafts are never listed.
+	// Authors see their own drafts through GetPostsByCreatedBy (/posts/me).
+	q = q.Where("posts.published = ? AND posts.hidden_at IS NULL", true)
+
+	if filter.StartDate != "" {
+		q = q.Where("posts.created_at >= ?", filter.StartDate)
+	}
+	if filter.EndDate != "" {
+		q = q.Where("posts.created_at <= ?", filter.EndDate)
+	}
+
+	if filter.CreatedBy != "" {
+		q = q.Where("posts.created_by = ?", filter.CreatedBy)
+	}
+
+	if len(filter.Tags) > 0 {
+		tagSubquery := r.db.Table("posts_to_tags").
+			Select("posts_to_tags.post_id").
+			Joins("JOIN tags ON tags.id = posts_to_tags.tag_id").
+			Where("tags.name IN ?", filter.Tags)
+		q = q.Where("posts.id IN (?)", tagSubquery)
+	}
+
+	return q
+}
+
+func (r *postRepository) GetPostsFiltered(ctx context.Context, filter *PostQueryFilter) ([]*Post, int64, error) {
+	var posts []*Post
+	var count int64
+
+	base := r.applyPostFilters(r.db.WithContext(ctx), filter)
+
+	if err := base.Count(&count).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
+	}
+
+	query := r.applyPostFilters(r.db.WithContext(ctx), filter).
+		Preload("User", userref.PreloadBrief).
+		Preload("Tags")
+
+	sortField := filter.GetSortField()
+	sortOrder := filter.GetSortOrder()
+	query = query.Order(fmt.Sprintf("%s %s", sortField, sortOrder))
+
+	query = query.Limit(filter.Limit).Offset(filter.Offset)
+
+	err := query.Find(&posts).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get filtered posts: %w", err)
+	}
+
+	return posts, count, nil
+}
+
+func (r *postRepository) GetPostsForSitemap(ctx context.Context, limit int) ([]*SitemapPost, error) {
+	var sitemapPosts []*SitemapPost
+
+	err := r.db.WithContext(ctx).
+		Table("posts").
+		Select("users.username, posts.slug, posts.created_at, posts.updated_at").
+		Joins("JOIN users ON users.id = posts.created_by").
+		Where("posts.published = ? AND posts.hidden_at IS NULL AND users.deleted_at IS NULL", true).
+		Order("posts.created_at DESC").
+		Limit(limit).
+		Find(&sitemapPosts).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get posts for sitemap: %w", err)
+	}
+
+	return sitemapPosts, nil
+}
+
+func (r *postRepository) GetAuthorPostStats(ctx context.Context, userID string) (*MyPostsAnalyticsSummary, error) {
+	stats := &MyPostsAnalyticsSummary{}
+	err := r.db.WithContext(ctx).
+		Table("posts").
+		Select(`
+			COUNT(*) AS total_posts,
+			COUNT(*) FILTER (WHERE published = true) AS published_posts,
+			COALESCE(SUM(view_count), 0) AS total_views,
+			COALESCE(SUM(like_count), 0) AS total_likes
+		`).
+		Where("created_by = ?", userID).
+		Scan(stats).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get author post stats: %w", err)
+	}
+	return stats, nil
+}
+
+func (r *postRepository) GetTopPostsByAuthor(ctx context.Context, userID string, limit int) ([]MyPostPerformance, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	var posts []MyPostPerformance
+	err := r.db.WithContext(ctx).
+		Table("posts").
+		Select("id, title, slug, view_count, like_count").
+		Where("created_by = ?", userID).
+		Order("view_count DESC, like_count DESC, created_at DESC").
+		Limit(limit).
+		Scan(&posts).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get top posts by author: %w", err)
+	}
+	return posts, nil
+}
