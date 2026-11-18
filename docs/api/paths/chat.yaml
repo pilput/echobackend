@@ -62,11 +62,12 @@ chatConversationsStream:
       | `type` | `data` |
       |--------|--------|
       | `conversation_created` | `{ conversation_id, user_message }` |
+      | `ai_reasoning` | reasoning ("thinking") text chunk from reasoning models; not stored |
       | `ai_chunk` | text chunk |
       | `ai_complete` | the AI `ChatMessageResponse` |
       | `error` | error message |
 
-      After the first event come zero or more `ai_chunk` events, then exactly one of
+      After the first event come zero or more `ai_reasoning` / `ai_chunk` events, then exactly one of
       `ai_complete` or `error`. The stream always terminates with `data: [DONE]`, including
       after an `error` event. `error` data is the upstream provider's message, "OpenRouter
       returned an empty response", or "Failed to save AI response" when the reply could not
@@ -259,11 +260,12 @@ chatConversationsByConversationidMessagesStream:
       | `type` | `data` |
       |--------|--------|
       | `user_message` | the stored `ChatMessageResponse` |
+      | `ai_reasoning` | reasoning ("thinking") text chunk from reasoning models; not stored |
       | `ai_chunk` | text chunk |
       | `ai_complete` | the AI `ChatMessageResponse` |
       | `error` | error message |
 
-      After the first event come zero or more `ai_chunk` events, then exactly one of
+      After the first event come zero or more `ai_reasoning` / `ai_chunk` events, then exactly one of
       `ai_complete` or `error`. The stream always terminates with `data: [DONE]`, including
       after an `error` event. `error` data is the upstream provider's message, "OpenRouter
       returned an empty response", or "Failed to save AI response" when the reply could not

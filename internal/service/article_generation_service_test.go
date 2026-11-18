@@ -14,10 +14,10 @@ import (
 
 // fakeArticleStream returns upstream channels that deliver chunks, then err
 // (if any), then usage — like openrouter.Client.GenerateStream.
-func fakeArticleStream(chunks []string, streamErr error) (<-chan string, <-chan openrouter.Usage, <-chan error) {
-	chunkCh := make(chan string, len(chunks))
+func fakeArticleStream(chunks []string, streamErr error) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
+	chunkCh := make(chan openrouter.Delta, len(chunks))
 	for _, c := range chunks {
-		chunkCh <- c
+		chunkCh <- openrouter.Delta{Content: c}
 	}
 	close(chunkCh)
 	usageCh := make(chan openrouter.Usage, 1)
@@ -89,7 +89,7 @@ func TestBuildArticleUserPrompt(t *testing.T) {
 
 func TestArticleGeneration_UnavailableNeverCallsOpenRouter(t *testing.T) {
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			t.Fatal("OpenRouter must not be called when AI is unavailable")
 			return nil, nil, nil
 		},
@@ -121,7 +121,7 @@ func TestArticleGeneration_StreamsChunksThenComplete(t *testing.T) {
 	var gotModel string
 	var gotTemp float64
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			gotMessages, gotTemp = messages, temperature
 			if model != nil {
 				gotModel = *model
@@ -164,7 +164,7 @@ func TestArticleGeneration_StreamsChunksThenComplete(t *testing.T) {
 
 func TestArticleGeneration_EmptyResponseIsError(t *testing.T) {
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			return fakeArticleStream(nil, nil)
 		},
 	}
@@ -182,7 +182,7 @@ func TestArticleGeneration_EmptyResponseIsError(t *testing.T) {
 func TestArticleGeneration_ForwardsUpstreamError(t *testing.T) {
 	upstream := errors.New(`OpenRouter API error: 429 {"error":{"message":"Rate limited"}}`)
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			return fakeArticleStream([]string{"partial"}, upstream)
 		},
 	}
@@ -198,16 +198,16 @@ func TestArticleGeneration_ForwardsUpstreamError(t *testing.T) {
 }
 
 func TestArticleGeneration_StopsOnContextCancel(t *testing.T) {
-	upstreamChunks := make(chan string)
+	upstreamChunks := make(chan openrouter.Delta)
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			usageCh := make(chan openrouter.Usage)
 			errCh := make(chan error)
 			go func() {
 				defer close(upstreamChunks)
 				defer close(usageCh)
 				defer close(errCh)
-				upstreamChunks <- "a"
+				upstreamChunks <- openrouter.Delta{Content: "a"}
 			}()
 			return upstreamChunks, usageCh, errCh
 		},

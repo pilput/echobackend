@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func (m *mockChatConversationRepo) DeleteMessage(ctx context.Context, id, userID
 }
 
 type mockOpenRouterService struct {
-	generateStreamFn   func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error)
+	generateStreamFn   func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error)
 	generateResponseFn func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (*openrouter.Response, error)
 }
 
@@ -100,7 +101,7 @@ func (m *mockOpenRouterService) GenerateResponse(ctx context.Context, messages [
 	return nil, nil
 }
 
-func (m *mockOpenRouterService) GenerateStream(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+func (m *mockOpenRouterService) GenerateStream(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 	if m.generateStreamFn != nil {
 		return m.generateStreamFn(ctx, messages, model, temperature)
 	}
@@ -224,13 +225,14 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 	}
 
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
-			chunks := make(chan string, 2)
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
+			chunks := make(chan openrouter.Delta, 3)
 			usageCh := make(chan openrouter.Usage, 1)
 			errCh := make(chan error, 1)
 
-			chunks <- "Hello "
-			chunks <- "world"
+			chunks <- openrouter.Delta{Reasoning: "thinking"}
+			chunks <- openrouter.Delta{Content: "Hello "}
+			chunks <- openrouter.Delta{Content: "world"}
 			close(chunks)
 			usageCh <- openrouter.Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}
 			close(usageCh)
@@ -252,13 +254,14 @@ func TestCreateStreamingMessage_ForwardsAllChunksToClient(t *testing.T) {
 		t.Fatal("expected user message in stream result")
 	}
 
-	var received []string
+	var received []openrouter.Delta
 	for chunk := range chunks {
 		received = append(received, chunk)
 	}
 
-	if len(received) != 2 || received[0] != "Hello " || received[1] != "world" {
-		t.Fatalf("client chunks = %#v, want [Hello , world]", received)
+	want := []openrouter.Delta{{Reasoning: "thinking"}, {Content: "Hello "}, {Content: "world"}}
+	if !reflect.DeepEqual(received, want) {
+		t.Fatalf("client chunks = %#v, want %#v", received, want)
 	}
 
 	if err, ok := <-errCh; ok && err != nil {
@@ -366,7 +369,7 @@ func TestCreateStreamingMessage_AIUnavailableReturnsFallback(t *testing.T) {
 
 	repo := ownedConversationRepo("user-1", "conv-1", "New conversation")
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
 			t.Fatal("OpenRouter must not be called without an API key")
 			return nil, nil, nil
 		},
@@ -398,11 +401,11 @@ func TestCreateStreamingMessage_SaveFailureSendsGenericError(t *testing.T) {
 		return message, nil
 	}
 	openRouter := &mockOpenRouterService{
-		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan string, <-chan openrouter.Usage, <-chan error) {
-			chunks := make(chan string, 1)
+		generateStreamFn: func(ctx context.Context, messages []openrouter.Message, model *string, temperature float64) (<-chan openrouter.Delta, <-chan openrouter.Usage, <-chan error) {
+			chunks := make(chan openrouter.Delta, 1)
 			usageCh := make(chan openrouter.Usage)
 			errCh := make(chan error)
-			chunks <- "Hi"
+			chunks <- openrouter.Delta{Content: "Hi"}
 			close(chunks)
 			close(usageCh)
 			close(errCh)

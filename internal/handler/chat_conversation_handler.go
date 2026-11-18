@@ -9,6 +9,7 @@ import (
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
+	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/service"
 	"echobackend/pkg/applog"
 	"echobackend/pkg/response"
@@ -294,10 +295,10 @@ func (h *ChatConversationHandler) respondChatError(c *echo.Context, message stri
 const chatStreamWriteTimeout = 10 * time.Second
 
 // streamChatEvents writes the AI chat SSE stream: the initial event, every
-// `ai_chunk`, then exactly one of `ai_complete` or `error`, and always a final
+// `ai_reasoning` / `ai_chunk`, then exactly one of `ai_complete` or `error`, and always a final
 // `data: [DONE]`. A failed write means the client is gone; the handler then
 // returns, which cancels the request context and stops the producer.
-func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan string, complete <-chan dto.ChatMessageResponse, errCh <-chan error) error {
+func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-chan openrouter.Delta, complete <-chan dto.ChatMessageResponse, errCh <-chan error) error {
 	write := openAIStream(c)
 
 	if initialEvent != nil {
@@ -306,11 +307,12 @@ func streamChatEvents(c *echo.Context, initialEvent map[string]any, chunks <-cha
 		}
 	}
 
-	for chunk := range chunks {
-		if err := writeSSE(write, map[string]any{
-			"type": "ai_chunk",
-			"data": chunk,
-		}); err != nil {
+	for delta := range chunks {
+		event := map[string]any{"type": "ai_chunk", "data": delta.Content}
+		if delta.Reasoning != "" {
+			event = map[string]any{"type": "ai_reasoning", "data": delta.Reasoning}
+		}
+		if err := writeSSE(write, event); err != nil {
 			return nil //nolint:nilerr // write failed: the client is gone, nothing left to report
 		}
 	}

@@ -13,6 +13,7 @@ import (
 
 	apperrors "echobackend/internal/apperror"
 	"echobackend/internal/dto"
+	"echobackend/internal/platform/openrouter"
 	"echobackend/internal/service"
 	"echobackend/pkg/response"
 	"echobackend/pkg/validator"
@@ -25,10 +26,10 @@ import (
 // panics, which doubles as a "service must not be called" assertion.
 type mockChatService struct {
 	service.ChatConversationService
-	createStreamingMessageFn func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error)
+	createStreamingMessageFn func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
 }
 
-func (m *mockChatService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (m *mockChatService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 	return m.createStreamingMessageFn(ctx, userID, conversationID, req)
 }
 
@@ -80,10 +81,22 @@ func TestChatHandlerRejectsMalformedIDs(t *testing.T) {
 
 // streamWith returns service channels that deliver chunks, then err (if any)
 // or the completed message, then close — like the real producer goroutine.
-func streamWith(chunks []string, streamErr error, done *dto.ChatMessageResponse) (<-chan string, <-chan dto.ChatMessageResponse, <-chan error) {
-	chunkCh := make(chan string, len(chunks))
-	for _, c := range chunks {
-		chunkCh <- c
+func streamWith(chunks []string, streamErr error, done *dto.ChatMessageResponse) (<-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error) {
+	return streamDeltas(contentDeltas(chunks), streamErr, done)
+}
+
+func contentDeltas(chunks []string) []openrouter.Delta {
+	out := make([]openrouter.Delta, len(chunks))
+	for i, c := range chunks {
+		out[i] = openrouter.Delta{Content: c}
+	}
+	return out
+}
+
+func streamDeltas(deltas []openrouter.Delta, streamErr error, done *dto.ChatMessageResponse) (<-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error) {
+	chunkCh := make(chan openrouter.Delta, len(deltas))
+	for _, d := range deltas {
+		chunkCh <- d
 	}
 	close(chunkCh)
 	complete := make(chan dto.ChatMessageResponse, 1)
@@ -100,7 +113,7 @@ func streamWith(chunks []string, streamErr error, done *dto.ChatMessageResponse)
 
 func TestChatMessageStreamEndsWithDoneAfterError(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 			chunks, complete, errCh := streamWith([]string{"Hel"}, apperrors.ErrChatAIResponseSaveFailed, nil)
 			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
@@ -125,7 +138,7 @@ func TestChatMessageStreamEndsWithDoneAfterError(t *testing.T) {
 
 func TestChatMessageStreamEndsWithDoneAfterComplete(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 			chunks, complete, errCh := streamWith([]string{"Hi"}, nil, &dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
 			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
 		},
@@ -138,7 +151,7 @@ func TestChatMessageStreamEndsWithDoneAfterComplete(t *testing.T) {
 
 func TestChatMessageStreamFallbackIs201(t *testing.T) {
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, nil, nil, nil, nil
 		},
 	}
@@ -178,8 +191,8 @@ func TestChatMessageStreamRejectsInvalidBody(t *testing.T) {
 func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 	const serverTimeout = 150 * time.Millisecond
 	svc := &mockChatService{
-		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
-			chunks := make(chan string)
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+			chunks := make(chan openrouter.Delta)
 			complete := make(chan dto.ChatMessageResponse, 1)
 			errCh := make(chan error, 1)
 			go func() {
@@ -197,7 +210,7 @@ func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 					case <-ctx.Done():
 						errCh <- ctx.Err()
 						return
-					case chunks <- c:
+					case chunks <- openrouter.Delta{Content: c}:
 					}
 				}
 				complete <- dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "abc"}
@@ -237,5 +250,28 @@ func TestChatMessageStreamOutlivesServerTimeouts(t *testing.T) {
 	raw := string(body)
 	if !strings.Contains(raw, `"type":"ai_complete"`) || !strings.HasSuffix(raw, "data: [DONE]\n\n") {
 		t.Fatalf("stream cut short by server timeouts:\n%s", raw)
+	}
+}
+
+func TestChatMessageStreamSendsReasoningEvents(t *testing.T) {
+	svc := &mockChatService{
+		createStreamingMessageFn: func(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
+			chunks, complete, errCh := streamDeltas([]openrouter.Delta{{Reasoning: "hmm"}, {Content: "Hi"}}, nil,
+				&dto.ChatMessageResponse{ID: "m-2", Role: "assistant", Content: "Hi"})
+			return &dto.ChatStreamResult{UserMessage: &dto.ChatMessageResponse{ID: "m-1", Role: "user"}}, chunks, complete, errCh, nil
+		},
+	}
+	status, raw, _ := serveChatRoute(t, svc, http.MethodPost, "/api/chat/conversations/"+validChatID+"/messages/stream", `{"content":"hi"}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", status, raw)
+	}
+	wantOrder := []string{`{"data":"hmm","type":"ai_reasoning"}`, `{"data":"Hi","type":"ai_chunk"}`, `"type":"ai_complete"`, "data: [DONE]\n\n"}
+	pos := 0
+	for _, w := range wantOrder {
+		i := strings.Index(raw[pos:], w)
+		if i < 0 {
+			t.Fatalf("missing %q after offset %d in stream:\n%s", w, pos, raw)
+		}
+		pos += i + len(w)
 	}
 }

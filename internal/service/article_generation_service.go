@@ -96,14 +96,18 @@ func (s *articleGenerationService) GenerateArticleStream(ctx context.Context, re
 		defer close(complete)
 		defer close(errCh)
 
+		// Reasoning deltas are dropped: article drafts only stream content.
 		var content strings.Builder
-		for chunk := range upstreamChunks {
-			content.WriteString(chunk)
+		for delta := range upstreamChunks {
+			if delta.Content == "" {
+				continue
+			}
+			content.WriteString(delta.Content)
 			select {
 			case <-ctx.Done():
 				errCh <- ctx.Err()
 				return
-			case outChunks <- chunk:
+			case outChunks <- delta.Content:
 			}
 		}
 

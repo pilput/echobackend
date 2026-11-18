@@ -17,13 +17,13 @@ import (
 
 type ChatConversationService interface {
 	CreateConversation(ctx context.Context, userID string, conversation *dto.CreateChatConversationRequest) (*dto.ChatConversationResponse, error)
-	CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error)
+	CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
 	GetConversationByID(ctx context.Context, id string, userID string) (*dto.ChatConversationResponse, error)
 	GetUserConversations(ctx context.Context, userID string, offset int, limit int) ([]*dto.ChatConversationResponse, int64, error)
 	UpdateConversation(ctx context.Context, id string, userID string, conversation *dto.UpdateChatConversationRequest) (*dto.ChatConversationResponse, error)
 	DeleteConversation(ctx context.Context, id string, userID string) error
 	CreateMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) ([]*dto.ChatMessageResponse, error)
-	CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error)
+	CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error)
 	SaveStreamingMessage(ctx context.Context, conversationID, userID, content string, model *string, usage openrouter.Usage) (*dto.ChatMessageResponse, error)
 	GetMessages(ctx context.Context, conversationID, userID string) ([]*dto.ChatMessageResponse, error)
 	GetMessage(ctx context.Context, id, userID string) (*dto.ChatMessageResponse, error)
@@ -58,7 +58,7 @@ func (s *chatConversationService) CreateConversation(ctx context.Context, userID
 	return dto.ChatConversationToResponse(createdConversation), nil
 }
 
-func (s *chatConversationService) CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (s *chatConversationService) CreateConversationStream(ctx context.Context, userID string, req *dto.CreateChatConversationStreamRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 	chatConversation := &model.ChatConversation{
 		Title:  buildConversationTitle(req.Title, req.Content),
 		UserID: userID,
@@ -232,11 +232,11 @@ func (s *chatConversationService) CreateMessage(ctx context.Context, userID, con
 	return responses, nil
 }
 
-func (s *chatConversationService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (s *chatConversationService) CreateStreamingMessage(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 	return s.createStreamingMessageInternal(ctx, userID, conversationID, req)
 }
 
-func (s *chatConversationService) createStreamingMessageInternal(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan string, <-chan dto.ChatMessageResponse, <-chan error, error) {
+func (s *chatConversationService) createStreamingMessageInternal(ctx context.Context, userID, conversationID string, req *dto.CreateChatMessageRequest) (*dto.ChatStreamResult, <-chan openrouter.Delta, <-chan dto.ChatMessageResponse, <-chan error, error) {
 	conversation, err := s.getOwnedConversation(ctx, conversationID, userID)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -285,7 +285,7 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 	}
 
 	upstreamChunks, usageCh, upstreamErrCh := s.openRouter.GenerateStream(ctx, toOpenRouterMessages(contextMessages), req.Model, normalizedTemperature(req.Temperature))
-	outChunks := make(chan string)
+	outChunks := make(chan openrouter.Delta)
 	complete := make(chan dto.ChatMessageResponse, 1)
 	errCh := make(chan error, 1)
 
@@ -294,14 +294,15 @@ func (s *chatConversationService) createStreamingMessageInternal(ctx context.Con
 		defer close(complete)
 		defer close(errCh)
 
+		// Reasoning deltas are forwarded to the client but never persisted.
 		var content strings.Builder
-		for chunk := range upstreamChunks {
-			content.WriteString(chunk)
+		for delta := range upstreamChunks {
+			content.WriteString(delta.Content)
 			select {
 			case <-ctx.Done():
 				errCh <- ctx.Err()
 				return
-			case outChunks <- chunk:
+			case outChunks <- delta:
 			}
 		}
 

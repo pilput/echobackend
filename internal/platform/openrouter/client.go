@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"echobackend/config"
@@ -41,14 +42,28 @@ type Response struct {
 	Usage   Usage    `json:"usage"`
 }
 
+// Delta is one piece of a streamed answer. Exactly one field is set:
+// Reasoning carries "thinking" text from reasoning models (never persisted),
+// Content the answer itself.
+type Delta struct {
+	Content   string
+	Reasoning string
+}
+
 type Client interface {
 	GenerateResponse(ctx context.Context, messages []Message, model *string, temperature float64) (*Response, error)
-	GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan string, <-chan Usage, <-chan error)
+	GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan Delta, <-chan Usage, <-chan error)
 }
 
 type client struct {
-	cfg        config.OpenRouterConfig
-	httpClient *http.Client
+	cfg     config.OpenRouterConfig
+	timeout time.Duration
+	// httpClient bounds whole non-streaming calls. streamClient has no overall
+	// timeout: a streamed answer (especially with reasoning) can legitimately
+	// run longer, so GenerateStream bounds the wait for the response head and
+	// the gap between lines instead.
+	httpClient   *http.Client
+	streamClient *http.Client
 }
 
 func NewClient(cfg config.OpenRouterConfig) Client {
@@ -57,10 +72,10 @@ func NewClient(cfg config.OpenRouterConfig) Client {
 		timeout = 90 * time.Second
 	}
 	return &client{
-		cfg: cfg,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		cfg:          cfg,
+		timeout:      timeout,
+		httpClient:   &http.Client{Timeout: timeout},
+		streamClient: &http.Client{},
 	}
 }
 
@@ -78,19 +93,40 @@ func (c *client) GenerateResponse(ctx context.Context, messages []Message, model
 	return &payload, nil
 }
 
-func (c *client) GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan string, <-chan Usage, <-chan error) {
-	chunks := make(chan string)
+// errStreamTimedOut is reported when OpenRouter sends nothing (no response
+// head, no line) for the client timeout.
+var errStreamTimedOut = errors.New("OpenRouter stream timed out")
+
+func (c *client) GenerateStream(ctx context.Context, messages []Message, model *string, temperature float64) (<-chan Delta, <-chan Usage, <-chan error) {
+	deltas := make(chan Delta)
 	usageCh := make(chan Usage, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(chunks)
+		defer close(deltas)
 		defer close(usageCh)
 		defer close(errCh)
 
-		resp, err := c.callAPI(ctx, messages, model, true, temperature)
-		if err != nil {
+		// The idle timer cancels the request when OpenRouter goes quiet for
+		// c.timeout; every line read pushes it back.
+		streamCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		var timedOut atomic.Bool
+		idle := time.AfterFunc(c.timeout, func() {
+			timedOut.Store(true)
+			cancel()
+		})
+		defer idle.Stop()
+		fail := func(err error) {
+			if timedOut.Load() {
+				err = errStreamTimedOut
+			}
 			errCh <- err
+		}
+
+		resp, err := c.callAPI(streamCtx, messages, model, true, temperature)
+		if err != nil {
+			fail(err)
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -100,51 +136,119 @@ func (c *client) GenerateStream(ctx context.Context, messages []Message, model *
 
 		var usage Usage
 		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" || !strings.HasPrefix(line, "data: ") {
+			idle.Reset(c.timeout)
+
+			// SSE comment lines such as ": OPENROUTER PROCESSING" are ignored.
+			data, ok := strings.CutPrefix(strings.TrimSpace(scanner.Text()), "data:")
+			if !ok {
 				continue
 			}
-
-			data := strings.TrimPrefix(line, "data: ")
+			data = strings.TrimLeft(data, " ")
 			if data == "[DONE]" {
 				usageCh <- usage
 				return
 			}
 
-			var payload struct {
-				Choices []struct {
-					Delta struct {
-						Content string `json:"content"`
-					} `json:"delta"`
-				} `json:"choices"`
-				Usage *Usage `json:"usage"`
-			}
-			if err := json.Unmarshal([]byte(data), &payload); err != nil {
-				continue
-			}
-			if payload.Usage != nil {
-				usage = *payload.Usage
-			}
-			if len(payload.Choices) == 0 || payload.Choices[0].Delta.Content == "" {
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
-				errCh <- ctx.Err()
+			chunk, err := parseStreamData(data)
+			if err != nil {
+				errCh <- err
 				return
-			case chunks <- payload.Choices[0].Delta.Content:
+			}
+			if chunk.usage != nil {
+				usage = *chunk.usage
+			}
+			for _, d := range chunk.deltas {
+				select {
+				case <-ctx.Done():
+					errCh <- ctx.Err()
+					return
+				case deltas <- d:
+				}
 			}
 		}
 
 		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			errCh <- fmt.Errorf("failed to read OpenRouter stream: %w", err)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				errCh <- ctxErr
+				return
+			}
+			fail(fmt.Errorf("failed to read OpenRouter stream: %w", err))
 			return
 		}
 		usageCh <- usage
 	}()
 
-	return chunks, usageCh, errCh
+	return deltas, usageCh, errCh
+}
+
+type streamChunk struct {
+	deltas []Delta
+	usage  *Usage
+}
+
+// parseStreamData parses one SSE data payload of a chat-completions stream.
+// Invalid JSON is skipped. Per the OpenRouter docs:
+//   - reasoning streams in choices[0].delta.reasoning_details (items of type
+//     reasoning.text / reasoning.summary; reasoning.encrypted has no readable
+//     text). Some providers also send a plain delta.reasoning string; it is used
+//     only when reasoning_details has no readable text, so the same reasoning
+//     is never emitted twice.
+//   - mid-stream failures arrive as a top-level error object (HTTP stays 200)
+//     and are returned as the error.
+func parseStreamData(data string) (streamChunk, error) {
+	var payload struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Usage   *Usage `json:"usage"`
+		Choices []struct {
+			Delta struct {
+				Content          *string `json:"content"`
+				Reasoning        *string `json:"reasoning"`
+				ReasoningDetails []struct {
+					Type    string `json:"type"`
+					Text    string `json:"text"`
+					Summary string `json:"summary"`
+				} `json:"reasoning_details"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		return streamChunk{}, nil //nolint:nilerr // malformed chunks are skipped, not fatal
+	}
+	if payload.Error != nil {
+		msg := payload.Error.Message
+		if msg == "" {
+			msg = "OpenRouter stream failed"
+		}
+		return streamChunk{}, errors.New(msg)
+	}
+
+	out := streamChunk{usage: payload.Usage}
+	if len(payload.Choices) == 0 {
+		return out, nil
+	}
+	delta := payload.Choices[0].Delta
+
+	var reasoning strings.Builder
+	for _, item := range delta.ReasoningDetails {
+		switch item.Type {
+		case "reasoning.text":
+			reasoning.WriteString(item.Text)
+		case "reasoning.summary":
+			reasoning.WriteString(item.Summary)
+		}
+	}
+	if reasoning.Len() == 0 && delta.Reasoning != nil {
+		reasoning.WriteString(*delta.Reasoning)
+	}
+	if reasoning.Len() > 0 {
+		out.deltas = append(out.deltas, Delta{Reasoning: reasoning.String()})
+	}
+	if delta.Content != nil && *delta.Content != "" {
+		out.deltas = append(out.deltas, Delta{Content: *delta.Content})
+	}
+	return out, nil
 }
 
 func (c *client) callAPI(ctx context.Context, messages []Message, model *string, stream bool, temperature float64) (*http.Response, error) {
@@ -189,7 +293,11 @@ func (c *client) callAPI(ctx context.Context, messages []Message, model *string,
 		req.Header.Set("X-Title", c.cfg.Title)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	httpClient := c.httpClient
+	if stream {
+		httpClient = c.streamClient
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OpenRouter request failed: %w", err)
 	}
