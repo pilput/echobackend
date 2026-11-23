@@ -74,5 +74,5 @@ Local `.env` after first `docker compose up`: set `REDIS_URL=redis://localhost:6
 
 ## CI & deploy
 
-- `.github/workflows/main.yml` on PRs + pushes to `main`: `go vet ./...` → `go test ./...` → `golangci-lint` (**pinned v2.12.2**). Run `make check` locally before pushing.
+- `.github/workflows/main.yml` on PRs + pushes to `main`: `go vet ./...` → `go test ./...` → `golangci-lint` (**pinned v2.12.2**) + `golang/govulncheck-action@v1` (known-vulnerability scan; blocks the Docker job on findings). Run `make check` locally before pushing.
 - Push to `main` only (after test): Docker build → `cecep31/echobackend:latest`, `:sha-<12-char>`, `:sha-<full>`. Multi-stage Go 1.26 image, non-root. Pull a pinned `sha-*` tag for reproducible deploys.
