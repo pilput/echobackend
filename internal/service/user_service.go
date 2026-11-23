@@ -50,6 +50,10 @@ type userService struct {
 const maxAvatarImageSize = 5 * 1024 * 1024
 const avatarUploadPrefix = "users/avatars"
 
+// maxAvatarDimension is the longest side, in pixels, of a stored avatar;
+// avatars render small and 512px covers 2x/3x displays.
+const maxAvatarDimension = 512
+
 func NewUserService(userRepo UserRepository, s3storage storage.FileUploader) UserService {
 	return &userService{userRepo: userRepo, s3storage: s3storage}
 }
@@ -153,6 +157,7 @@ func (s *userService) UploadAvatar(ctx context.Context, userID string, file *mul
 	if !ok {
 		return "", apperrors.ErrInvalidFileType
 	}
+	data, contentType, ext = storage.OptimizeImage(data, contentType, ext, maxAvatarDimension)
 
 	objectKey, err := storage.RandomImageObjectKey(avatarUploadPrefix, ext)
 	if err != nil {

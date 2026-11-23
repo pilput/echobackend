@@ -54,6 +54,10 @@ type trendingPostsCacheEntry struct {
 const maxPostImageSize = 1 * 1024 * 1024
 const imageUploadPrefix = "posts/images"
 
+// maxPostImageDimension is the longest side, in pixels, of a stored post
+// image; larger uploads are downscaled and re-encoded as WebP.
+const maxPostImageDimension = 1600
+
 func NewPostService(postRepo PostRepository, tagService TagService, storageclient storage.FileUploader, redisCache CacheStore) PostService {
 	return &postService{postRepo: postRepo, tagService: tagService, s3storage: storageclient, cache: redisCache}
 }
@@ -502,6 +506,7 @@ func (s *postService) UploadImagePosts(ctx context.Context, file *multipart.File
 	if !ok {
 		return "", apperrors.ErrInvalidFileType
 	}
+	data, contentType, ext = storage.OptimizeImage(data, contentType, ext, maxPostImageDimension)
 
 	objectKey, err := storage.RandomImageObjectKey(imageUploadPrefix, ext)
 	if err != nil {
