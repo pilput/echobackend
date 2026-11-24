@@ -55,7 +55,7 @@ info:
       an idle client is remembered (default 3 minutes); it is not a counting window. A
       denied request gets 429 with a `Retry-After` header (seconds) and
       `{"success":false,"message":"Too many attempts. Please try again later.","error":"Rate limit exceeded"}`.
-    - Client IP: with `HTTP_TRUST_PROXY=true` (alias `TRUST_PROXY`), `X-Forwarded-For` is
+    - Client IP: with `HTTP_TRUST_PROXY=true` (alias `TRUST_PROXY`, the default), `X-Forwarded-For` is
       walked right to left and the first hop outside loopback, private, link-local and
       CGNAT (`100.64.0.0/10`) ranges is the client IP; otherwise the peer address is used.
       It keys every per-IP limit and is stored in sessions, activity logs and post views.

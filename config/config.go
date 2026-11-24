@@ -54,8 +54,9 @@ type HTTPConfig struct {
 	// RateLimitWindow, when > 0, sets the Echo memory-store visitor ExpiresIn.
 	// When 0, Echo defaults (3 minutes) apply.
 	RateLimitWindow time.Duration
-	// TrustProxy, when true, extracts client IP from X-Forwarded-For.
-	// Use only behind a trusted reverse proxy.
+	// TrustProxy, when true (default), extracts client IP from X-Forwarded-For.
+	// Only hops from loopback/private/link-local/CGNAT peers are trusted, so a
+	// directly exposed server still ignores a client-set header.
 	TrustProxy bool
 	// AllowOrigins is the parsed CORS allow-list (always non-empty; defaults to ["*"]).
 	AllowOrigins []string
@@ -191,7 +192,7 @@ func Load() (*Config, error) {
 			Port:            envString([]string{"PORT"}, "8080"),
 			RateLimitRPS:    envInt([]string{"HTTP_RATE_LIMIT_RPS", "RATE_LIMITER_MAX"}, 0),
 			RateLimitWindow: time.Duration(envInt([]string{"HTTP_RATE_LIMIT_WINDOW_SEC", "RATE_LIMITER_TTL"}, 0)) * time.Second,
-			TrustProxy:      envBool([]string{"HTTP_TRUST_PROXY", "TRUST_PROXY"}, false),
+			TrustProxy:      envBool([]string{"HTTP_TRUST_PROXY", "TRUST_PROXY"}, true),
 			AllowOrigins:    parseOrigins(envString([]string{"HTTP_ALLOW_ORIGINS"}, "*")),
 		},
 		Auth: AuthConfig{
